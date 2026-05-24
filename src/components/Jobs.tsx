@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Plus, X, Pencil, Trash2, Clock, Package, ChevronDown, ChevronUp,
-  HardHat, CheckCircle, PauseCircle, XCircle, FileText, TrendingUp, AlertCircle
+  HardHat, CheckCircle, PauseCircle, XCircle, FileText, TrendingUp,
+  Camera, Image, Receipt, Users, MapPin, Phone,
+  ZoomIn,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Job, JobStatus, TimeEntry, JobMaterial, Currency } from '../types';
+import { Job, JobStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency } from '../types';
 
 function newId(prefix: string) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function nowISO() { return new Date().toISOString(); }
@@ -13,11 +15,11 @@ function todayISO() { return new Date().toISOString().slice(0,10); }
 const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
 const STATUS_COLORS: Record<JobStatus, string> = {
-  quote:     'bg-purple-100 text-purple-700',
-  active:    'bg-green-100 text-green-700',
-  paused:    'bg-amber-100 text-amber-700',
-  complete:  'bg-blue-100 text-blue-700',
-  cancelled: 'bg-gray-100 text-gray-500',
+  quote:     'bg-purple-100 text-purple-700 border border-purple-200',
+  active:    'bg-green-100 text-green-700 border border-green-200',
+  paused:    'bg-amber-100 text-amber-700 border border-amber-200',
+  complete:  'bg-blue-100 text-blue-700 border border-blue-200',
+  cancelled: 'bg-gray-100 text-gray-500 border border-gray-200',
 };
 
 const STATUS_ICONS: Record<JobStatus, React.ElementType> = {
@@ -31,6 +33,7 @@ const emptyJob = (): Partial<Job> => ({
   description:'', notes:'',
 });
 
+type TabType = 'time' | 'materials' | 'photos' | 'summary';
 interface JobFormState { open: boolean; job?: Partial<Job>; }
 interface TimeFormState { open: boolean; jobId: string; entry?: Partial<TimeEntry>; }
 interface MatFormState  { open: boolean; jobId: string; mat?: Partial<JobMaterial>; }
@@ -38,25 +41,37 @@ interface MatFormState  { open: boolean; jobId: string; mat?: Partial<JobMateria
 export default function Jobs() {
   const { data, dispatch, lang, fmt, cc } = useApp();
   const isIS = lang === 'is';
+  const t = (is: string, en: string) => isIS ? is : en;
 
-  const jobs       = data.jobs ?? [];
-  const times      = data.timeEntries ?? [];
-  const materials  = data.jobMaterials ?? [];
+  const jobs      = data.jobs ?? [];
+  const times     = data.timeEntries ?? [];
+  const materials = data.jobMaterials ?? [];
+  const photos    = data.jobPhotos ?? [];
 
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>('all');
   const [expandedId, setExpandedId]     = useState<string | null>(null);
-  const [tab, setTab]                   = useState<Record<string, 'time'|'materials'|'summary'>>({});
+  const [tab, setTab]                   = useState<Record<string, TabType>>({});
   const [jobForm, setJobForm]           = useState<JobFormState>({ open: false });
   const [timeForm, setTimeForm]         = useState<TimeFormState>({ open: false, jobId: '' });
   const [matForm, setMatForm]           = useState<MatFormState>({ open: false, jobId: '' });
+  const [lightbox, setLightbox]         = useState<JobPhoto | null>(null);
+  const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null);
+
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const [photoJobId, setPhotoJobId] = useState<string>('');
 
   // ── helpers ──────────────────────────────────────────────
-  const jobTimes = (id: string) => times.filter(t => t.jobId === id);
-  const jobMats  = (id: string) => materials.filter(m => m.jobId === id);
+  const jobTimes  = (id: string) => times.filter(t => t.jobId === id);
+  const jobMats   = (id: string) => materials.filter(m => m.jobId === id);
+  const jobPhotos = (id: string) => photos.filter(p => p.jobId === id);
   const labourCost = (id: string) => jobTimes(id).reduce((s,t) => s + t.hours * t.hourlyRate, 0);
   const matCost    = (id: string) => jobMats(id).reduce((s,m) => s + m.qty * m.unitCost, 0);
   const totalCost  = (id: string) => labourCost(id) + matCost(id);
-  const profit     = (j: Job)  => (j.quotedAmount ?? 0) - totalCost(j.id);
+  const profit     = (j: Job)    => (j.quotedAmount ?? 0) - totalCost(j.id);
+
+  const getTab = (id: string): TabType => tab[id] ?? 'summary';
+  const setJobTab = (id: string, t: TabType) => setTab(v => ({ ...v, [id]: t }));
 
   // ── job counter ──────────────────────────────────────────
   const nextJobNumber = () => {
@@ -79,7 +94,7 @@ export default function Jobs() {
   }
 
   function deleteJob(id: string) {
-    if (confirm(isIS ? 'Eyða þessum verkefni og öllum tímum/efni?' : 'Delete this job and all its time/materials?'))
+    if (confirm(t('Eyða þessum verkefni og öllum tímum/efni/myndum?', 'Delete this job and all its time/materials/photos?')))
       dispatch({ type:'DELETE_JOB', payload:id });
   }
 
@@ -87,7 +102,7 @@ export default function Jobs() {
     dispatch({ type:'UPDATE_JOB', payload:{ ...job, status, updatedAt:nowISO() } });
   }
 
-  // ── save time entry ───────────────────────────────────────
+  // ── time entry ────────────────────────────────────────────
   function saveTime() {
     const f = timeForm.entry!;
     if (!f.employeeName?.trim() || !f.hours || f.hours <= 0) return;
@@ -100,7 +115,7 @@ export default function Jobs() {
     setTimeForm(v => ({ ...v, open:false, entry:undefined }));
   }
 
-  // ── save material ─────────────────────────────────────────
+  // ── material ──────────────────────────────────────────────
   function saveMat() {
     const f = matForm.mat!;
     if (!f.description?.trim() || !f.qty || f.qty <= 0) return;
@@ -113,247 +128,491 @@ export default function Jobs() {
     setMatForm(v => ({ ...v, open:false, mat:undefined }));
   }
 
-  const filtered = jobs.filter(j => statusFilter === 'all' || j.status === statusFilter)
-    .sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+  // ── photos ────────────────────────────────────────────────
+  function handlePhotoFiles(jobId: string, files: FileList | null) {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        const dataUrl = e.target?.result as string;
+        if (!dataUrl) return;
+        dispatch({ type:'ADD_JOB_PHOTO', payload:{
+          id: newId('photo'), jobId,
+          dataUrl, caption:'', takenBy:'',
+          takenAt: nowISO(), createdAt: nowISO(),
+        }});
+      };
+      reader.readAsDataURL(file);
+    });
+  }
 
-  const activeCount = jobs.filter(j => j.status === 'active').length;
-  const totalRevenue = jobs.filter(j => j.status === 'complete').reduce((s,j) => s + (j.quotedAmount ?? 0), 0);
+  function updateCaption(photo: JobPhoto, caption: string) {
+    dispatch({ type:'UPDATE_JOB_PHOTO', payload:{ ...photo, caption } });
+  }
 
-  const statuses: { key: JobStatus|'all'; label: string }[] = [
-    { key:'all',       label: isIS ? 'Öll' : 'All' },
-    { key:'active',    label: isIS ? 'Virk' : 'Active' },
-    { key:'quote',     label: isIS ? 'Tilboð' : 'Quote' },
-    { key:'paused',    label: isIS ? 'Í bið' : 'Paused' },
-    { key:'complete',  label: isIS ? 'Lokið' : 'Complete' },
-    { key:'cancelled', label: isIS ? 'Afturkallað' : 'Cancelled' },
-  ];
+  function deletePhoto(id: string) {
+    dispatch({ type:'DELETE_JOB_PHOTO', payload:id });
+  }
 
-  const jobTab = (id: string) => tab[id] ?? 'time';
-  const setJobTab = (id: string, t: 'time'|'materials'|'summary') => setTab(v => ({...v, [id]:t}));
+  // ── convert to invoice ────────────────────────────────────
+  function convertToInvoice(job: Job) {
+    const timeItems = jobTimes(job.id);
+    const matItems  = jobMats(job.id);
+
+    if (timeItems.length === 0 && matItems.length === 0) {
+      alert(t('Engar færslur á þessum verkefni til að reikningsfæra.', 'No time or materials on this job to invoice.'));
+      return;
+    }
+
+    const lines: InvoiceLine[] = [];
+
+    // Group time by worker
+    const workerMap: Record<string, { hours: number; rate: number }> = {};
+    timeItems.forEach(te => {
+      if (!workerMap[te.employeeName]) workerMap[te.employeeName] = { hours: 0, rate: te.hourlyRate };
+      workerMap[te.employeeName].hours += te.hours;
+    });
+
+    Object.entries(workerMap).forEach(([name, { hours, rate }]) => {
+      lines.push({
+        id: newId('il'),
+        description: `${t('Vinnulaun', 'Labour')} — ${name}`,
+        quantity: hours,
+        unitPrice: rate,
+        vatRate: cc.standardRate,
+      });
+    });
+
+    // Materials
+    matItems.forEach(m => {
+      lines.push({
+        id: newId('il'),
+        description: m.description,
+        quantity: m.qty,
+        unitPrice: m.unitCost,
+        vatRate: cc.standardRate,
+      });
+    });
+
+    const customer: InvoiceCustomer = {
+      name: job.clientName,
+      email: job.clientEmail,
+      phone: job.clientPhone,
+      address: job.address,
+    };
+
+    const today = todayISO();
+    const due = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
+    const lastNum = data.settings.invoiceLastNumber + 1;
+    const prefix = data.settings.invoicePrefix || 'R';
+
+    const invoice: Invoice = {
+      id: newId('inv'),
+      number: `${prefix}${String(lastNum).padStart(4,'0')}`,
+      type: 'invoice',
+      date: today,
+      dueDate: due,
+      customer,
+      lines,
+      notes: `${t('Verk', 'Job')}: ${job.number} — ${job.name}`,
+      status: 'draft',
+      currency: job.currency,
+      eurToIskRate: data.settings.exchangeRates?.EUR ?? 150,
+    };
+
+    dispatch({ type:'ADD_INVOICE', payload: invoice });
+    dispatch({ type:'UPDATE_SETTINGS', payload:{ invoiceLastNumber: lastNum } });
+
+    setInvoiceSuccess(invoice.number);
+    setTimeout(() => setInvoiceSuccess(null), 4000);
+  }
+
+  // ── filter ────────────────────────────────────────────────
+  const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => j.status === statusFilter);
+  const STATUSES: JobStatus[] = ['quote','active','paused','complete','cancelled'];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+
+      {/* Invoice success toast */}
+      {invoiceSuccess && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm font-medium">
+          <CheckCircle className="w-4 h-4" />
+          {t(`Reikningur ${invoiceSuccess} búinn til!`, `Invoice ${invoiceSuccess} created!`)}
+        </div>
+      )}
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <HardHat className="w-6 h-6 text-amber-500" />
-            {isIS ? 'Verkefni / Starfsstöðvar' : 'Jobs / Work Accounting'}
+          <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <HardHat className="w-5 h-5 text-blue-600" />
+            {t('Vinnubók', 'Work Book')}
           </h1>
-          <p className="text-sm text-gray-500">{isIS ? 'Tími, efni og arðsemi per verkefni' : 'Time, materials and profit per job'}</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {t('Verkefni · Tímar · Efni · Myndir → Reikningur', 'Jobs · Hours · Materials · Photos → Invoice')}
+          </p>
         </div>
-        <button onClick={() => setJobForm({ open:true, job:{ ...emptyJob(), currency: cc.currency } })}
-          className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-          <Plus className="w-4 h-4" />{isIS ? 'Nýtt verkefni' : 'New job'}
+        <button onClick={() => setJobForm({ open:true, job:emptyJob() })}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
+          <Plus className="w-4 h-4" />
+          {t('Nýtt verkefni', 'New job')}
         </button>
       </div>
 
-      {/* Summary strip */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">{isIS ? 'Virk verkefni' : 'Active jobs'}</div>
-          <div className="text-2xl font-bold text-green-600">{activeCount}</div>
+      {/* Stats bar */}
+      {jobs.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: t('Virk', 'Active'), count: jobs.filter(j=>j.status==='active').length, color:'text-green-600' },
+            { label: t('Tilboð', 'Quotes'), count: jobs.filter(j=>j.status==='quote').length, color:'text-purple-600' },
+            { label: t('Lokið', 'Complete'), count: jobs.filter(j=>j.status==='complete').length, color:'text-blue-600' },
+            { label: t('Myndir', 'Photos'), count: photos.length, color:'text-orange-600' },
+          ].map(s => (
+            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
+              <div className={`text-2xl font-bold ${s.color}`}>{s.count}</div>
+              <div className="text-xs text-gray-500">{s.label}</div>
+            </div>
+          ))}
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">{isIS ? 'Verkefni samtals' : 'Total jobs'}</div>
-          <div className="text-2xl font-bold text-gray-900">{jobs.length}</div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="text-xs text-gray-500 mb-1">{isIS ? 'Tekjur (lokið)' : 'Revenue (complete)'}</div>
-          <div className="text-lg font-bold text-gray-900">{fmt(totalRevenue)}</div>
-        </div>
-      </div>
+      )}
 
-      {/* Status filter */}
+      {/* Filter */}
       <div className="flex gap-2 flex-wrap">
-        {statuses.map(s => (
-          <button key={s.key} onClick={() => setStatusFilter(s.key)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${statusFilter === s.key ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}>
-            {s.label}
-            {s.key !== 'all' && <span className="ml-1 opacity-60">{jobs.filter(j=>j.status===s.key).length}</span>}
+        {(['all', ...STATUSES] as const).map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+              statusFilter === s ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+            }`}>
+            {s === 'all' ? t('Allt', 'All') : s}
           </button>
         ))}
       </div>
 
       {/* Job list */}
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-400">
-          <HardHat className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="text-sm">{isIS ? 'Engin verkefni' : 'No jobs yet — add your first job'}</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <HardHat className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-400 text-sm">{t('Engin verkefni. Búðu til fyrsta verkefnið.', 'No jobs yet. Create your first job.')}</p>
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map(job => {
-            const expanded = expandedId === job.id;
-            const lc = labourCost(job.id);
-            const mc = matCost(job.id);
-            const tc = totalCost(job.id);
-            const pr = profit(job);
             const StatusIcon = STATUS_ICONS[job.status];
+            const isExpanded = expandedId === job.id;
+            const currentTab = getTab(job.id);
+            const jTimes = jobTimes(job.id);
+            const jMats  = jobMats(job.id);
+            const jPhotos = jobPhotos(job.id);
+            const labour  = labourCost(job.id);
+            const mat     = matCost(job.id);
+            const total   = labour + mat;
+            const profitAmt = profit(job);
 
             return (
-              <div key={job.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {/* Job header row */}
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <button onClick={() => setExpandedId(expanded ? null : job.id)} className="flex-1 flex items-center gap-3 text-left">
-                    <StatusIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              <div key={job.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                {/* Job header */}
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-gray-900">{job.name}</span>
                         <span className="text-xs font-mono text-gray-400">{job.number}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[job.status]}`}>
-                          {statuses.find(s=>s.key===job.status)?.label}
+                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[job.status]}`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {job.status}
                         </span>
+                        {jPhotos.length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
+                            <Camera className="w-3 h-3" />
+                            {jPhotos.length}
+                          </span>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">{job.clientName}{job.address ? ` · ${job.address}` : ''}</div>
-                    </div>
-                    <div className="text-right flex-shrink-0 hidden sm:block">
-                      <div className="text-sm font-semibold text-gray-800">{fmt(job.quotedAmount ?? 0)}</div>
-                      <div className={`text-xs font-medium ${pr >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {pr >= 0 ? '+' : ''}{fmt(pr)} {isIS ? 'framlegð' : 'margin'}
+                      <h3 className="font-semibold text-gray-900 mt-1">{job.name}</h3>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
+                        <span className="flex items-center gap-1"><Users className="w-3 h-3" />{job.clientName}</span>
+                        {job.address && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{job.address}</span>}
+                        {job.clientPhone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{job.clientPhone}</span>}
                       </div>
                     </div>
-                    {expanded ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-                  </button>
-                  <div className="flex gap-1">
-                    <button onClick={() => setJobForm({ open:true, job:{...job} })} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => deleteJob(job.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {/* Quick status change */}
+                      <select value={job.status}
+                        onChange={e => updateStatus(job, e.target.value as JobStatus)}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <button onClick={() => setJobForm({ open:true, job:{ ...job } })}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => deleteJob(job.id)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-600 transition">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setExpandedId(isExpanded ? null : job.id)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Mini summary */}
+                  <div className="flex gap-4 mt-3 text-xs text-gray-500">
+                    <span><Clock className="w-3 h-3 inline mr-0.5" />{jTimes.reduce((s,t)=>s+t.hours,0).toFixed(1)}h</span>
+                    <span><Package className="w-3 h-3 inline mr-0.5" />{jMats.length} {t('hlutir','items')}</span>
+                    <span className="font-medium text-gray-700">{fmt(total)}</span>
+                    {job.quotedAmount ? (
+                      <span className={`font-semibold ${profitAmt >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {profitAmt >= 0 ? '+' : ''}{fmt(profitAmt)}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
 
-                {/* Expanded detail panel */}
-                {expanded && (
+                {/* Expanded panel */}
+                {isExpanded && (
                   <div className="border-t border-gray-100">
-                    {/* Status switcher */}
-                    <div className="px-4 pt-3 pb-1 flex gap-2 flex-wrap">
-                      {(['quote','active','paused','complete','cancelled'] as JobStatus[]).map(s => (
-                        <button key={s} onClick={() => updateStatus(job, s)}
-                          className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${job.status === s ? STATUS_COLORS[s]+' border-transparent' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
-                          {statuses.find(x=>x.key===s)?.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="flex gap-0 border-b border-gray-100 px-4">
-                      {([['time', isIS?'Tími':'Time'], ['materials', isIS?'Efni':'Materials'], ['summary', isIS?'Samantekt':'Summary']] as const).map(([t,label]) => (
-                        <button key={t} onClick={() => setJobTab(job.id, t as 'time'|'materials'|'summary')}
-                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${jobTab(job.id)===t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                    {/* Tab bar */}
+                    <div className="flex border-b border-gray-100 bg-gray-50">
+                      {([
+                        { id:'summary',   label: t('Samantekt','Summary'),  icon: TrendingUp },
+                        { id:'time',      label: t('Tímar','Time'),         icon: Clock },
+                        { id:'materials', label: t('Efni','Materials'),     icon: Package },
+                        { id:'photos',    label: `${t('Myndir','Photos')} (${jPhotos.length})`, icon: Camera },
+                      ] as const).map(({ id, label, icon: Icon }) => (
+                        <button key={id} onClick={() => setJobTab(job.id, id)}
+                          className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition ${
+                            currentTab === id ? 'border-blue-500 text-blue-600 bg-white' : 'border-transparent text-gray-500 hover:text-gray-700'
+                          }`}>
+                          <Icon className="w-3.5 h-3.5" />
                           {label}
                         </button>
                       ))}
                     </div>
 
-                    {/* TIME TAB */}
-                    {jobTab(job.id) === 'time' && (
-                      <div className="p-4">
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="text-xs font-semibold text-gray-500 uppercase">{isIS?'Tímaskráning':'Time entries'}</span>
-                          <button onClick={() => setTimeForm({ open:true, jobId:job.id, entry:{ date:todayISO(), hours:8, hourlyRate:5000, employeeName:'' } })}
-                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-                            <Plus className="w-3.5 h-3.5" />{isIS?'Bæta við tíma':'Log time'}
-                          </button>
-                        </div>
-                        {jobTimes(job.id).length === 0 ? (
-                          <p className="text-xs text-gray-400 py-2">{isIS?'Engir tímar skráðir':'No time logged yet'}</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {jobTimes(job.id).sort((a,b)=>b.date.localeCompare(a.date)).map(te => (
-                              <div key={te.id} className="flex items-center gap-3 text-xs bg-gray-50 rounded-lg px-3 py-2">
-                                <span className="text-gray-400 w-20 flex-shrink-0">{te.date}</span>
-                                <span className="font-medium text-gray-800 flex-1">{te.employeeName}</span>
-                                <span className="text-gray-600">{te.hours}h × {fmt(te.hourlyRate)}</span>
-                                <span className="font-semibold text-gray-800">{fmt(te.hours * te.hourlyRate)}</span>
-                                <button onClick={() => dispatch({ type:'DELETE_TIME_ENTRY', payload:te.id })} className="text-gray-300 hover:text-red-400 ml-1">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                            <div className="flex justify-end pt-1">
-                              <span className="text-xs font-bold text-gray-700">{isIS?'Samtals':'Total'}: {fmt(lc)}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    <div className="p-4">
 
-                    {/* MATERIALS TAB */}
-                    {jobTab(job.id) === 'materials' && (
-                      <div className="p-4">
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="text-xs font-semibold text-gray-500 uppercase">{isIS?'Efni og hlutir':'Materials'}</span>
-                          <button onClick={() => setMatForm({ open:true, jobId:job.id, mat:{ date:todayISO(), qty:1, unit:'pcs', unitCost:0, description:'' } })}
-                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
-                            <Plus className="w-3.5 h-3.5" />{isIS?'Bæta við efni':'Add material'}
-                          </button>
-                        </div>
-                        {jobMats(job.id).length === 0 ? (
-                          <p className="text-xs text-gray-400 py-2">{isIS?'Ekkert efni skráð':'No materials yet'}</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {jobMats(job.id).sort((a,b)=>b.date.localeCompare(a.date)).map(m => (
-                              <div key={m.id} className="flex items-center gap-3 text-xs bg-gray-50 rounded-lg px-3 py-2">
-                                <span className="text-gray-400 w-20 flex-shrink-0">{m.date}</span>
-                                <span className="font-medium text-gray-800 flex-1">{m.description}</span>
-                                <span className="text-gray-600">{m.qty} {m.unit} × {fmt(m.unitCost)}</span>
-                                <span className="font-semibold text-gray-800">{fmt(m.qty * m.unitCost)}</span>
-                                <button onClick={() => dispatch({ type:'DELETE_JOB_MATERIAL', payload:m.id })} className="text-gray-300 hover:text-red-400 ml-1">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                            <div className="flex justify-end pt-1">
-                              <span className="text-xs font-bold text-gray-700">{isIS?'Samtals':'Total'}: {fmt(mc)}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      {/* ── SUMMARY TAB ── */}
+                      {currentTab === 'summary' && (
+                        <div className="space-y-4">
+                          {job.description && (
+                            <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{job.description}</p>
+                          )}
 
-                    {/* SUMMARY TAB */}
-                    {jobTab(job.id) === 'summary' && (
-                      <div className="p-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          <div className="bg-gray-50 rounded-xl p-3">
-                            <div className="text-xs text-gray-500 mb-1">{isIS?'Samkvæmt tilboði':'Quoted'}</div>
-                            <div className="text-lg font-bold text-gray-900">{fmt(job.quotedAmount ?? 0)}</div>
-                          </div>
-                          <div className="bg-blue-50 rounded-xl p-3">
-                            <div className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Clock className="w-3 h-3"/>{isIS?'Launakostnaður':'Labour cost'}</div>
-                            <div className="text-lg font-bold text-blue-700">{fmt(lc)}</div>
-                            <div className="text-xs text-gray-400">{jobTimes(job.id).reduce((s,t)=>s+t.hours,0)}h {isIS?'samtals':'total'}</div>
-                          </div>
-                          <div className="bg-amber-50 rounded-xl p-3">
-                            <div className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Package className="w-3 h-3"/>{isIS?'Efniskostnaður':'Materials cost'}</div>
-                            <div className="text-lg font-bold text-amber-700">{fmt(mc)}</div>
-                          </div>
-                          <div className="bg-gray-100 rounded-xl p-3">
-                            <div className="text-xs text-gray-500 mb-1">{isIS?'Heildarkostnaður':'Total cost'}</div>
-                            <div className="text-lg font-bold text-gray-800">{fmt(tc)}</div>
-                          </div>
-                          <div className={`rounded-xl p-3 col-span-2 ${pr >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                            <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-                              {pr >= 0 ? <TrendingUp className="w-3 h-3 text-green-600"/> : <AlertCircle className="w-3 h-3 text-red-500"/>}
-                              {isIS?'Framlegð / hagnaður':'Margin / profit'}
+                          {/* Financials */}
+                          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">{t('Vinnulaun','Labour cost')}</span>
+                              <span className="font-medium">{fmt(labour)}</span>
                             </div>
-                            <div className={`text-xl font-bold ${pr >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                              {pr >= 0 ? '+' : ''}{fmt(pr)}
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-500">{t('Efniskostnaður','Materials cost')}</span>
+                              <span className="font-medium">{fmt(mat)}</span>
                             </div>
-                            {(job.quotedAmount ?? 0) > 0 && (
-                              <div className={`text-xs font-medium ${pr >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                {Math.round(pr / (job.quotedAmount ?? 1) * 100)}% {isIS?'af tilboði':'of quoted'}
+                            <div className="border-t border-gray-200 pt-2 flex justify-between text-sm font-semibold">
+                              <span>{t('Heildarkostnaður','Total cost')}</span>
+                              <span>{fmt(total)}</span>
+                            </div>
+                            {job.quotedAmount ? <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">{t('Tilboðsverð','Quoted price')}</span>
+                                <span className="font-medium">{fmt(job.quotedAmount ?? 0)}</span>
                               </div>
-                            )}
+                              <div className={`flex justify-between text-sm font-bold pt-1 border-t border-gray-200 ${profitAmt >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                <span>{t('Hagnaður','Profit')}</span>
+                                <span>{profitAmt >= 0 ? '+' : ''}{fmt(profitAmt)} ({job.quotedAmount > 0 ? Math.round(profitAmt / job.quotedAmount * 100) : 0}%)</span>
+                              </div>
+                            </> : null}
                           </div>
+
+                          {/* Worker summary */}
+                          {jTimes.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                {t('Starfsmenn','Workers')}
+                              </h4>
+                              {Object.entries(
+                                jTimes.reduce((acc, te) => {
+                                  acc[te.employeeName] = (acc[te.employeeName] || 0) + te.hours;
+                                  return acc;
+                                }, {} as Record<string, number>)
+                              ).map(([name, hours]) => (
+                                <div key={name} className="flex justify-between text-sm py-1 border-b border-gray-100 last:border-0">
+                                  <span className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold">
+                                      {name.charAt(0).toUpperCase()}
+                                    </div>
+                                    {name}
+                                  </span>
+                                  <span className="font-medium text-gray-700">{hours.toFixed(1)}h</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Convert to Invoice button */}
+                          <button onClick={() => convertToInvoice(job)}
+                            className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
+                            <Receipt className="w-4 h-4" />
+                            {t('Breyta í reikning', 'Convert to Invoice')}
+                          </button>
+
+                          {job.notes && (
+                            <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                              📝 {job.notes}
+                            </p>
+                          )}
                         </div>
-                        {job.description && <p className="text-xs text-gray-500 mt-3 bg-gray-50 rounded-lg px-3 py-2">{job.description}</p>}
-                      </div>
-                    )}
+                      )}
+
+                      {/* ── TIME TAB ── */}
+                      {currentTab === 'time' && (
+                        <div className="space-y-3">
+                          <button onClick={() => setTimeForm({ open:true, jobId:job.id, entry:{ date:todayISO(), hourlyRate:5000, hours:8 } })}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition">
+                            <Plus className="w-3.5 h-3.5" />
+                            {t('Skrá tíma', 'Log time')}
+                          </button>
+                          {jTimes.length === 0 ? (
+                            <p className="text-xs text-gray-400 text-center py-4">{t('Engir tímar skráðir','No time logged')}</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {jTimes.map(te => (
+                                <div key={te.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold flex-shrink-0">
+                                    {te.employeeName.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900">{te.employeeName}</div>
+                                    <div className="text-xs text-gray-500">{te.date} · {te.description || ''}</div>
+                                  </div>
+                                  <div className="text-right flex-shrink-0">
+                                    <div className="text-sm font-semibold text-gray-900">{te.hours}h</div>
+                                    <div className="text-xs text-gray-500">{fmt(te.hours * te.hourlyRate)}</div>
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <button onClick={() => setTimeForm({ open:true, jobId:job.id, entry:{ ...te } })}
+                                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-blue-600 transition">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => dispatch({ type:'DELETE_TIME_ENTRY', payload:te.id })}
+                                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-600 transition">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-xs font-semibold text-gray-700 px-3 py-2 bg-blue-50 rounded-lg">
+                                <span>{jTimes.reduce((s,t)=>s+t.hours,0).toFixed(1)}h {t('alls','total')}</span>
+                                <span>{fmt(labour)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── MATERIALS TAB ── */}
+                      {currentTab === 'materials' && (
+                        <div className="space-y-3">
+                          <button onClick={() => setMatForm({ open:true, jobId:job.id, mat:{ date:todayISO(), qty:1, unitCost:0, unit:'stk' } })}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition">
+                            <Plus className="w-3.5 h-3.5" />
+                            {t('Bæta við efni', 'Add material')}
+                          </button>
+                          {jMats.length === 0 ? (
+                            <p className="text-xs text-gray-400 text-center py-4">{t('Ekkert efni skráð','No materials logged')}</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {jMats.map(m => (
+                                <div key={m.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                                  <Package className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900">{m.description}</div>
+                                    <div className="text-xs text-gray-500">{m.date} · {m.qty} {m.unit}</div>
+                                  </div>
+                                  <div className="text-right flex-shrink-0">
+                                    <div className="text-sm font-semibold text-gray-900">{fmt(m.qty * m.unitCost)}</div>
+                                    <div className="text-xs text-gray-500">{fmt(m.unitCost)}/{m.unit}</div>
+                                  </div>
+                                  <div className="flex gap-1">
+                                    <button onClick={() => setMatForm({ open:true, jobId:job.id, mat:{ ...m } })}
+                                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-blue-600 transition">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => dispatch({ type:'DELETE_JOB_MATERIAL', payload:m.id })}
+                                      className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-600 transition">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-xs font-semibold text-gray-700 px-3 py-2 bg-green-50 rounded-lg">
+                                <span>{jMats.length} {t('liðir','lines')}</span>
+                                <span>{fmt(mat)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── PHOTOS TAB ── */}
+                      {currentTab === 'photos' && (
+                        <div className="space-y-3">
+                          {/* Camera / upload buttons */}
+                          <div className="flex gap-2">
+                            <button onClick={() => { setPhotoJobId(job.id); cameraRef.current?.click(); }}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 rounded-lg text-xs font-medium transition">
+                              <Camera className="w-3.5 h-3.5" />
+                              {t('Taka mynd', 'Take photo')}
+                            </button>
+                            <button onClick={() => { setPhotoJobId(job.id); galleryRef.current?.click(); }}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition">
+                              <Image className="w-3.5 h-3.5" />
+                              {t('Velja úr myndasafni', 'Choose from gallery')}
+                            </button>
+                          </div>
+
+                          {jPhotos.length === 0 ? (
+                            <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-xl">
+                              <Camera className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                              <p className="text-xs text-gray-400">{t('Engar myndir. Taktu mynd á vinnustaðnum.', 'No photos. Take a photo on site.')}</p>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              {jPhotos.map(photo => (
+                                <div key={photo.id} className="relative group rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
+                                  <img src={photo.dataUrl} alt={photo.caption || ''} className="w-full aspect-square object-cover" />
+                                  {/* Overlay */}
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                                    <button onClick={() => setLightbox(photo)}
+                                      className="p-2 rounded-full bg-white/90 text-gray-700 hover:bg-white transition">
+                                      <ZoomIn className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => deletePhoto(photo.id)}
+                                      className="p-2 rounded-full bg-white/90 text-red-600 hover:bg-white transition">
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                  {/* Caption */}
+                                  <div className="p-2">
+                                    <input
+                                      value={photo.caption || ''}
+                                      onChange={e => updateCaption(photo, e.target.value)}
+                                      placeholder={t('Lýsing...', 'Caption...')}
+                                      className="w-full text-xs text-gray-600 bg-transparent border-0 focus:outline-none placeholder-gray-400"
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-0.5">{photo.takenAt.slice(0,10)}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -362,165 +621,204 @@ export default function Jobs() {
         </div>
       )}
 
-      {/* ── Job Form Modal ───────────────────────────────────── */}
-      {jobForm.open && jobForm.job && (
-        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white w-full md:max-w-xl md:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-              <h2 className="font-semibold">{jobForm.job.id ? (isIS?'Breyta verkefni':'Edit job') : (isIS?'Nýtt verkefni':'New job')}</h2>
-              <button onClick={() => setJobForm({open:false})}><X className="w-5 h-5 text-gray-400"/></button>
+      {/* Hidden file inputs for photos */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+        onChange={e => { handlePhotoFiles(photoJobId, e.target.files); e.target.value = ''; }} />
+      <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
+        onChange={e => { handlePhotoFiles(photoJobId, e.target.files); e.target.value = ''; }} />
+
+      {/* ── Lightbox ── */}
+      {lightbox && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            <img src={lightbox.dataUrl} alt={lightbox.caption || ''} className="w-full rounded-xl shadow-2xl max-h-[80vh] object-contain" />
+            {lightbox.caption && (
+              <p className="text-center text-white/80 mt-3 text-sm">{lightbox.caption}</p>
+            )}
+            <button onClick={() => setLightbox(null)}
+              className="absolute top-3 right-3 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Job form modal ── */}
+      {jobForm.open && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-8 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="font-semibold text-gray-900">
+                {jobForm.job?.id ? t('Breyta verkefni','Edit job') : t('Nýtt verkefni','New job')}
+              </h2>
+              <button onClick={() => setJobForm({ open:false })} className="p-1 rounded hover:bg-gray-100 text-gray-500">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="px-6 py-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Heiti verkefnis':'Job name'} *</label>
-                  <input className={inp} value={jobForm.job.name??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,name:e.target.value}}))} placeholder={isIS?'t.d. Kringlan 3. hæð viðbygging':'e.g. Office extension - North block'} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Heiti verkefnis *','Job name *')}</label>
+                  <input className={inp} value={jobForm.job?.name ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, name:e.target.value } }))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Viðskiptavinur *','Client *')}</label>
+                  <input className={inp} value={jobForm.job?.clientName ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, clientName:e.target.value } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Viðskiptavinur':'Client'} *</label>
-                  <input className={inp} value={jobForm.job.clientName??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,clientName:e.target.value}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tengiliður','Contact person')}</label>
+                  <input className={inp} value={jobForm.job?.clientContact ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, clientContact:e.target.value } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Staða':'Status'}</label>
-                  <select className={inp} value={jobForm.job.status??'active'} onChange={e => setJobForm(f=>({...f,job:{...f.job!,status:e.target.value as JobStatus}}))}>
-                    <option value="quote">{isIS?'Tilboð':'Quote'}</option>
-                    <option value="active">{isIS?'Virkt':'Active'}</option>
-                    <option value="paused">{isIS?'Í bið':'Paused'}</option>
-                    <option value="complete">{isIS?'Lokið':'Complete'}</option>
-                    <option value="cancelled">{isIS?'Afturkallað':'Cancelled'}</option>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Sími','Phone')}</label>
+                  <input className={inp} value={jobForm.job?.clientPhone ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, clientPhone:e.target.value } }))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Netfang','Email')}</label>
+                  <input type="email" className={inp} value={jobForm.job?.clientEmail ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, clientEmail:e.target.value } }))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Vinnustaður / Heimilisfang','Site address')}</label>
+                  <input className={inp} value={jobForm.job?.address ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, address:e.target.value } }))} placeholder={t('Götuheiti, bær','Street, town')} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Staða','Status')}</label>
+                  <select className={inp} value={jobForm.job?.status ?? 'active'} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, status:e.target.value as JobStatus } }))}>
+                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Tilboðsverð':'Quoted amount'}</label>
-                  <input type="number" min="0" className={inp} value={jobForm.job.quotedAmount??0} onChange={e => setJobForm(f=>({...f,job:{...f.job!,quotedAmount:parseFloat(e.target.value)||0}}))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Gjaldmiðill':'Currency'}</label>
-                  <select className={inp} value={jobForm.job.currency??'ISK'} onChange={e => setJobForm(f=>({...f,job:{...f.job!,currency:e.target.value as Currency}}))}>
-                    {['ISK','EUR','USD','GBP','DKK','NOK','SEK'].map(c=><option key={c} value={c}>{c}</option>)}
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Gjaldmiðill','Currency')}</label>
+                  <select className={inp} value={jobForm.job?.currency ?? 'ISK'} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, currency:e.target.value as Currency } }))}>
+                    {['ISK','EUR','USD','GBP','DKK','NOK','SEK'].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Upphafsdagur':'Start date'}</label>
-                  <input type="date" className={inp} value={jobForm.job.startDate??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,startDate:e.target.value}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Upphafsdagur','Start date')}</label>
+                  <input type="date" className={inp} value={jobForm.job?.startDate ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, startDate:e.target.value } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Skiladagur':'End date'}</label>
-                  <input type="date" className={inp} value={jobForm.job.endDate??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,endDate:e.target.value}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Lokadagur','End date')}</label>
+                  <input type="date" className={inp} value={jobForm.job?.endDate ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, endDate:e.target.value } }))} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Staðsetning':'Address / location'}</label>
-                  <input className={inp} value={jobForm.job.address??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,address:e.target.value}}))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Netfang viðskiptavinar':'Client email'}</label>
-                  <input type="email" className={inp} value={jobForm.job.clientEmail??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,clientEmail:e.target.value}}))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Sími':'Phone'}</label>
-                  <input type="tel" className={inp} value={jobForm.job.clientPhone??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,clientPhone:e.target.value}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tilboðsverð (án VSK)','Quoted amount (ex. VAT)')}</label>
+                  <input type="number" className={inp} value={jobForm.job?.quotedAmount ?? 0} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, quotedAmount:Number(e.target.value) } }))} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Lýsing':'Description'}</label>
-                  <textarea className={inp} rows={2} value={jobForm.job.description??''} onChange={e => setJobForm(f=>({...f,job:{...f.job!,description:e.target.value}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Lýsing','Description')}</label>
+                  <textarea rows={2} className={inp} value={jobForm.job?.description ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, description:e.target.value } }))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Athugasemdir','Notes')}</label>
+                  <textarea rows={2} className={inp} value={jobForm.job?.notes ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, notes:e.target.value } }))} />
                 </div>
               </div>
-              <div className="flex gap-3 pt-1">
-                <button onClick={() => setJobForm({open:false})} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm">{isIS?'Hætta við':'Cancel'}</button>
-                <button onClick={saveJob} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700">{isIS?'Vista':'Save'}</button>
-              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setJobForm({ open:false })} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">
+                {t('Hætta við','Cancel')}
+              </button>
+              <button onClick={saveJob} disabled={!jobForm.job?.name?.trim() || !jobForm.job?.clientName?.trim()}
+                className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition disabled:opacity-50">
+                {t('Vista','Save')}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Time Entry Modal ─────────────────────────────────── */}
+      {/* ── Time form modal ── */}
       {timeForm.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white w-full md:max-w-sm md:rounded-2xl rounded-t-2xl shadow-xl">
-            <div className="flex items-center justify-between p-4 border-b">
-              <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-blue-500"/><h2 className="font-semibold">{isIS?'Skrá tíma':'Log time'}</h2></div>
-              <button onClick={() => setTimeForm(v=>({...v,open:false}))}><X className="w-5 h-5 text-gray-400"/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-blue-600" />
+                {timeForm.entry?.id ? t('Breyta tíma','Edit time') : t('Skrá tíma','Log time')}
+              </h2>
+              <button onClick={() => setTimeForm(v => ({ ...v, open:false }))} className="p-1 rounded hover:bg-gray-100 text-gray-500"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="px-6 py-4 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Dagsetning':'Date'}</label>
-                <input type="date" className={inp} value={timeForm.entry?.date??todayISO()} onChange={e=>setTimeForm(v=>({...v,entry:{...v.entry!,date:e.target.value}}))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Starfsmaður':'Employee name'}</label>
-                <input className={inp} value={timeForm.entry?.employeeName??''} onChange={e=>setTimeForm(v=>({...v,entry:{...v.entry!,employeeName:e.target.value}}))} autoFocus />
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('Starfsmaður *','Worker *')}</label>
+                <input className={inp} value={timeForm.entry?.employeeName ?? ''} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, employeeName:e.target.value } }))} placeholder={t('Nafn starfsmanns','Employee name')} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Tímar':'Hours'}</label>
-                  <input type="number" min="0.5" step="0.5" max="24" className={inp} value={timeForm.entry?.hours??8} onChange={e=>setTimeForm(v=>({...v,entry:{...v.entry!,hours:parseFloat(e.target.value)||0}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Dagsetning','Date')}</label>
+                  <input type="date" className={inp} value={timeForm.entry?.date ?? todayISO()} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, date:e.target.value } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Tímagjald (kostnaður)':'Hourly rate (cost)'}</label>
-                  <input type="number" min="0" step="100" className={inp} value={timeForm.entry?.hourlyRate??0} onChange={e=>setTimeForm(v=>({...v,entry:{...v.entry!,hourlyRate:parseFloat(e.target.value)||0}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Klukkustundir *','Hours *')}</label>
+                  <input type="number" step="0.5" min="0.5" className={inp} value={timeForm.entry?.hours ?? 8} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, hours:Number(e.target.value) } }))} />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Lýsing':'Description'}</label>
-                <input className={inp} value={timeForm.entry?.description??''} onChange={e=>setTimeForm(v=>({...v,entry:{...v.entry!,description:e.target.value}}))} />
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tímagjald (kr/klst)','Hourly rate')}</label>
+                <input type="number" className={inp} value={timeForm.entry?.hourlyRate ?? 5000} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, hourlyRate:Number(e.target.value) } }))} />
               </div>
-              <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700 font-medium">
-                {isIS?'Samtals':'Total'}: {fmt((timeForm.entry?.hours??0)*(timeForm.entry?.hourlyRate??0))}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('Lýsing','Description')}</label>
+                <input className={inp} value={timeForm.entry?.description ?? ''} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, description:e.target.value } }))} placeholder={t('Hvað var gert?','What was done?')} />
               </div>
-              <div className="flex gap-3">
-                <button onClick={()=>setTimeForm(v=>({...v,open:false}))} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm">{isIS?'Hætta við':'Cancel'}</button>
-                <button onClick={saveTime} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700">{isIS?'Vista':'Save'}</button>
-              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setTimeForm(v => ({ ...v, open:false }))} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{t('Hætta við','Cancel')}</button>
+              <button onClick={saveTime} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">{t('Vista','Save')}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Material Modal ───────────────────────────────────── */}
+      {/* ── Material form modal ── */}
       {matForm.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
-          <div className="bg-white w-full md:max-w-sm md:rounded-2xl rounded-t-2xl shadow-xl">
-            <div className="flex items-center justify-between p-4 border-b">
-              <div className="flex items-center gap-2"><Package className="w-4 h-4 text-amber-500"/><h2 className="font-semibold">{isIS?'Bæta við efni':'Add material'}</h2></div>
-              <button onClick={()=>setMatForm(v=>({...v,open:false}))}><X className="w-5 h-5 text-gray-400"/></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Package className="w-4 h-4 text-green-600" />
+                {matForm.mat?.id ? t('Breyta efni','Edit material') : t('Bæta við efni','Add material')}
+              </h2>
+              <button onClick={() => setMatForm(v => ({ ...v, open:false }))} className="p-1 rounded hover:bg-gray-100 text-gray-500"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-4 space-y-3">
+            <div className="px-6 py-4 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Dagsetning':'Date'}</label>
-                <input type="date" className={inp} value={matForm.mat?.date??todayISO()} onChange={e=>setMatForm(v=>({...v,mat:{...v.mat!,date:e.target.value}}))} />
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('Efni / Lýsing *','Material / Description *')}</label>
+                <input className={inp} value={matForm.mat?.description ?? ''} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, description:e.target.value } }))} placeholder={t('t.d. Viðarleggur 2x4','e.g. Timber 2x4')} />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Lýsing efnis':'Material description'}</label>
-                <input className={inp} value={matForm.mat?.description??''} onChange={e=>setMatForm(v=>({...v,mat:{...v.mat!,description:e.target.value}}))} autoFocus placeholder={isIS?'t.d. Einangrun, 100mm þykkt':'e.g. Insulation 100mm'} />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Magn':'Qty'}</label>
-                  <input type="number" min="0" step="0.1" className={inp} value={matForm.mat?.qty??1} onChange={e=>setMatForm(v=>({...v,mat:{...v.mat!,qty:parseFloat(e.target.value)||0}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Magn','Qty')}</label>
+                  <input type="number" min="0" step="0.1" className={inp} value={matForm.mat?.qty ?? 1} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, qty:Number(e.target.value) } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Eining':'Unit'}</label>
-                  <select className={inp} value={matForm.mat?.unit??'pcs'} onChange={e=>setMatForm(v=>({...v,mat:{...v.mat!,unit:e.target.value}}))}>
-                    {['pcs','kg','m','m²','m³','L','box','bag','roll','set'].map(u=><option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Eining','Unit')}</label>
+                  <input className={inp} value={matForm.mat?.unit ?? 'stk'} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, unit:e.target.value } }))} placeholder="stk/m/kg" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Einingaverð':'Unit cost'}</label>
-                  <input type="number" min="0" step="1" className={inp} value={matForm.mat?.unitCost??0} onChange={e=>setMatForm(v=>({...v,mat:{...v.mat!,unitCost:parseFloat(e.target.value)||0}}))} />
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Verð/stk','Unit cost')}</label>
+                  <input type="number" min="0" className={inp} value={matForm.mat?.unitCost ?? 0} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, unitCost:Number(e.target.value) } }))} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Dagsetning','Date')}</label>
+                  <input type="date" className={inp} value={matForm.mat?.date ?? todayISO()} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, date:e.target.value } }))} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Birgi','Supplier')}</label>
+                  <input className={inp} value={matForm.mat?.supplierName ?? ''} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, supplierName:e.target.value } }))} />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{isIS?'Birgir / tilvísun':'Supplier / reference'}</label>
-                <input className={inp} value={matForm.mat?.supplierName??''} onChange={e=>setMatForm(v=>({...v,mat:{...v.mat!,supplierName:e.target.value}}))} />
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tilvísun / Númer','Reference')}</label>
+                <input className={inp} value={matForm.mat?.reference ?? ''} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, reference:e.target.value } }))} placeholder={t('Reikningsnúmer birgis','Supplier invoice no.')} />
               </div>
-              <div className="bg-amber-50 rounded-lg px-3 py-2 text-xs text-amber-700 font-medium">
-                {isIS?'Samtals':'Total'}: {fmt((matForm.mat?.qty??0)*(matForm.mat?.unitCost??0))}
-              </div>
-              <div className="flex gap-3">
-                <button onClick={()=>setMatForm(v=>({...v,open:false}))} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm">{isIS?'Hætta við':'Cancel'}</button>
-                <button onClick={saveMat} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700">{isIS?'Vista':'Save'}</button>
-              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setMatForm(v => ({ ...v, open:false }))} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{t('Hætta við','Cancel')}</button>
+              <button onClick={saveMat} className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition">{t('Vista','Save')}</button>
             </div>
           </div>
         </div>

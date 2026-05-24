@@ -3,7 +3,7 @@ import { pushData, pullData } from '../utils/supabase';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
-  StockItem, StockMovement, Supplier, Job, TimeEntry, JobMaterial, AppUser,
+  StockItem, StockMovement, Supplier, Job, TimeEntry, JobMaterial, JobPhoto, AppUser,
   DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, Language, CountryConfig,
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
@@ -37,6 +37,7 @@ const defaultData: AppData = {
   jobs: [],
   timeEntries: [],
   jobMaterials: [],
+  jobPhotos: [],
   appUsers: [],
   settings: DEFAULT_SETTINGS,
 };
@@ -88,6 +89,9 @@ type Action =
   | { type: 'ADD_APP_USER'; payload: AppUser }
   | { type: 'UPDATE_APP_USER'; payload: AppUser }
   | { type: 'DELETE_APP_USER'; payload: string }
+  | { type: 'ADD_JOB_PHOTO'; payload: JobPhoto }
+  | { type: 'UPDATE_JOB_PHOTO'; payload: JobPhoto }
+  | { type: 'DELETE_JOB_PHOTO'; payload: string }
   | { type: 'SET_LANGUAGE'; payload: Language }
   | { type: 'LOAD'; payload: AppData };
 
@@ -142,7 +146,7 @@ function reducer(state: AppData, action: Action): AppData {
     case 'DELETE_SUPPLIER': return { ...state, suppliers: (state.suppliers ?? []).filter(s => s.id !== action.payload) };
     case 'ADD_JOB': return { ...state, jobs: [...(state.jobs ?? []), action.payload] };
     case 'UPDATE_JOB': return { ...state, jobs: (state.jobs ?? []).map(j => j.id === action.payload.id ? action.payload : j) };
-    case 'DELETE_JOB': return { ...state, jobs: (state.jobs ?? []).filter(j => j.id !== action.payload), timeEntries: (state.timeEntries ?? []).filter(t => t.jobId !== action.payload), jobMaterials: (state.jobMaterials ?? []).filter(m => m.jobId !== action.payload) };
+    case 'DELETE_JOB': return { ...state, jobs: (state.jobs ?? []).filter(j => j.id !== action.payload), timeEntries: (state.timeEntries ?? []).filter(t => t.jobId !== action.payload), jobMaterials: (state.jobMaterials ?? []).filter(m => m.jobId !== action.payload), jobPhotos: (state.jobPhotos ?? []).filter(p => p.jobId !== action.payload) };
     case 'ADD_TIME_ENTRY': return { ...state, timeEntries: [...(state.timeEntries ?? []), action.payload] };
     case 'UPDATE_TIME_ENTRY': return { ...state, timeEntries: (state.timeEntries ?? []).map(t => t.id === action.payload.id ? action.payload : t) };
     case 'DELETE_TIME_ENTRY': return { ...state, timeEntries: (state.timeEntries ?? []).filter(t => t.id !== action.payload) };
@@ -152,6 +156,9 @@ function reducer(state: AppData, action: Action): AppData {
     case 'ADD_APP_USER': return { ...state, appUsers: [...(state.appUsers ?? []), action.payload] };
     case 'UPDATE_APP_USER': return { ...state, appUsers: (state.appUsers ?? []).map(u => u.id === action.payload.id ? action.payload : u) };
     case 'DELETE_APP_USER': return { ...state, appUsers: (state.appUsers ?? []).filter(u => u.id !== action.payload) };
+    case 'ADD_JOB_PHOTO': return { ...state, jobPhotos: [...(state.jobPhotos ?? []), action.payload] };
+    case 'UPDATE_JOB_PHOTO': return { ...state, jobPhotos: (state.jobPhotos ?? []).map(p => p.id === action.payload.id ? action.payload : p) };
+    case 'DELETE_JOB_PHOTO': return { ...state, jobPhotos: (state.jobPhotos ?? []).filter(p => p.id !== action.payload) };
     case 'SET_LANGUAGE': return { ...state, settings: { ...state.settings, language: action.payload } };
     default: return state;
   }
@@ -193,6 +200,7 @@ function migrateData(parsed: Partial<AppData>): AppData {
     jobs: parsed.jobs ?? [],
     timeEntries: parsed.timeEntries ?? [],
     jobMaterials: parsed.jobMaterials ?? [],
+    jobPhotos: parsed.jobPhotos ?? [],
     appUsers: parsed.appUsers ?? [],
     settings: {
       ...DEFAULT_SETTINGS,

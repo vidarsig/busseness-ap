@@ -300,6 +300,16 @@ export interface JobMaterial {
   createdAt: string;
 }
 
+export interface JobPhoto {
+  id: string;
+  jobId: string;
+  dataUrl: string;       // base64 image
+  caption?: string;
+  takenBy?: string;
+  takenAt: string;       // ISO datetime
+  createdAt: string;
+}
+
 // ── Stock / Inventory ────────────────────────────────────────
 export interface StockItem {
   id: string;
@@ -364,6 +374,7 @@ export interface AppData {
   jobs: Job[];
   timeEntries: TimeEntry[];
   jobMaterials: JobMaterial[];
+  jobPhotos: JobPhoto[];
   appUsers: AppUser[];
   settings: AppSettings;
 }
