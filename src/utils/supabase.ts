@@ -1,11 +1,11 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { AppData } from '../types';
 
 let cachedClient: SupabaseClient | null = null;
 let cachedUrl = '';
 let cachedKey = '';
 
-function getClient(url: string, key: string): SupabaseClient | null {
+export function getClient(url: string, key: string): SupabaseClient | null {
   if (!url || !key) return null;
   if (cachedClient && cachedUrl === url && cachedKey === key) return cachedClient;
   try {
@@ -17,6 +17,58 @@ function getClient(url: string, key: string): SupabaseClient | null {
     return null;
   }
 }
+
+// ── Auth ─────────────────────────────────────────────────────
+
+export async function signUp(url: string, key: string, email: string, password: string, name: string) {
+  const sb = getClient(url, key);
+  if (!sb) return { error: 'Supabase not configured' };
+  const { data, error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { name, role: 'owner' } },
+  });
+  if (error) return { error: error.message };
+  return { user: data.user };
+}
+
+export async function signIn(url: string, key: string, email: string, password: string) {
+  const sb = getClient(url, key);
+  if (!sb) return { error: 'Supabase not configured' };
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) return { error: error.message };
+  return { user: data.user, session: data.session };
+}
+
+export async function signOut(url: string, key: string) {
+  const sb = getClient(url, key);
+  if (!sb) return;
+  await sb.auth.signOut();
+}
+
+export async function resetPassword(url: string, key: string, email: string) {
+  const sb = getClient(url, key);
+  if (!sb) return { error: 'Supabase not configured' };
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/?reset=true`,
+  });
+  return error ? { error: error.message } : {};
+}
+
+export async function getSession(url: string, key: string) {
+  const sb = getClient(url, key);
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  return data.session;
+}
+
+export async function getCurrentUser(url: string, key: string): Promise<User | null> {
+  const sb = getClient(url, key);
+  if (!sb) return null;
+  const { data } = await sb.auth.getUser();
+  return data.user ?? null;
+}
+
+// ── Data sync ────────────────────────────────────────────────
 
 export async function pushData(url: string, key: string, userKey: string, data: AppData): Promise<{ error?: string }> {
   const sb = getClient(url, key);

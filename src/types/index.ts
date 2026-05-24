@@ -6,7 +6,7 @@ export type View =
   | 'dashboard' | 'transactions' | 'recurring' | 'bankimport' | 'rules'
   | 'invoices' | 'accounts' | 'budget' | 'payroll'
   | 'vat' | 'vatreturn' | 'reports' | 'annual' | 'settings' | 'tasks' | 'ai'
-  | 'stock' | 'suppliers' | 'jobs';
+  | 'stock' | 'suppliers' | 'jobs' | 'users';
 
 // ── User roles ──────────────────────────────────────────────
 export type UserRole = 'owner' | 'manager' | 'accountant' | 'staff' | 'viewer';

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './contexts/AppContext';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -20,16 +20,71 @@ import CountryOnboarding from './components/CountryOnboarding';
 import AIAssistant from './components/AIAssistant';
 import Stock from './components/Stock';
 import Jobs from './components/Jobs';
+import Users from './components/Users';
+import Login from './components/Login';
 import { View } from './types';
+import { getSession } from './utils/supabase';
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+}
 
 function AppInner() {
   const [view, setView] = useState<View>('dashboard');
   const { data } = useApp();
 
+  const { supabaseUrl, supabaseKey } = data.settings;
+  const supabaseConfigured = !!(supabaseUrl && supabaseKey);
+
+  // Auth state
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // On mount: if Supabase configured, restore session
+  useEffect(() => {
+    if (!supabaseConfigured) {
+      setAuthChecked(true);
+      return;
+    }
+    getSession(supabaseUrl, supabaseKey).then(session => {
+      if (session?.user) {
+        const meta = session.user.user_metadata as { name?: string } | undefined;
+        setSessionUser({
+          id: session.user.id,
+          name: meta?.name || session.user.email || 'User',
+          email: session.user.email || '',
+        });
+      }
+      setAuthChecked(true);
+    });
+  }, [supabaseConfigured, supabaseUrl, supabaseKey]);
+
+  // Country onboarding first
   if (!data.settings.country) return <CountryOnboarding />;
 
+  // Wait for auth check
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Show login if Supabase configured but no session
+  if (supabaseConfigured && !sessionUser) {
+    return (
+      <Login
+        onSuccess={(id, name, email) => setSessionUser({ id, name, email })}
+      />
+    );
+  }
+
   return (
-    <Layout view={view} setView={setView}>
+    <Layout view={view} setView={setView} sessionUser={sessionUser}
+      onSignOut={() => setSessionUser(null)}>
       {view === 'dashboard'    && <Dashboard setView={setView} />}
       {view === 'transactions' && <Transactions />}
       {view === 'recurring'    && <Recurring />}
@@ -48,6 +103,7 @@ function AppInner() {
       {view === 'ai'           && <AIAssistant />}
       {view === 'stock'        && <Stock />}
       {view === 'jobs'         && <Jobs />}
+      {view === 'users'        && <Users sessionUser={sessionUser} />}
     </Layout>
   );
 }

@@ -3,12 +3,20 @@ import {
   BookOpen, LayoutDashboard, List, Calculator, BarChart2, FileText,
   Settings, Globe, Menu, X, RefreshCw, Upload, Receipt,
   BookMarked, TrendingUp, Users, ClipboardList, Zap, CheckSquare,
-  Cloud, CloudOff, Loader2, Bot, Package, HardHat,
+  Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
+import { signOut } from '../utils/supabase';
 import { View } from '../types';
+import type { SessionUser } from '../App';
 
-interface Props { view: View; setView: (v: View) => void; children: React.ReactNode; }
+interface Props {
+  view: View;
+  setView: (v: View) => void;
+  children: React.ReactNode;
+  sessionUser?: SessionUser | null;
+  onSignOut?: () => void;
+}
 
 interface NavItem { id: View; icon: React.ElementType; }
 interface NavSection { label?: string; labelKey?: string; items: NavItem[]; }
@@ -44,6 +52,7 @@ const sections: NavSection[] = [
     { id: 'ai', icon: Bot },
   ]},
   { items: [{ id: 'settings', icon: Settings }] },
+  { items: [{ id: 'users', icon: Users }] },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -73,10 +82,18 @@ function SyncIndicator() {
   );
 }
 
-export default function Layout({ view, setView, children }: Props) {
+export default function Layout({ view, setView, children, sessionUser, onSignOut }: Props) {
   const { t, lang, setLang, data } = useApp();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const companyName = data.settings.company.name || t('appName');
+  const supabaseConfigured = !!(data.settings.supabaseUrl && data.settings.supabaseKey);
+
+  async function handleSignOut() {
+    if (data.settings.supabaseUrl && data.settings.supabaseKey) {
+      await signOut(data.settings.supabaseUrl, data.settings.supabaseKey);
+    }
+    onSignOut?.();
+  }
 
   useEffect(() => { setDrawerOpen(false); }, [view]);
   useEffect(() => {
@@ -98,14 +115,18 @@ export default function Layout({ view, setView, children }: Props) {
       </div>
 
       <nav className="flex-1 py-3 px-2 overflow-y-auto">
-        {sections.map((section, si) => (
+        {sections.map((section, si) => {
+          // Hide 'users' nav item when Supabase is not configured
+          const items = section.items.filter(item => item.id !== 'users' || supabaseConfigured);
+          if (items.length === 0) return null;
+          return (
           <div key={si} className={si > 0 ? 'mt-1' : ''}>
             {section.labelKey && (
               <div className="px-3 pt-3 pb-1 text-[10px] font-bold text-blue-400 uppercase tracking-widest">
                 {t(section.labelKey as never)}
               </div>
             )}
-            {section.items.map(({ id, icon: Icon }) => (
+            {items.map(({ id, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
@@ -119,8 +140,26 @@ export default function Layout({ view, setView, children }: Props) {
             ))}
             {section.labelKey && <div className="mx-3 mt-1 border-t border-blue-800/50" />}
           </div>
-        ))}
+          );
+        })}
       </nav>
+
+      {/* Logged-in user */}
+      {sessionUser && (
+        <div className="px-4 py-2 border-t border-blue-800 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <UserCircle className="w-4 h-4 text-blue-300 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium text-white truncate">{sessionUser.name}</div>
+              <div className="text-[10px] text-blue-400 truncate">{sessionUser.email}</div>
+            </div>
+            <button onClick={handleSignOut} title="Sign out"
+              className="p-1 rounded hover:bg-blue-800 text-blue-300 hover:text-red-400 transition-colors">
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="px-4 py-3 border-t border-blue-800 flex-shrink-0 flex items-center gap-2">
         <button
