@@ -91,7 +91,7 @@ export default function Layout({ view, setView, children }: Props) {
         <div className="flex items-center gap-2">
           <BookOpen className="w-6 h-6 text-blue-300 flex-shrink-0" />
           <div className="min-w-0">
-            <div className="text-xs text-blue-300 font-medium uppercase tracking-wide">{t('appName')}</div>
+            <div className="text-xs text-blue-300 font-medium tracking-wide">Book as you go</div>
             <div className="text-sm font-semibold leading-tight truncate">{companyName}</div>
           </div>
         </div>
@@ -148,7 +148,7 @@ export default function Layout({ view, setView, children }: Props) {
           <Menu className="w-6 h-6" />
         </button>
         <BookOpen className="w-5 h-5 text-blue-300 flex-shrink-0" />
-        <span className="font-semibold text-sm truncate flex-1">{companyName}</span>
+        <span className="font-semibold text-sm truncate flex-1">{companyName || 'Book as you go'}</span>
         <button
           onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
           className="p-1 rounded-lg hover:bg-blue-800 flex items-center gap-1 text-blue-300 text-xs"

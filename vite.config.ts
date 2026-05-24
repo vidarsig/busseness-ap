@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Bókhald — Accounting',
-        short_name: 'Bókhald',
-        description: 'Bókhalds-forrit fyrir íslensk fyrirtæki / Accounting app for Icelandic companies',
+        name: 'Book as you go',
+        short_name: 'BookAsYouGo',
+        description: 'Accounting on the go — for contractors, architects and engineers. bookasugo.com',
         theme_color: '#1e3a8a',
         background_color: '#f8fafc',
         display: 'standalone',

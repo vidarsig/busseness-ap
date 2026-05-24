@@ -57,7 +57,7 @@ export default function CountryOnboarding() {
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-6">
           <BookOpen className="w-8 h-8 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Bókhald</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Book as you go</h1>
         </div>
 
         {/* Language picker */}
