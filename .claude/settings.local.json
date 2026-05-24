@@ -14,7 +14,9 @@
       "Bash(git --version)",
       "Bash(winget install *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(Read \"C:\\\\Users\\\\vidar\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-vidar-Claude-bussines-app\\\\3ccb79fc-f262-4d6a-84f9-04ff5281b300\\\\tasks\\\\bsby6g65l.output\")"
     ]
   }
 }

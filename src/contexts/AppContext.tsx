@@ -3,7 +3,7 @@ import { pushData, pullData } from '../utils/supabase';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
-  StockItem, StockMovement, Supplier,
+  StockItem, StockMovement, Supplier, Job, TimeEntry, JobMaterial, AppUser,
   DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, Language, CountryConfig,
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
@@ -34,6 +34,10 @@ const defaultData: AppData = {
   stockItems: [],
   stockMovements: [],
   suppliers: [],
+  jobs: [],
+  timeEntries: [],
+  jobMaterials: [],
+  appUsers: [],
   settings: DEFAULT_SETTINGS,
 };
 
@@ -72,6 +76,18 @@ type Action =
   | { type: 'ADD_SUPPLIER'; payload: Supplier }
   | { type: 'UPDATE_SUPPLIER'; payload: Supplier }
   | { type: 'DELETE_SUPPLIER'; payload: string }
+  | { type: 'ADD_JOB'; payload: Job }
+  | { type: 'UPDATE_JOB'; payload: Job }
+  | { type: 'DELETE_JOB'; payload: string }
+  | { type: 'ADD_TIME_ENTRY'; payload: TimeEntry }
+  | { type: 'UPDATE_TIME_ENTRY'; payload: TimeEntry }
+  | { type: 'DELETE_TIME_ENTRY'; payload: string }
+  | { type: 'ADD_JOB_MATERIAL'; payload: JobMaterial }
+  | { type: 'UPDATE_JOB_MATERIAL'; payload: JobMaterial }
+  | { type: 'DELETE_JOB_MATERIAL'; payload: string }
+  | { type: 'ADD_APP_USER'; payload: AppUser }
+  | { type: 'UPDATE_APP_USER'; payload: AppUser }
+  | { type: 'DELETE_APP_USER'; payload: string }
   | { type: 'SET_LANGUAGE'; payload: Language }
   | { type: 'LOAD'; payload: AppData };
 
@@ -124,6 +140,18 @@ function reducer(state: AppData, action: Action): AppData {
     case 'ADD_SUPPLIER': return { ...state, suppliers: [...(state.suppliers ?? []), action.payload] };
     case 'UPDATE_SUPPLIER': return { ...state, suppliers: (state.suppliers ?? []).map(s => s.id === action.payload.id ? action.payload : s) };
     case 'DELETE_SUPPLIER': return { ...state, suppliers: (state.suppliers ?? []).filter(s => s.id !== action.payload) };
+    case 'ADD_JOB': return { ...state, jobs: [...(state.jobs ?? []), action.payload] };
+    case 'UPDATE_JOB': return { ...state, jobs: (state.jobs ?? []).map(j => j.id === action.payload.id ? action.payload : j) };
+    case 'DELETE_JOB': return { ...state, jobs: (state.jobs ?? []).filter(j => j.id !== action.payload), timeEntries: (state.timeEntries ?? []).filter(t => t.jobId !== action.payload), jobMaterials: (state.jobMaterials ?? []).filter(m => m.jobId !== action.payload) };
+    case 'ADD_TIME_ENTRY': return { ...state, timeEntries: [...(state.timeEntries ?? []), action.payload] };
+    case 'UPDATE_TIME_ENTRY': return { ...state, timeEntries: (state.timeEntries ?? []).map(t => t.id === action.payload.id ? action.payload : t) };
+    case 'DELETE_TIME_ENTRY': return { ...state, timeEntries: (state.timeEntries ?? []).filter(t => t.id !== action.payload) };
+    case 'ADD_JOB_MATERIAL': return { ...state, jobMaterials: [...(state.jobMaterials ?? []), action.payload] };
+    case 'UPDATE_JOB_MATERIAL': return { ...state, jobMaterials: (state.jobMaterials ?? []).map(m => m.id === action.payload.id ? action.payload : m) };
+    case 'DELETE_JOB_MATERIAL': return { ...state, jobMaterials: (state.jobMaterials ?? []).filter(m => m.id !== action.payload) };
+    case 'ADD_APP_USER': return { ...state, appUsers: [...(state.appUsers ?? []), action.payload] };
+    case 'UPDATE_APP_USER': return { ...state, appUsers: (state.appUsers ?? []).map(u => u.id === action.payload.id ? action.payload : u) };
+    case 'DELETE_APP_USER': return { ...state, appUsers: (state.appUsers ?? []).filter(u => u.id !== action.payload) };
     case 'SET_LANGUAGE': return { ...state, settings: { ...state.settings, language: action.payload } };
     default: return state;
   }
@@ -162,6 +190,10 @@ function migrateData(parsed: Partial<AppData>): AppData {
     stockItems: parsed.stockItems ?? [],
     stockMovements: parsed.stockMovements ?? [],
     suppliers: parsed.suppliers ?? [],
+    jobs: parsed.jobs ?? [],
+    timeEntries: parsed.timeEntries ?? [],
+    jobMaterials: parsed.jobMaterials ?? [],
+    appUsers: parsed.appUsers ?? [],
     settings: {
       ...DEFAULT_SETTINGS,
       ...parsed.settings,

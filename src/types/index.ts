@@ -6,7 +6,45 @@ export type View =
   | 'dashboard' | 'transactions' | 'recurring' | 'bankimport' | 'rules'
   | 'invoices' | 'accounts' | 'budget' | 'payroll'
   | 'vat' | 'vatreturn' | 'reports' | 'annual' | 'settings' | 'tasks' | 'ai'
-  | 'stock' | 'suppliers';
+  | 'stock' | 'suppliers' | 'jobs';
+
+// ── User roles ──────────────────────────────────────────────
+export type UserRole = 'owner' | 'manager' | 'accountant' | 'staff' | 'viewer';
+
+export interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+  createdAt: string;
+  lastLogin?: string;
+  permissions: UserPermissions;
+}
+
+export interface UserPermissions {
+  canViewFinancials: boolean;    // transactions, reports, VAT
+  canEditTransactions: boolean;
+  canViewPayroll: boolean;
+  canEditPayroll: boolean;
+  canViewInvoices: boolean;
+  canEditInvoices: boolean;
+  canViewStock: boolean;
+  canEditStock: boolean;
+  canViewJobs: boolean;
+  canEditJobs: boolean;
+  canLogTime: boolean;           // clock in/out on jobs
+  canViewSettings: boolean;
+  canExportData: boolean;
+}
+
+export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
+  owner: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:true, canViewInvoices:true, canEditInvoices:true, canViewStock:true, canEditStock:true, canViewJobs:true, canEditJobs:true, canLogTime:true, canViewSettings:true, canExportData:true },
+  manager: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:false, canViewInvoices:true, canEditInvoices:true, canViewStock:true, canEditStock:true, canViewJobs:true, canEditJobs:true, canLogTime:true, canViewSettings:false, canExportData:true },
+  accountant: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:true, canViewInvoices:true, canEditInvoices:true, canViewStock:false, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:false, canViewSettings:false, canExportData:true },
+  staff: { canViewFinancials:false, canEditTransactions:false, canViewPayroll:false, canEditPayroll:false, canViewInvoices:false, canEditInvoices:false, canViewStock:true, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:true, canViewSettings:false, canExportData:false },
+  viewer: { canViewFinancials:true, canEditTransactions:false, canViewPayroll:false, canEditPayroll:false, canViewInvoices:true, canEditInvoices:false, canViewStock:true, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:false, canViewSettings:false, canExportData:false },
+};
 
 export type TaskPriority = 'low' | 'medium' | 'high';
 export type TaskStatus = 'open' | 'done';
@@ -211,6 +249,54 @@ export interface AppSettings {
   anthropicKey: string;
 }
 
+// ── Jobs / Work Accounting ───────────────────────────────────
+export type JobStatus = 'quote' | 'active' | 'paused' | 'complete' | 'cancelled';
+
+export interface Job {
+  id: string;
+  number: string;         // e.g. JOB-2026-001
+  name: string;
+  clientName: string;
+  clientContact?: string;
+  clientEmail?: string;
+  clientPhone?: string;
+  address?: string;
+  status: JobStatus;
+  startDate?: string;
+  endDate?: string;
+  quotedAmount?: number;  // agreed price
+  currency: Currency;
+  description?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  jobId: string;
+  date: string;
+  employeeName: string;
+  hours: number;
+  hourlyRate: number;     // cost to company
+  description?: string;
+  createdAt: string;
+}
+
+export interface JobMaterial {
+  id: string;
+  jobId: string;
+  date: string;
+  description: string;
+  qty: number;
+  unit: string;
+  unitCost: number;
+  stockItemId?: string;   // link to stock if applicable
+  supplierName?: string;
+  reference?: string;
+  createdAt: string;
+}
+
 // ── Stock / Inventory ────────────────────────────────────────
 export interface StockItem {
   id: string;
@@ -272,6 +358,10 @@ export interface AppData {
   stockItems: StockItem[];
   stockMovements: StockMovement[];
   suppliers: Supplier[];
+  jobs: Job[];
+  timeEntries: TimeEntry[];
+  jobMaterials: JobMaterial[];
+  appUsers: AppUser[];
   settings: AppSettings;
 }
 

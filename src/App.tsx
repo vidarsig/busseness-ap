@@ -19,6 +19,7 @@ import Settings from './components/Settings';
 import CountryOnboarding from './components/CountryOnboarding';
 import AIAssistant from './components/AIAssistant';
 import Stock from './components/Stock';
+import Jobs from './components/Jobs';
 import { View } from './types';
 
 function AppInner() {
@@ -46,6 +47,7 @@ function AppInner() {
       {view === 'settings'     && <Settings />}
       {view === 'ai'           && <AIAssistant />}
       {view === 'stock'        && <Stock />}
+      {view === 'jobs'         && <Jobs />}
     </Layout>
   );
 }
