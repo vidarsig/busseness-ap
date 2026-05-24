@@ -21,6 +21,7 @@ import AIAssistant from './components/AIAssistant';
 import Stock from './components/Stock';
 import Jobs from './components/Jobs';
 import Users from './components/Users';
+import Upgrade from './components/Upgrade';
 import Login from './components/Login';
 import { View } from './types';
 import { getSession } from './utils/supabase';
@@ -104,6 +105,7 @@ function AppInner() {
       {view === 'stock'        && <Stock />}
       {view === 'jobs'         && <Jobs />}
       {view === 'users'        && <Users sessionUser={sessionUser} />}
+      {view === 'upgrade'      && <Upgrade />}
     </Layout>
   );
 }

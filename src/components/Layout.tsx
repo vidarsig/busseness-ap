@@ -3,7 +3,7 @@ import {
   BookOpen, LayoutDashboard, List, Calculator, BarChart2, FileText,
   Settings, Globe, Menu, X, RefreshCw, Upload, Receipt,
   BookMarked, TrendingUp, Users, ClipboardList, Zap, CheckSquare,
-  Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle,
+  Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle, Crown,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { signOut } from '../utils/supabase';
@@ -143,6 +143,17 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
           );
         })}
       </nav>
+
+      {/* Upgrade CTA */}
+      {data.settings.plan === 'free' && (
+        <div className="px-3 py-2 flex-shrink-0">
+          <button onClick={() => setView('upgrade' as View)}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs font-semibold transition">
+            <Crown className="w-3.5 h-3.5 flex-shrink-0" />
+            {lang === 'is' ? 'Uppfæra í Pro' : 'Upgrade to Pro'}
+          </button>
+        </div>
+      )}
 
       {/* Logged-in user */}
       {sessionUser && (

@@ -6,7 +6,7 @@ export type View =
   | 'dashboard' | 'transactions' | 'recurring' | 'bankimport' | 'rules'
   | 'invoices' | 'accounts' | 'budget' | 'payroll'
   | 'vat' | 'vatreturn' | 'reports' | 'annual' | 'settings' | 'tasks' | 'ai'
-  | 'stock' | 'suppliers' | 'jobs' | 'users';
+  | 'stock' | 'suppliers' | 'jobs' | 'users' | 'upgrade';
 
 // ── User roles ──────────────────────────────────────────────
 export type UserRole = 'owner' | 'manager' | 'accountant' | 'staff' | 'viewer';
@@ -247,6 +247,9 @@ export interface AppSettings {
   supabaseKey: string;
   supabaseUserKey: string;
   anthropicKey: string;
+  plan: 'free' | 'pro' | 'business';
+  paddleCustomerId?: string;
+  paddleSubscriptionId?: string;
 }
 
 // ── Jobs / Work Accounting ───────────────────────────────────
@@ -424,6 +427,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   supabaseKey: '',
   supabaseUserKey: '',
   anthropicKey: '',
+  plan: 'free',
 };
 
 export const DEFAULT_ACCOUNTS: Account[] = [
