@@ -1,0 +1,329 @@
+import { useState, useMemo } from 'react';
+import { Plus, Pencil, Trash2, X, Users, Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { useApp } from '../contexts/AppContext';
+import { PayrollEntry } from '../types';
+import { formatISK } from '../utils/formatters';
+import { exportPDF, exportExcel } from '../utils/exports';
+
+function downloadCSV(filename: string, rows: string[][]) {
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function newId() { return `pay_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
+
+function calcPayroll(gross: number, settings: { taxWithholdingRate: number; employeePensionRate: number; employerPensionRate: number; socialInsuranceRate: number; personalDeductionMonthly: number }) {
+  const employeePension = Math.round(gross * settings.employeePensionRate / 100);
+  const taxBase = Math.max(0, gross - employeePension - settings.personalDeductionMonthly);
+  const taxWithheld = Math.round(taxBase * settings.taxWithholdingRate / 100);
+  const netWage = gross - employeePension - taxWithheld;
+  const employerPension = Math.round(gross * settings.employerPensionRate / 100);
+  const socialInsurance = Math.round(gross * settings.socialInsuranceRate / 100);
+  return { employeePension, taxWithheld, netWage, employerPension, socialInsurance };
+}
+
+const thisMonth = () => new Date().toISOString().slice(0, 7);
+
+function PayrollModal({ initial, onSave, onClose }: {
+  initial?: PayrollEntry; onSave: (p: PayrollEntry) => void; onClose: () => void;
+}) {
+  const { t, lang, data } = useApp();
+  const s = data.settings;
+  const [month, setMonth] = useState(initial?.month ?? thisMonth());
+  const [name, setName] = useState(initial?.employeeName ?? '');
+  const [kennitala, setKennitala] = useState(initial?.employeeKennitala ?? '');
+  const [gross, setGross] = useState(initial?.grossWage ?? 0);
+  const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [overrideTax, setOverrideTax] = useState<number | null>(initial ? initial.taxWithheld : null);
+
+  const calc = useMemo(() => calcPayroll(gross, s), [gross, s]);
+  const taxWithheld = overrideTax !== null ? overrideTax : calc.taxWithheld;
+  const netWage = gross - calc.employeePension - taxWithheld;
+
+  const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const lbl = 'block text-xs font-medium text-gray-600 mb-1';
+
+  function handleSave() {
+    const entry: PayrollEntry = {
+      id: initial?.id ?? newId(), month, employeeName: name, employeeKennitala: kennitala || undefined,
+      grossWage: gross, employeePension: calc.employeePension, taxWithheld,
+      employerPension: calc.employerPension, socialInsurance: calc.socialInsurance,
+      netWage, notes: notes || undefined,
+    };
+    onSave(entry);
+  }
+
+  const row = (label: string, amount: number, cls = 'text-gray-700') => (
+    <div className="flex justify-between text-xs py-1 border-b border-gray-50">
+      <span className="text-gray-600">{label}</span>
+      <span className={`font-mono font-medium ${cls}`}>{formatISK(amount, lang)}</span>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50">
+      <div className="bg-white w-full md:max-w-lg md:rounded-2xl rounded-t-2xl shadow-xl p-5 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900">{initial ? t('editPayroll') : t('addPayroll')}</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>{lang === 'is' ? 'Mánuður' : 'Month'}</label>
+              <input type="month" className={inp} value={month} onChange={e => setMonth(e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>{t('kennitala')}</label>
+              <input className={inp} value={kennitala} onChange={e => setKennitala(e.target.value)} placeholder="000000-0000" />
+            </div>
+          </div>
+          <div>
+            <label className={lbl}>{lang === 'is' ? 'Nafn starfsmanns' : 'Employee name'}</label>
+            <input className={inp} value={name} onChange={e => setName(e.target.value)} required />
+          </div>
+          <div>
+            <label className={lbl}>{lang === 'is' ? 'Brúttólaun (ISK)' : 'Gross wage (ISK)'}</label>
+            <input type="number" className={inp} value={gross || ''} onChange={e => setGross(parseInt(e.target.value) || 0)} min={0} step={1000} />
+          </div>
+
+          {gross > 0 && (
+            <div className="bg-gray-50 rounded-xl p-4 space-y-0.5">
+              <p className="text-xs font-bold text-gray-700 mb-2">{lang === 'is' ? 'Útreikningur' : 'Calculation'}</p>
+              {row(lang === 'is' ? 'Brúttólaun' : 'Gross wage', gross)}
+              {row(lang === 'is' ? `Lífeyrir starfsmanns (${s.employeePensionRate}%)` : `Employee pension (${s.employeePensionRate}%)`, -calc.employeePension, 'text-red-600')}
+              <div className="flex justify-between text-xs py-1 border-b border-gray-50 items-center">
+                <span className="text-gray-600">{lang === 'is' ? `Staðgreiðsla (${s.taxWithholdingRate}%)` : `Tax withheld (${s.taxWithholdingRate}%)`}</span>
+                <div className="flex items-center gap-2">
+                  <input type="number" className="w-24 border border-gray-300 rounded px-2 py-0.5 text-xs text-right font-mono"
+                    value={overrideTax !== null ? overrideTax : calc.taxWithheld}
+                    onChange={e => setOverrideTax(parseInt(e.target.value) || 0)} />
+                  {overrideTax !== null && (
+                    <button onClick={() => setOverrideTax(null)} className="text-blue-600 text-xs">{lang === 'is' ? 'Endurstilla' : 'Reset'}</button>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-between text-sm font-bold pt-1.5">
+                <span className="text-gray-700">{lang === 'is' ? 'Nettólaun' : 'Net wage'}</span>
+                <span className="font-mono text-green-700">{formatISK(netWage, lang)}</span>
+              </div>
+              <div className="border-t border-gray-200 mt-2 pt-2 space-y-0.5">
+                <p className="text-xs font-semibold text-gray-500 mb-1">{lang === 'is' ? 'Kostnaður atvinnurekanda' : 'Employer costs'}</p>
+                {row(lang === 'is' ? `Lífeyrir atvinnurekanda (${s.employerPensionRate}%)` : `Employer pension (${s.employerPensionRate}%)`, calc.employerPension, 'text-red-600')}
+                {row(lang === 'is' ? `Tryggingagjald (${s.socialInsuranceRate}%)` : `Social insurance (${s.socialInsuranceRate}%)`, calc.socialInsurance, 'text-red-600')}
+                <div className="flex justify-between text-xs font-bold pt-1">
+                  <span>{lang === 'is' ? 'Heildarkostnaður' : 'Total employer cost'}</span>
+                  <span className="font-mono">{formatISK(gross + calc.employerPension + calc.socialInsurance, lang)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className={lbl}>{t('notes')}</label>
+            <input className={inp} value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={onClose} className="flex-1 border border-gray-300 py-3 rounded-xl text-sm">{t('cancel')}</button>
+            <button onClick={handleSave} disabled={!name || gross <= 0}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm disabled:opacity-40">{t('save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Payroll() {
+  const { data, dispatch, t, lang } = useApp();
+  const [modal, setModal] = useState<{ open: boolean; entry?: PayrollEntry }>({ open: false });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [filterMonth, setFilterMonth] = useState(thisMonth());
+
+  function handleSave(entry: PayrollEntry) {
+    dispatch(data.payrollEntries.find(p => p.id === entry.id)
+      ? { type: 'UPDATE_PAYROLL', payload: entry }
+      : { type: 'ADD_PAYROLL', payload: entry });
+    setModal({ open: false });
+  }
+
+  const payCols = [
+    { header: lang === 'is' ? 'Nafn' : 'Name',                             key: 'name',     width: 22 },
+    { header: lang === 'is' ? 'Kennitala' : 'Kennitala',                   key: 'kt',       width: 14 },
+    { header: lang === 'is' ? 'Brúttólaun' : 'Gross wage',                 key: 'gross',    width: 14 },
+    { header: lang === 'is' ? 'Lífeyrir (starfsm.)' : 'Employee pension',  key: 'empPens',  width: 16 },
+    { header: lang === 'is' ? 'Staðgreiðsla' : 'Tax withheld',             key: 'tax',      width: 14 },
+    { header: lang === 'is' ? 'Nettólaun' : 'Net wage',                    key: 'net',      width: 14 },
+    { header: lang === 'is' ? 'Lífeyrir (atvinnur.)' : 'Employer pension', key: 'emplrPens',width: 16 },
+    { header: lang === 'is' ? 'Tryggingagjald' : 'Social ins.',            key: 'social',   width: 14 },
+    { header: lang === 'is' ? 'Heildarkostnaður' : 'Total cost',           key: 'total',    width: 16 },
+  ];
+  function getPayRows() {
+    return filtered.map(p => ({
+      name: p.employeeName, kt: p.employeeKennitala ?? '',
+      gross: p.grossWage, empPens: p.employeePension, tax: p.taxWithheld, net: p.netWage,
+      emplrPens: p.employerPension, social: p.socialInsurance,
+      total: p.grossWage + p.employerPension + p.socialInsurance,
+    }));
+  }
+
+  function exportToPDF() {
+    exportPDF(
+      `${lang === 'is' ? 'Launaskrá' : 'Payroll'} — ${filterMonth}`,
+      data.settings.company.name || '',
+      payCols, getPayRows(),
+      `laun_${filterMonth}.pdf`,
+    );
+  }
+  function exportToExcel() {
+    exportExcel([{ name: lang === 'is' ? 'Launaskrá' : 'Payroll', columns: payCols, rows: getPayRows() }],
+      `laun_${filterMonth}.xlsx`);
+  }
+
+  function exportCSV() {
+    const header = lang === 'is'
+      ? ['Mánuður','Nafn','Kennitala','Brúttólaun','Lífeyrir (starfsm.)','Staðgreiðsla','Nettólaun','Lífeyrir (atvinnur.)','Tryggingagjald','Heildarkostnaður','Athugasemd']
+      : ['Month','Name','Kennitala','Gross wage','Employee pension','Tax withheld','Net wage','Employer pension','Social insurance','Total employer cost','Notes'];
+    const rows = filtered.map(p => [
+      p.month, p.employeeName, p.employeeKennitala ?? '',
+      String(p.grossWage), String(p.employeePension), String(p.taxWithheld), String(p.netWage),
+      String(p.employerPension), String(p.socialInsurance),
+      String(p.grossWage + p.employerPension + p.socialInsurance),
+      p.notes ?? '',
+    ]);
+    downloadCSV(`laun_${filterMonth}.csv`, [header, ...rows]);
+  }
+
+  const months = useMemo(() => {
+    const ms = new Set(data.payrollEntries.map(p => p.month));
+    ms.add(thisMonth());
+    return Array.from(ms).sort((a, b) => b.localeCompare(a));
+  }, [data.payrollEntries]);
+
+  const filtered = data.payrollEntries.filter(p => p.month === filterMonth)
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+
+  const totals = useMemo(() => filtered.reduce((acc, p) => ({
+    gross: acc.gross + p.grossWage,
+    net: acc.net + p.netWage,
+    tax: acc.tax + p.taxWithheld,
+    empPension: acc.empPension + p.employeePension,
+    emplrPension: acc.emplrPension + p.employerPension,
+    social: acc.social + p.socialInsurance,
+  }), { gross: 0, net: 0, tax: 0, empPension: 0, emplrPension: 0, social: 0 }), [filtered]);
+
+  const fmt = (n: number) => formatISK(n, lang);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('payroll')}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Launaútreikningur með íslenskum skattareglum' : 'Payroll with Icelandic tax rules'}</p>
+        </div>
+        <div className="flex gap-2">
+          {filtered.length > 0 && (<>
+            <button onClick={exportToPDF}
+              className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+              <FileText className="w-4 h-4" /><span className="hidden sm:inline">PDF</span>
+            </button>
+            <button onClick={exportToExcel}
+              className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+              <FileSpreadsheet className="w-4 h-4" /><span className="hidden sm:inline">Excel</span>
+            </button>
+            <button onClick={exportCSV}
+              className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+              <Download className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
+            </button>
+          </>)}
+          <button onClick={() => setModal({ open: true })}
+            className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium">
+            <Plus className="w-4 h-4" /><span className="hidden sm:inline">{t('addPayroll')}</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex items-center gap-3">
+        <label className="text-xs font-medium text-gray-600">{lang === 'is' ? 'Mánuður' : 'Month'}:</label>
+        <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
+          {months.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 py-12 text-center text-gray-400 text-sm">
+          <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          {lang === 'is' ? 'Engar launafærslur fyrir þennan mánuð' : 'No payroll entries for this month'}
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2 mb-4">
+            {filtered.map(p => (
+              <div key={p.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-800">{p.employeeName}</p>
+                    {p.employeeKennitala && <p className="text-xs text-gray-400">{p.employeeKennitala}</p>}
+                    {p.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{p.notes}</p>}
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => setModal({ open: true, entry: p })}
+                      className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setDeleteId(p.id)}
+                      className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-50 text-xs">
+                  <div><span className="text-gray-500">{lang === 'is' ? 'Brúttó' : 'Gross'}</span><div className="font-semibold font-mono">{fmt(p.grossWage)}</div></div>
+                  <div><span className="text-gray-500">{lang === 'is' ? 'Staðgreiðsla' : 'Tax'}</span><div className="font-semibold font-mono text-red-600">-{fmt(p.taxWithheld)}</div></div>
+                  <div><span className="text-gray-500">{lang === 'is' ? 'Nettó' : 'Net'}</span><div className="font-semibold font-mono text-green-700">{fmt(p.netWage)}</div></div>
+                  <div><span className="text-gray-500">{lang === 'is' ? 'Lífeyrir (starfsm.)' : 'Pension (empl.)'}</span><div className="font-mono">-{fmt(p.employeePension)}</div></div>
+                  <div><span className="text-gray-500">{lang === 'is' ? 'Lífeyrir (atvinnur.)' : 'Pension (emplr.)'}</span><div className="font-mono">{fmt(p.employerPension)}</div></div>
+                  <div><span className="text-gray-500">{lang === 'is' ? 'Tryggingagjald' : 'Social ins.'}</span><div className="font-mono">{fmt(p.socialInsurance)}</div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h3 className="text-sm font-bold text-blue-900 mb-3">{lang === 'is' ? 'Samtals' : 'Totals'} — {filterMonth}</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+              <div><div className="text-xs text-blue-700">{lang === 'is' ? 'Heildarbr.' : 'Total gross'}</div><div className="font-bold font-mono">{fmt(totals.gross)}</div></div>
+              <div><div className="text-xs text-blue-700">{lang === 'is' ? 'Nettólaun' : 'Net wages'}</div><div className="font-bold font-mono text-green-700">{fmt(totals.net)}</div></div>
+              <div><div className="text-xs text-blue-700">{lang === 'is' ? 'Staðgreiðsla' : 'Tax withheld'}</div><div className="font-bold font-mono text-red-600">{fmt(totals.tax)}</div></div>
+              <div><div className="text-xs text-blue-700">{lang === 'is' ? 'Lífeyrir (starfsm.)' : 'Employee pension'}</div><div className="font-mono">{fmt(totals.empPension)}</div></div>
+              <div><div className="text-xs text-blue-700">{lang === 'is' ? 'Lífeyrir (atvinnur.)' : 'Employer pension'}</div><div className="font-mono">{fmt(totals.emplrPension)}</div></div>
+              <div><div className="text-xs text-blue-700">{lang === 'is' ? 'Tryggingagjald' : 'Social ins.'}</div><div className="font-mono">{fmt(totals.social)}</div></div>
+            </div>
+            <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between text-sm font-bold text-blue-900">
+              <span>{lang === 'is' ? 'Heildarkostnaður atvinnurekanda' : 'Total employer cost'}</span>
+              <span className="font-mono">{fmt(totals.gross + totals.emplrPension + totals.social)}</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {modal.open && <PayrollModal initial={modal.entry} onSave={handleSave} onClose={() => setModal({ open: false })} />}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h3 className="font-semibold mb-2">{t('warning')}</h3>
+            <p className="text-sm text-gray-600 mb-5">{t('confirmDelete')}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteId(null)} className="flex-1 border border-gray-300 py-2 rounded-xl text-sm">{t('cancel')}</button>
+              <button onClick={() => { dispatch({ type: 'DELETE_PAYROLL', payload: deleteId }); setDeleteId(null); }} className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm">{t('delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@keyframes slide-in {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.22s ease-out;
+}
+
+/* Safe area for iPhone notch / home indicator */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  body { background: white; }
+  .print-container { max-width: 100%; padding: 0; margin: 0; }
+}
+
+.print-only { display: none; }
+
+@layer utilities {
+  .scrollbar-thin { scrollbar-width: thin; }
+}

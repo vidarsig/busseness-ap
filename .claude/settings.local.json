@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(node -e ' *)",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(npm list *)",
+      "Bash(npx tsc *)",
+      "Bash(ls \"C:\\\\Users\\\\vidar\\\\\")",
+      "PowerShell(Start-Process \"C:\\\\Users\\\\vidar\\\\bokhalds-web\\\\index.html\")",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(winget install *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

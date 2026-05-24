@@ -1,0 +1,207 @@
+import { TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare, AlertTriangle, Circle } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts';
+import { useApp } from '../contexts/AppContext';
+import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary } from '../utils/calculations';
+import { formatISK, formatDate } from '../utils/formatters';
+import { View } from '../types';
+
+interface Props { setView: (v: View) => void; }
+
+export default function Dashboard({ setView }: Props) {
+  const { data, t, lang } = useApp();
+  const year = data.settings.fiscalYear;
+  const yearly = filterByYear(data.transactions, year);
+
+  const totalIncome = yearly.filter(t => t.type === 'income').reduce((s, t) => s + getTransactionISK(t), 0);
+  const totalExpenses = yearly.filter(t => t.type === 'expense').reduce((s, t) => s + getTransactionISK(t), 0);
+  const netProfit = totalIncome - totalExpenses;
+  const vat = calcVATSummary(yearly);
+
+  const monthlyData = getMonthlyTotals(data.transactions, year);
+  const monthLabels = [t('january'),t('february'),t('march'),t('april'),t('may'),t('june'),
+    t('july'),t('august'),t('september'),t('october'),t('november'),t('december')];
+  const chartData = monthlyData.map((m, i) => ({
+    name: monthLabels[i].slice(0, 3),
+    [t('income')]: m.income,
+    [t('expense')]: m.expenses,
+  }));
+
+  const recent = [...data.transactions]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
+
+  const cards = [
+    {
+      label: t('totalIncome'),
+      value: formatISK(totalIncome, lang),
+      icon: TrendingUp,
+      color: 'text-green-600',
+      bg: 'bg-green-50',
+      border: 'border-green-200',
+    },
+    {
+      label: t('totalExpenses'),
+      value: formatISK(totalExpenses, lang),
+      icon: TrendingDown,
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+      border: 'border-red-200',
+    },
+    {
+      label: t('netProfit'),
+      value: formatISK(netProfit, lang),
+      icon: DollarSign,
+      color: netProfit >= 0 ? 'text-blue-600' : 'text-red-600',
+      bg: netProfit >= 0 ? 'bg-blue-50' : 'bg-red-50',
+      border: netProfit >= 0 ? 'border-blue-200' : 'border-red-200',
+    },
+    {
+      label: vat.netVAT >= 0 ? t('vatOwed') : t('vatRefund'),
+      value: formatISK(Math.abs(vat.netVAT), lang),
+      icon: Receipt,
+      color: vat.netVAT >= 0 ? 'text-orange-600' : 'text-green-600',
+      bg: vat.netVAT >= 0 ? 'bg-orange-50' : 'bg-green-50',
+      border: vat.netVAT >= 0 ? 'border-orange-200' : 'border-green-200',
+    },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{t('dashboard')}</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{t('thisYear')}: {year}</p>
+        </div>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {cards.map(card => (
+          <div key={card.label} className={`bg-white rounded-xl border ${card.border} p-4`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm text-gray-500">{card.label}</span>
+              <div className={`${card.bg} rounded-lg p-2`}>
+                <card.icon className={`w-4 h-4 ${card.color}`} />
+              </div>
+            </div>
+            <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('incomeVsExpenses')} — {year}</h2>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <Tooltip
+              formatter={(value: number) => formatISK(value, lang)}
+              labelStyle={{ fontSize: 12 }}
+              contentStyle={{ fontSize: 12 }}
+            />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey={t('income')} fill="#22c55e" radius={[3, 3, 0, 0]} />
+            <Bar dataKey={t('expense')} fill="#f87171" radius={[3, 3, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Recent transactions */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-700">{t('recentTransactions')}</h2>
+          <button
+            onClick={() => setView('transactions')}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+          >
+            {t('all')} <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+        {recent.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-gray-400 text-sm">{t('noTransactions')}</p>
+            <button
+              onClick={() => setView('transactions')}
+              className="mt-3 text-blue-600 text-sm font-medium hover:underline"
+            >
+              {t('addFirst')}
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {recent.map(tx => (
+              <div key={tx.id} className="flex items-center justify-between px-5 py-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${tx.type === 'income' ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{tx.description}</p>
+                    <p className="text-xs text-gray-400">{formatDate(tx.date, lang)} · {t(tx.category as never)}</p>
+                  </div>
+                </div>
+                <div className={`text-sm font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                  {tx.type === 'income' ? '+' : '-'}{formatISK(getTransactionISK(tx), lang)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upcoming tasks widget */}
+      {(() => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const upcoming = data.tasks
+          .filter(t => t.status === 'open')
+          .sort((a, b) => {
+            if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+            if (a.dueDate) return -1;
+            if (b.dueDate) return 1;
+            return 0;
+          })
+          .slice(0, 5);
+        if (upcoming.length === 0) return null;
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                <CheckSquare className="w-4 h-4 text-blue-600" />
+                {t('upcomingTasks')}
+              </h2>
+              <button onClick={() => setView('tasks')}
+                className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                {lang === 'is' ? 'Sjá öll' : 'See all'}<ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {upcoming.map(task => {
+                const isOverdue = task.dueDate && task.dueDate < todayStr;
+                const isToday = task.dueDate === todayStr;
+                return (
+                  <div key={task.id} className="px-4 py-2.5 flex items-center gap-3">
+                    {isOverdue
+                      ? <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                      : <Circle className="w-4 h-4 text-gray-300 flex-shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 truncate">{task.title}</p>
+                    </div>
+                    {task.dueDate && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
+                        isOverdue ? 'bg-red-100 text-red-700' : isToday ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {isOverdue ? (lang === 'is' ? 'Útrunnið' : 'Overdue') : isToday ? (lang === 'is' ? 'Í dag' : 'Today') : task.dueDate}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}

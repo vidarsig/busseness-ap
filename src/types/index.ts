@@ -1,0 +1,391 @@
+export type Currency = 'ISK' | 'EUR' | 'USD' | 'GBP' | 'DKK' | 'NOK' | 'SEK' | 'AUD' | 'CAD' | 'NZD';
+export type TransactionType = 'income' | 'expense';
+export type VATRate = number;
+export type Language = 'is' | 'en' | 'de' | 'fr' | 'nl' | 'no' | 'da' | 'sv';
+export type View =
+  | 'dashboard' | 'transactions' | 'recurring' | 'bankimport' | 'rules'
+  | 'invoices' | 'accounts' | 'budget' | 'payroll'
+  | 'vat' | 'vatreturn' | 'reports' | 'annual' | 'settings' | 'tasks' | 'ai'
+  | 'stock' | 'suppliers';
+
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'open' | 'done';
+
+export interface Task {
+  id: string;
+  title: string;
+  note?: string;
+  dueDate?: string;       // ISO date YYYY-MM-DD
+  priority: TaskPriority;
+  status: TaskStatus;
+  linkedView?: View;      // optional shortcut to an app screen
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface CategoryRule {
+  id: string;
+  pattern: string;        // case-insensitive substring match against description
+  category: string;
+  type: TransactionType;
+  vatRate: VATRate;
+  useCount: number;
+  createdAt: string;
+  lastUsed?: string;
+}
+
+export interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  type: TransactionType;
+  amount: number;
+  currency: Currency;
+  eurToIskRate: number;
+  vatRate: VATRate;
+  reference?: string;
+  accountNumber?: string;
+  receiptNote?: string;
+}
+
+export interface BalanceSheetItem {
+  id: string;
+  name: string;
+  nameEn: string;
+  section: 'fixed_assets' | 'current_assets' | 'equity' | 'long_term_liabilities' | 'current_liabilities';
+  amount: number;
+}
+
+export interface Account {
+  id: string;
+  number: string;
+  name: string;
+  nameEn: string;
+  type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  isSystem: boolean;
+  isActive: boolean;
+}
+
+export interface InvoiceLine {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatRate: VATRate;
+  accountNumber?: string;
+}
+
+export interface InvoiceCustomer {
+  name: string;
+  kennitala?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  type: 'invoice' | 'quote';
+  date: string;
+  dueDate: string;
+  customer: InvoiceCustomer;
+  lines: InvoiceLine[];
+  notes?: string;
+  status: 'draft' | 'sent' | 'paid' | 'overdue';
+  currency: Currency;
+  eurToIskRate: number;
+}
+
+export interface RecurringTransaction {
+  id: string;
+  description: string;
+  category: string;
+  type: TransactionType;
+  amount: number;
+  currency: Currency;
+  vatRate: VATRate;
+  frequency: 'monthly' | 'quarterly' | 'annually';
+  dayOfMonth: number;
+  startDate: string;
+  endDate?: string;
+  lastGenerated?: string;
+  isActive: boolean;
+  accountNumber?: string;
+}
+
+export interface BudgetLine {
+  id: string;
+  year: number;
+  category: string;
+  type: TransactionType;
+  amounts: number[]; // 12 values, one per month
+}
+
+export interface PayrollEntry {
+  id: string;
+  month: string; // YYYY-MM
+  employeeName: string;
+  employeeKennitala?: string;
+  grossWage: number;
+  employeePension: number;
+  taxWithheld: number;
+  employerPension: number;
+  socialInsurance: number;
+  netWage: number;
+  notes?: string;
+}
+
+export interface ExchangeRates {
+  EUR: number;
+  USD: number;
+  GBP: number;
+  DKK: number;
+  NOK: number;
+  SEK: number;
+  AUD: number;
+  CAD: number;
+  NZD: number;
+}
+
+export interface CountryConfig {
+  code: string;
+  flag: string;
+  nameEn: string;
+  currency: Currency;
+  vatTerm: string;
+  vatRates: number[];
+  standardRate: number;
+  taxAuthority: string;
+  companyIdLabel: string;
+  vatNumberLabel: string;
+  isUSA: boolean;
+  taxWithholdingRate: number;
+  employeePensionRate: number;
+  employerPensionRate: number;
+  socialInsuranceRate: number;
+  personalDeductionMonthly: number;
+}
+
+export interface CompanyInfo {
+  name: string;
+  kennitala: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  email: string;
+  phone: string;
+  bankAccount: string;
+  vskNumber: string;
+  auditor: string;
+}
+
+export interface AppSettings {
+  language: Language;
+  defaultCurrency: Currency;
+  exchangeRates: ExchangeRates;
+  fiscalYear: number;
+  company: CompanyInfo;
+  invoicePrefix: string;
+  invoiceLastNumber: number;
+  quoteLastNumber: number;
+  taxWithholdingRate: number;
+  employeePensionRate: number;
+  employerPensionRate: number;
+  socialInsuranceRate: number;
+  personalDeductionMonthly: number;
+  country: string;
+  salesTaxRate: number;
+  vatRates: number[];
+  standardRate: number;
+  vatTerm: string;
+  taxAuthority: string;
+  companyIdLabel: string;
+  vatNumberLabel: string;
+  supabaseUrl: string;
+  supabaseKey: string;
+  supabaseUserKey: string;
+  anthropicKey: string;
+}
+
+// ── Stock / Inventory ────────────────────────────────────────
+export interface StockItem {
+  id: string;
+  sku: string;            // supplier code or internal
+  name: string;
+  description?: string;
+  category: string;
+  unit: string;           // pcs, kg, m, m², box …
+  qtyOnHand: number;
+  qtyReserved: number;    // committed to jobs
+  reorderPoint: number;   // alert threshold
+  costPrice: number;      // per unit, excl. VAT
+  sellPrice: number;      // per unit, excl. VAT
+  currency: Currency;
+  vatRate: VATRate;
+  supplierName?: string;
+  supplierCode?: string;  // their item code
+  location?: string;      // shelf / bin
+  imageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  date: string;
+  type: 'in' | 'out' | 'adjust' | 'return';
+  qty: number;
+  unitCost?: number;
+  reference?: string;   // PO number, job number …
+  note?: string;
+  createdAt: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  vatNumber?: string;
+  currency: Currency;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface AppData {
+  transactions: Transaction[];
+  balanceSheetItems: BalanceSheetItem[];
+  accounts: Account[];
+  invoices: Invoice[];
+  recurringTransactions: RecurringTransaction[];
+  budgetLines: BudgetLine[];
+  payrollEntries: PayrollEntry[];
+  categoryRules: CategoryRule[];
+  tasks: Task[];
+  stockItems: StockItem[];
+  stockMovements: StockMovement[];
+  suppliers: Supplier[];
+  settings: AppSettings;
+}
+
+// ── Defaults ────────────────────────────────────────────────
+
+export const INCOME_CATEGORIES = [
+  'sala_vara', 'sala_thjonustu', 'fjarmagns_tekjur', 'adrar_tekjur',
+] as const;
+
+export const EXPENSE_CATEGORIES = [
+  'laun', 'launatengd_gjold', 'husaleiga', 'rafmagn_hiti',
+  'simagjold', 'skrifstofugjold', 'samgongur', 'markadsmal',
+  'fagthjonusta', 'vorur', 'afskriftir', 'fjarmagnsgjold', 'adrir_rekstrargjold',
+] as const;
+
+export type IncomeCategory = typeof INCOME_CATEGORIES[number];
+export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
+
+export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
+  EUR: 148,
+  USD: 137,
+  GBP: 172,
+  DKK: 20,
+  NOK: 62,
+  SEK: 81,
+  AUD: 89,
+  CAD: 100,
+  NZD: 83,
+};
+
+export const DEFAULT_COMPANY: CompanyInfo = {
+  name: '', kennitala: '', address: '', postalCode: '',
+  city: 'Reykjavík', email: '', phone: '', bankAccount: '',
+  vskNumber: '', auditor: '',
+};
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  language: 'is',
+  defaultCurrency: 'ISK',
+  exchangeRates: DEFAULT_EXCHANGE_RATES,
+  fiscalYear: new Date().getFullYear(),
+  company: DEFAULT_COMPANY,
+  invoicePrefix: 'R',
+  invoiceLastNumber: 0,
+  quoteLastNumber: 0,
+  taxWithholdingRate: 36.94,
+  employeePensionRate: 4,
+  employerPensionRate: 11.5,
+  socialInsuranceRate: 6.35,
+  personalDeductionMonthly: 62596,
+  country: '',
+  salesTaxRate: 8,
+  vatRates: [24, 11, 0],
+  standardRate: 24,
+  vatTerm: 'VSK',
+  taxAuthority: 'RSK',
+  companyIdLabel: 'Kennitala',
+  vatNumberLabel: 'VSK-númer',
+  supabaseUrl: '',
+  supabaseKey: '',
+  supabaseUserKey: '',
+  anthropicKey: '',
+};
+
+export const DEFAULT_ACCOUNTS: Account[] = [
+  // Assets 1xxx
+  { id: 'ac1200', number: '1200', name: 'Varanlegir rekstrarfjármunir', nameEn: 'Tangible fixed assets', type: 'asset', isSystem: true, isActive: true },
+  { id: 'ac1400', number: '1400', name: 'Viðskiptakröfur', nameEn: 'Trade receivables', type: 'asset', isSystem: true, isActive: true },
+  { id: 'ac1410', number: '1410', name: 'Aðrar kröfur', nameEn: 'Other receivables', type: 'asset', isSystem: true, isActive: true },
+  { id: 'ac1420', number: '1420', name: 'Fyrirframgreiðslur', nameEn: 'Prepayments', type: 'asset', isSystem: false, isActive: true },
+  { id: 'ac1500', number: '1500', name: 'Birgðir', nameEn: 'Inventories', type: 'asset', isSystem: false, isActive: true },
+  { id: 'ac1600', number: '1600', name: 'Bankareikningur', nameEn: 'Bank account', type: 'asset', isSystem: true, isActive: true },
+  { id: 'ac1610', number: '1610', name: 'Gjaldeyrisreikningur', nameEn: 'Foreign currency account', type: 'asset', isSystem: false, isActive: true },
+  { id: 'ac1620', number: '1620', name: 'Handbært fé', nameEn: 'Petty cash', type: 'asset', isSystem: false, isActive: true },
+  // Liability & Equity 2xxx
+  { id: 'ac2000', number: '2000', name: 'Hlutafé', nameEn: 'Share capital', type: 'equity', isSystem: true, isActive: true },
+  { id: 'ac2010', number: '2010', name: 'Stofnfé (einkahlutafélag)', nameEn: 'Founding capital (LLC)', type: 'equity', isSystem: false, isActive: true },
+  { id: 'ac2100', number: '2100', name: 'Varasjóður', nameEn: 'Reserves', type: 'equity', isSystem: false, isActive: true },
+  { id: 'ac2200', number: '2200', name: 'Óráðstafaður hagnaður', nameEn: 'Retained earnings', type: 'equity', isSystem: true, isActive: true },
+  { id: 'ac2300', number: '2300', name: 'Langtímalán', nameEn: 'Long-term loans', type: 'liability', isSystem: false, isActive: true },
+  { id: 'ac2400', number: '2400', name: 'Viðskiptaskuldir', nameEn: 'Trade payables', type: 'liability', isSystem: true, isActive: true },
+  { id: 'ac2410', number: '2410', name: 'Aðrar skammtímaskuldir', nameEn: 'Other current liabilities', type: 'liability', isSystem: false, isActive: true },
+  { id: 'ac2500', number: '2500', name: 'VSK til greiðslu', nameEn: 'VAT payable', type: 'liability', isSystem: true, isActive: true },
+  { id: 'ac2510', number: '2510', name: 'Staðgreiðsla til greiðslu', nameEn: 'PAYE payable', type: 'liability', isSystem: false, isActive: true },
+  { id: 'ac2520', number: '2520', name: 'Tryggingagjald til greiðslu', nameEn: 'Social insurance payable', type: 'liability', isSystem: false, isActive: true },
+  { id: 'ac2530', number: '2530', name: 'Lífeyrissjóðsframlag til greiðslu', nameEn: 'Pension payable', type: 'liability', isSystem: false, isActive: true },
+  // Revenue 3xxx
+  { id: 'ac3000', number: '3000', name: 'Sala vara', nameEn: 'Sales of goods', type: 'revenue', isSystem: true, isActive: true },
+  { id: 'ac3100', number: '3100', name: 'Sala þjónustu', nameEn: 'Sales of services', type: 'revenue', isSystem: true, isActive: true },
+  { id: 'ac3200', number: '3200', name: 'Fjármagnstekjur', nameEn: 'Financial income', type: 'revenue', isSystem: false, isActive: true },
+  { id: 'ac3900', number: '3900', name: 'Aðrar tekjur', nameEn: 'Other income', type: 'revenue', isSystem: false, isActive: true },
+  // Cost of goods 4xxx
+  { id: 'ac4000', number: '4000', name: 'Vara- og efniskaup', nameEn: 'Cost of goods', type: 'expense', isSystem: true, isActive: true },
+  // Wages 5xxx
+  { id: 'ac5000', number: '5000', name: 'Laun', nameEn: 'Wages & salaries', type: 'expense', isSystem: true, isActive: true },
+  { id: 'ac5100', number: '5100', name: 'Tryggingagjald (6.35%)', nameEn: 'Social insurance (6.35%)', type: 'expense', isSystem: true, isActive: true },
+  { id: 'ac5200', number: '5200', name: 'Lífeyrisframlag atvinnurekanda (11.5%)', nameEn: 'Employer pension (11.5%)', type: 'expense', isSystem: true, isActive: true },
+  { id: 'ac5300', number: '5300', name: 'Aðrir launatengdir kostnaðir', nameEn: 'Other payroll costs', type: 'expense', isSystem: false, isActive: true },
+  // Operating 6xxx
+  { id: 'ac6000', number: '6000', name: 'Húsaleiga', nameEn: 'Rent', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6100', number: '6100', name: 'Raforka og hiti', nameEn: 'Electricity and heating', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6200', number: '6200', name: 'Símar og samskipti', nameEn: 'Phone and communications', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6300', number: '6300', name: 'Skrifstofugjöld', nameEn: 'Office expenses', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6400', number: '6400', name: 'Samgöngu- og ferðakostnaðir', nameEn: 'Travel and transport', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6500', number: '6500', name: 'Markaðsmál og auglýsingar', nameEn: 'Marketing and advertising', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6600', number: '6600', name: 'Fagþjónusta', nameEn: 'Professional services', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6700', number: '6700', name: 'Tryggingargjöld', nameEn: 'Insurance', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6800', number: '6800', name: 'Leiga á tækjum', nameEn: 'Equipment rental', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac6900', number: '6900', name: 'Aðrir rekstrargjöld', nameEn: 'Other operating expenses', type: 'expense', isSystem: false, isActive: true },
+  // Depreciation 7xxx
+  { id: 'ac7000', number: '7000', name: 'Afskriftir rekstrarfjármuna', nameEn: 'Depreciation', type: 'expense', isSystem: false, isActive: true },
+  // Financial 8xxx
+  { id: 'ac8000', number: '8000', name: 'Vextir og verðbætur á skuldum', nameEn: 'Interest and indexation', type: 'expense', isSystem: false, isActive: true },
+  { id: 'ac8100', number: '8100', name: 'Gengistap', nameEn: 'Exchange rate loss', type: 'expense', isSystem: false, isActive: true },
+  // Tax 9xxx
+  { id: 'ac9000', number: '9000', name: 'Tekjuskattur', nameEn: 'Income tax', type: 'expense', isSystem: false, isActive: true },
+];

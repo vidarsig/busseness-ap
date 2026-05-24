@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bokhalds-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "bokhalds-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "C:\\Users\\vidar\\bokhalds-web", "-p", "5174", "--no-clipboard"],
+      "port": 5174
+    }
+  ]
+}
