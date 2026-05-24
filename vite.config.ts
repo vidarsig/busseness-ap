@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Book as you go',
-        short_name: 'BookAsYouGo',
+        name: 'Jobboks',
+        short_name: 'Jobboks',
         description: 'Accounting on the go — for contractors, architects and engineers. bookasugo.com',
         theme_color: '#1e3a8a',
         background_color: '#f8fafc',

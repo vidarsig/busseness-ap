@@ -2,7 +2,7 @@ export type TranslationKey = keyof typeof is;
 
 const is = {
   // Nav
-  appName: 'Book as you go',
+  appName: 'Jobboks',
   dashboard: 'Yfirlit',
   transactions: 'Færslur',
   recurring: 'Endurteknar',

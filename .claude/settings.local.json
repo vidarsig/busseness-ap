@@ -16,7 +16,14 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(Read \"C:\\\\Users\\\\vidar\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-vidar-Claude-bussines-app\\\\3ccb79fc-f262-4d6a-84f9-04ff5281b300\\\\tasks\\\\bsby6g65l.output\")"
+      "Bash(Read \"C:\\\\Users\\\\vidar\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-vidar-Claude-bussines-app\\\\3ccb79fc-f262-4d6a-84f9-04ff5281b300\\\\tasks\\\\bsby6g65l.output\")",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "WebFetch(domain:instantdomainsearch.com)",
+      "WebFetch(domain:www.whois.com)",
+      "WebFetch(domain:rdap.verisign.com)",
+      "WebFetch(domain:rdap.registry.google)"
     ]
   }
 }
