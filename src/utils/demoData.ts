@@ -185,17 +185,19 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
     { id:id('bl'), year, category:'simagjold',      type:'expense', amounts:[20000,20000,20000,20000,20000,20000,20000,20000,20000,20000,20000,20000] },
   ];
 
+  // Strip previously loaded demo items (id contains '_demo_') before adding fresh ones
+  const isDemo = (item: { id: string }) => item.id.includes('_demo_');
   return {
-    transactions: [...(existing.transactions ?? []), ...transactions],
-    invoices:     [...(existing.invoices ?? []),     ...invoices],
-    jobs:         [...(existing.jobs ?? []),         ...jobs],
-    timeEntries:  [...(existing.timeEntries ?? []),  ...timeEntries],
-    jobMaterials: [...(existing.jobMaterials ?? []), ...jobMaterials],
-    stockItems:   [...(existing.stockItems ?? []),   ...stockItems],
-    stockMovements:[...(existing.stockMovements ?? []),...stockMovements],
-    payrollEntries:[...(existing.payrollEntries ?? []),...payrollEntries],
-    tasks:        [...(existing.tasks ?? []),        ...tasks],
-    budgetLines:  [...(existing.budgetLines ?? []),  ...budgetLines],
+    transactions:  [...(existing.transactions  ?? []).filter(x => !isDemo(x)), ...transactions],
+    invoices:      [...(existing.invoices      ?? []).filter(x => !isDemo(x)), ...invoices],
+    jobs:          [...(existing.jobs          ?? []).filter(x => !isDemo(x)), ...jobs],
+    timeEntries:   [...(existing.timeEntries   ?? []).filter(x => !isDemo(x)), ...timeEntries],
+    jobMaterials:  [...(existing.jobMaterials  ?? []).filter(x => !isDemo(x)), ...jobMaterials],
+    stockItems:    [...(existing.stockItems    ?? []).filter(x => !isDemo(x)), ...stockItems],
+    stockMovements:[...(existing.stockMovements ?? []).filter(x => !isDemo(x)), ...stockMovements],
+    payrollEntries:[...(existing.payrollEntries ?? []).filter(x => !isDemo(x)), ...payrollEntries],
+    tasks:         [...(existing.tasks         ?? []).filter(x => !isDemo(x)), ...tasks],
+    budgetLines:   [...(existing.budgetLines   ?? []).filter(x => !isDemo(x)), ...budgetLines],
     settings: {
       ...existing.settings,
       company: {

@@ -558,15 +558,37 @@ export default function Settings() {
                 ? 'Fyllir appið með raunhæfum sýnigögnum. Hentugt fyrir skjámyndir og kynningu.'
                 : 'Fills the app with realistic sample data. Useful for screenshots and demos.'}
             </p>
-            <button
-              onClick={() => {
-                const demo = generateDemoData(data);
-                dispatch({ type: 'LOAD', payload: { ...data, ...demo } });
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition">
-              <FlaskConical className="w-3.5 h-3.5" />
-              {lang === 'is' ? 'Hlaða sýnigögnum' : 'Load demo data'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  const demo = generateDemoData(data);
+                  dispatch({ type: 'LOAD', payload: { ...data, ...demo } });
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition">
+                <FlaskConical className="w-3.5 h-3.5" />
+                {lang === 'is' ? 'Hlaða sýnigögnum' : 'Load demo data'}
+              </button>
+              <button
+                onClick={() => {
+                  const isDemo = (item: { id: string }) => item.id.includes('_demo_');
+                  dispatch({ type: 'LOAD', payload: {
+                    ...data,
+                    transactions:   (data.transactions   ?? []).filter(x => !isDemo(x)),
+                    invoices:       (data.invoices       ?? []).filter(x => !isDemo(x)),
+                    jobs:           (data.jobs           ?? []).filter(x => !isDemo(x)),
+                    timeEntries:    (data.timeEntries    ?? []).filter(x => !isDemo(x)),
+                    jobMaterials:   (data.jobMaterials   ?? []).filter(x => !isDemo(x)),
+                    stockItems:     (data.stockItems     ?? []).filter(x => !isDemo(x)),
+                    stockMovements: (data.stockMovements ?? []).filter(x => !isDemo(x)),
+                    payrollEntries: (data.payrollEntries ?? []).filter(x => !isDemo(x)),
+                    tasks:          (data.tasks          ?? []).filter(x => !isDemo(x)),
+                    budgetLines:    (data.budgetLines    ?? []).filter(x => !isDemo(x)),
+                  }});
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-700 rounded-lg text-xs font-medium transition">
+                {lang === 'is' ? 'Hreinsa sýnigögn' : 'Clear demo data'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
