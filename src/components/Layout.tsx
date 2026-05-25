@@ -69,14 +69,14 @@ function SyncIndicator() {
   const icon = syncStatus === 'syncing'
     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
     : syncStatus === 'error'
-    ? <CloudOff className="w-3.5 h-3.5 text-red-400" />
-    : <Cloud className="w-3.5 h-3.5 text-blue-300" />;
+    ? <CloudOff className="w-3.5 h-3.5 text-red-500" />
+    : <Cloud className="w-3.5 h-3.5 text-blue-500" />;
   const title = syncStatus === 'syncing' ? 'Syncing…'
     : syncStatus === 'error' ? 'Sync error'
     : lastSyncedAt ? `Synced ${new Date(lastSyncedAt).toLocaleTimeString()}` : 'Cloud sync';
   return (
     <button onClick={syncNow} title={title}
-      className="p-1 rounded-lg hover:bg-blue-800 text-blue-300 flex items-center">
+      className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 flex items-center">
       {icon}
     </button>
   );
@@ -104,25 +104,27 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
 
   const NavContent = () => (
     <>
-      <div className="px-4 py-4 border-b border-blue-800 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-blue-300 flex-shrink-0" />
+      {/* Logo / company */}
+      <div className="px-4 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <BookOpen className="w-4.5 h-4.5 text-white w-[18px] h-[18px]" />
+          </div>
           <div className="min-w-0">
-            <div className="text-xs text-blue-300 font-medium tracking-wide">Jobboks</div>
-            <div className="text-sm font-semibold leading-tight truncate">{companyName}</div>
+            <div className="text-xs font-bold text-blue-600 tracking-wide uppercase">Jobboks</div>
+            <div className="text-sm font-semibold text-gray-800 leading-tight truncate">{companyName}</div>
           </div>
         </div>
       </div>
 
       <nav className="flex-1 py-3 px-2 overflow-y-auto">
         {sections.map((section, si) => {
-          // Hide 'users' nav item when Supabase is not configured
           const items = section.items.filter(item => item.id !== 'users' || supabaseConfigured);
           if (items.length === 0) return null;
           return (
           <div key={si} className={si > 0 ? 'mt-1' : ''}>
             {section.labelKey && (
-              <div className="px-3 pt-3 pb-1 text-[10px] font-bold text-blue-400 uppercase tracking-widest">
+              <div className="px-3 pt-3 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                 {t(section.labelKey as never)}
               </div>
             )}
@@ -130,15 +132,17 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
               <button
                 key={id}
                 onClick={() => setView(id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-colors ${
-                  view === id ? 'bg-blue-700 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-all ${
+                  view === id
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
                 {t(id)}
               </button>
             ))}
-            {section.labelKey && <div className="mx-3 mt-1 border-t border-blue-800/50" />}
+            {section.labelKey && <div className="mx-3 mt-1 border-t border-gray-100" />}
           </div>
           );
         })}
@@ -148,7 +152,7 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
       {data.settings.plan === 'free' && (
         <div className="px-3 py-2 flex-shrink-0">
           <button onClick={() => setView('upgrade' as View)}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-xs font-semibold transition">
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-xs font-semibold shadow-sm transition">
             <Crown className="w-3.5 h-3.5 flex-shrink-0" />
             {lang === 'is' ? 'Uppfæra í Pro' : 'Upgrade to Pro'}
           </button>
@@ -157,25 +161,25 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
 
       {/* Logged-in user */}
       {sessionUser && (
-        <div className="px-4 py-2 border-t border-blue-800 flex-shrink-0">
+        <div className="px-4 py-2 border-t border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <UserCircle className="w-4 h-4 text-blue-300 flex-shrink-0" />
+            <UserCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-medium text-white truncate">{sessionUser.name}</div>
-              <div className="text-[10px] text-blue-400 truncate">{sessionUser.email}</div>
+              <div className="text-xs font-medium text-gray-800 truncate">{sessionUser.name}</div>
+              <div className="text-[10px] text-gray-400 truncate">{sessionUser.email}</div>
             </div>
             <button onClick={handleSignOut} title="Sign out"
-              className="p-1 rounded hover:bg-blue-800 text-blue-300 hover:text-red-400 transition-colors">
+              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-500 transition-colors">
               <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       )}
 
-      <div className="px-4 py-3 border-t border-blue-800 flex-shrink-0 flex items-center gap-2">
+      <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0 flex items-center gap-2">
         <button
           onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
-          className="flex items-center gap-2 text-blue-300 hover:text-white text-sm transition-colors flex-1"
+          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 text-sm transition-colors flex-1"
         >
           <Globe className="w-4 h-4" />
           {lang === 'is' ? 'English' : 'Íslenska'}
@@ -188,20 +192,23 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-56 bg-blue-900 text-white flex-shrink-0 h-screen sticky top-0 no-print">
+      <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-200 flex-shrink-0 h-screen sticky top-0 no-print">
         <NavContent />
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-blue-900 text-white flex items-center px-4 gap-3 shadow-lg no-print">
-        <button onClick={() => setDrawerOpen(true)} className="p-1 rounded-lg hover:bg-blue-800" aria-label="Menu">
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shadow-sm no-print">
+        <button onClick={() => setDrawerOpen(true)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="Menu">
           <Menu className="w-6 h-6" />
         </button>
-        <BookOpen className="w-5 h-5 text-blue-300 flex-shrink-0" />
-        <span className="font-semibold text-sm truncate flex-1">{companyName || 'Jobboks'}</span>
+        <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center flex-shrink-0">
+          <BookOpen className="w-3.5 h-3.5 text-white" />
+        </div>
+        <span className="font-bold text-blue-600 text-sm tracking-wide uppercase flex-shrink-0">Jobboks</span>
+        <span className="text-gray-400 text-sm truncate flex-1">{companyName !== 'Jobboks' ? companyName : ''}</span>
         <button
           onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
-          className="p-1 rounded-lg hover:bg-blue-800 flex items-center gap-1 text-blue-300 text-xs"
+          className="p-1 rounded-lg hover:bg-gray-100 flex items-center gap-1 text-gray-500 text-xs"
         >
           <Globe className="w-4 h-4" />
           {lang === 'is' ? 'EN' : 'IS'}
@@ -213,7 +220,7 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
       {drawerOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex no-print">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
-          <div className="relative flex flex-col w-72 max-w-[85vw] bg-blue-900 text-white h-full shadow-2xl animate-slide-in">
+          <div className="relative flex flex-col w-72 max-w-[85vw] bg-white h-full shadow-2xl animate-slide-in">
             <button onClick={() => setDrawerOpen(false)} className="absolute top-4 right-4 text-blue-300 hover:text-white p-1" aria-label="Close">
               <X className="w-5 h-5" />
             </button>
