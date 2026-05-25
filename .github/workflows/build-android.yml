@@ -22,11 +22,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Install Gradle (no gradlew in repo, so we use the action)
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.4'
+      # Install Gradle 8.4 directly (avoids GitHub cache service issues)
+      - name: Install Gradle 8.4
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.4/bin" >> $GITHUB_PATH
 
       # Accept SDK licences and install needed components
       # (Android SDK is pre-installed on ubuntu-latest at $ANDROID_HOME)
