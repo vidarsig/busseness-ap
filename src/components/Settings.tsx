@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2 } from 'lucide-react';
+import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2, FlaskConical } from 'lucide-react';
 import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
 import { COUNTRY_LIST } from '../data/countries';
+import { generateDemoData } from '../utils/demoData';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
@@ -544,6 +545,32 @@ export default function Settings() {
               </a>
             </div>
             <p className="text-[10px] text-blue-500 mt-2">Jobboks v1.0 · © 2026</p>
+          </div>
+
+          {/* Demo data */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <h3 className="text-xs font-semibold text-amber-800 mb-1 flex items-center gap-1.5">
+              <FlaskConical className="w-3.5 h-3.5" />
+              {lang === 'is' ? 'Sýnigögn' : 'Demo data'}
+            </h3>
+            <p className="text-xs text-amber-700 mb-3">
+              {lang === 'is'
+                ? 'Fyllir appið með raunhæfum sýnigögnum. Hentugt fyrir skjámyndir og kynningu.'
+                : 'Fills the app with realistic sample data. Useful for screenshots and demos.'}
+            </p>
+            <button
+              onClick={() => {
+                if (confirm(lang === 'is'
+                  ? 'Bæta sýnigögnum við? Núverandi gögn haldast.'
+                  : 'Load demo data? Your existing data will be kept.')) {
+                  const demo = generateDemoData(data);
+                  dispatch({ type: 'LOAD', payload: { ...data, ...demo } });
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition">
+              <FlaskConical className="w-3.5 h-3.5" />
+              {lang === 'is' ? 'Hlaða sýnigögnum' : 'Load demo data'}
+            </button>
           </div>
         </div>
       </div>
