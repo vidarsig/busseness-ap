@@ -31,7 +31,7 @@ const thisMonth = () => new Date().toISOString().slice(0, 7);
 function PayrollModal({ initial, onSave, onClose }: {
   initial?: PayrollEntry; onSave: (p: PayrollEntry) => void; onClose: () => void;
 }) {
-  const { t, lang, data, fmtISK } = useApp();
+  const { t, lang, data, fmt } = useApp();
   const s = data.settings;
   const [month, setMonth] = useState(initial?.month ?? thisMonth());
   const [name, setName] = useState(initial?.employeeName ?? '');
@@ -60,7 +60,7 @@ function PayrollModal({ initial, onSave, onClose }: {
   const row = (label: string, amount: number, cls = 'text-gray-700') => (
     <div className="flex justify-between text-xs py-1 border-b border-gray-50">
       <span className="text-gray-600">{label}</span>
-      <span className={`font-mono font-medium ${cls}`}>{fmtISK(amount)}</span>
+      <span className={`font-mono font-medium ${cls}`}>{fmt(amount)}</span>
     </div>
   );
 
@@ -109,7 +109,7 @@ function PayrollModal({ initial, onSave, onClose }: {
               </div>
               <div className="flex justify-between text-sm font-bold pt-1.5">
                 <span className="text-gray-700">{lang === 'is' ? 'Nettólaun' : 'Net wage'}</span>
-                <span className="font-mono text-green-700">{fmtISK(netWage)}</span>
+                <span className="font-mono text-green-700">{fmt(netWage)}</span>
               </div>
               <div className="border-t border-gray-200 mt-2 pt-2 space-y-0.5">
                 <p className="text-xs font-semibold text-gray-500 mb-1">{lang === 'is' ? 'Kostnaður atvinnurekanda' : 'Employer costs'}</p>
@@ -117,7 +117,7 @@ function PayrollModal({ initial, onSave, onClose }: {
                 {row(lang === 'is' ? `Tryggingagjald (${s.socialInsuranceRate}%)` : `Social insurance (${s.socialInsuranceRate}%)`, calc.socialInsurance, 'text-red-600')}
                 <div className="flex justify-between text-xs font-bold pt-1">
                   <span>{lang === 'is' ? 'Heildarkostnaður' : 'Total employer cost'}</span>
-                  <span className="font-mono">{fmtISK(gross + calc.employerPension + calc.socialInsurance)}</span>
+                  <span className="font-mono">{fmt(gross + calc.employerPension + calc.socialInsurance)}</span>
                 </div>
               </div>
             </div>
@@ -139,7 +139,7 @@ function PayrollModal({ initial, onSave, onClose }: {
 }
 
 export default function Payroll() {
-  const { data, dispatch, t, lang, fmtISK } = useApp();
+  const { data, dispatch, t, lang, fmt: fmtCur } = useApp();
   const [modal, setModal] = useState<{ open: boolean; entry?: PayrollEntry }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -222,7 +222,7 @@ export default function Payroll() {
     social: acc.social + p.socialInsurance,
   }), { gross: 0, net: 0, tax: 0, empPension: 0, emplrPension: 0, social: 0 }), [filtered]);
 
-  const fmt = (n: number) => fmtISK(n);
+  const fmt = (n: number) => fmtCur(n);
 
   return (
     <div>
