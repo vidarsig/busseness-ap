@@ -1,8 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Printer, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss } from '../utils/calculations';
-import { formatISK } from '../utils/formatters';
 import { BalanceSheetItem } from '../types';
 
 function newId() {
@@ -73,7 +72,7 @@ function BSModal({ initial, onSave, onClose }: BSModalProps) {
 }
 
 export default function AnnualAccounts() {
-  const { data, dispatch, t, lang } = useApp();
+  const { data, dispatch, t, lang, fmtISK } = useApp();
   const year = data.settings.fiscalYear;
   const company = data.settings.company;
   const txs = filterByYear(data.transactions, year);
@@ -110,7 +109,7 @@ export default function AnnualAccounts() {
     <tr className={bold ? 'border-t border-gray-300 bg-gray-50' : ''}>
       <td className={`px-4 py-1.5 text-sm ${bold ? 'font-bold' : ''} ${indent ? 'pl-8' : ''}`}>{label}</td>
       <td className={`px-4 py-1.5 text-sm text-right font-mono ${bold ? 'font-bold' : ''}`}>
-        {amount !== 0 || bold ? formatISK(amount, lang) : '—'}
+        {amount !== 0 || bold ? fmtISK(amount) : '—'}
       </td>
     </tr>
   );
@@ -119,7 +118,7 @@ export default function AnnualAccounts() {
     <tr className={bold ? 'border-t border-gray-300 bg-gray-50' : ''}>
       <td className={`px-4 py-1.5 text-sm ${bold ? 'font-bold' : ''} ${indent ? 'pl-8' : ''}`}>{label}</td>
       <td className={`px-4 py-1.5 text-sm text-right font-mono ${bold ? 'font-bold' : ''}`}>
-        {amount !== 0 ? formatISK(isNeg ? -amount : amount, lang) : '—'}
+        {amount !== 0 ? fmtISK(isNeg ? -amount : amount) : '—'}
       </td>
     </tr>
   );
@@ -257,7 +256,7 @@ export default function AnnualAccounts() {
                       <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
                       <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{formatISK(item.amount, lang)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
                 <BSRow label={t('fixedAssets')} amount={totalFixedAssets} bold />
@@ -270,7 +269,7 @@ export default function AnnualAccounts() {
                       <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
                       <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{formatISK(item.amount, lang)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
                 <BSRow label={t('currentAssets')} amount={totalCurrentAssets} bold />
@@ -300,10 +299,10 @@ export default function AnnualAccounts() {
                       <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
                       <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{formatISK(item.amount, lang)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
-                <BSRow label={lang === 'is' ? 'Hagnaður / tap árs' : 'Net result for year'} amount={pl.netResult} indent />
+                <BSRow label={lang === 'is' ? 'HagnaÃ°ur / tap Ã¡rs' : 'Net result for year'} amount={pl.netResult} indent />
                 <BSRow label={t('totalEquity')} amount={totalEquity} bold />
 
                 <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('longTermLiabilities')}</td></tr>
@@ -314,7 +313,7 @@ export default function AnnualAccounts() {
                       <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
                       <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{formatISK(item.amount, lang)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
                 <BSRow label={t('longTermLiabilities')} amount={totalLongTerm} bold />
@@ -327,7 +326,7 @@ export default function AnnualAccounts() {
                       <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
                       <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{formatISK(item.amount, lang)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
                 <BSRow label={t('currentLiabilities')} amount={totalCurrentLiab} bold />
@@ -336,7 +335,7 @@ export default function AnnualAccounts() {
             </table>
             {Math.abs(totalAssets - totalEquityAndLiab) > 1 && (
               <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-xs text-yellow-700">
-                ⚠ {lang === 'is' ? 'Efnahagsreikningur jafnast ekki — uppfærðu opnunarstöður' : 'Balance sheet does not balance — update opening balances'}
+                âš  {lang === 'is' ? 'Efnahagsreikningur jafnast ekki â€” uppfÃ¦rÃ°u opnunarstÃ¶Ã°ur' : 'Balance sheet does not balance â€” update opening balances'}
               </div>
             )}
           </div>
@@ -411,3 +410,4 @@ export default function AnnualAccounts() {
     </div>
   );
 }
+

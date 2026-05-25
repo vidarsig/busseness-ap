@@ -1,15 +1,14 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import {
   calcVATSummary,
   filterByYear, filterByMonth, filterByQuarter,
 } from '../utils/calculations';
-import { formatISK } from '../utils/formatters';
 
 type PeriodType = 'year' | 'quarter' | 'month';
 
 export default function VAT() {
-  const { data, t, lang } = useApp();
+  const { data, t, fmtISK } = useApp();
   const year = data.settings.fiscalYear;
 
   const [periodType, setPeriodType] = useState<PeriodType>('year');
@@ -54,9 +53,9 @@ export default function VAT() {
           {rows.filter(r => r.baseAmount > 0 || r.vatAmount > 0).map(row => (
             <tr key={row.rate}>
               <td className="px-4 py-2.5 text-sm font-medium text-gray-700">{row.rate}%</td>
-              <td className="px-4 py-2.5 text-sm text-right font-mono">{formatISK(row.baseAmount, lang)}</td>
-              <td className="px-4 py-2.5 text-sm text-right font-mono font-semibold">{formatISK(row.vatAmount, lang)}</td>
-              <td className="px-4 py-2.5 text-sm text-right font-mono">{formatISK(row.totalAmount, lang)}</td>
+              <td className="px-4 py-2.5 text-sm text-right font-mono">{fmtISK(row.baseAmount)}</td>
+              <td className="px-4 py-2.5 text-sm text-right font-mono font-semibold">{fmtISK(row.vatAmount)}</td>
+              <td className="px-4 py-2.5 text-sm text-right font-mono">{fmtISK(row.totalAmount)}</td>
             </tr>
           ))}
           {rows.every(r => r.baseAmount === 0 && r.vatAmount === 0) && (
@@ -67,13 +66,13 @@ export default function VAT() {
           <tr>
             <td className="px-4 py-2.5 text-sm font-bold text-gray-900">{t('total')}</td>
             <td className="px-4 py-2.5 text-sm text-right font-mono font-bold">
-              {formatISK(rows.reduce((s, r) => s + r.baseAmount, 0), lang)}
+              {fmtISK(rows.reduce((s, r) => s + r.baseAmount, 0))}
             </td>
             <td className="px-4 py-2.5 text-sm text-right font-mono font-bold">
-              {formatISK(total, lang)}
+              {fmtISK(total)}
             </td>
             <td className="px-4 py-2.5 text-sm text-right font-mono font-bold">
-              {formatISK(rows.reduce((s, r) => s + r.totalAmount, 0), lang)}
+              {fmtISK(rows.reduce((s, r) => s + r.totalAmount, 0))}
             </td>
           </tr>
         </tfoot>
@@ -137,11 +136,11 @@ export default function VAT() {
           {isOwed ? t('toPayRSK') : t('refundFromRSK')}
         </div>
         <div className={`text-3xl font-bold ${isOwed ? 'text-orange-600' : 'text-green-600'}`}>
-          {formatISK(Math.abs(vat.netVAT), lang)}
+          {fmtISK(Math.abs(vat.netVAT))}
         </div>
         <div className="mt-3 flex gap-6 text-sm text-gray-500">
-          <span>{t('outputVAT')}: <span className="font-semibold text-gray-700">{formatISK(vat.totalOutput, lang)}</span></span>
-          <span>{t('inputVAT')}: <span className="font-semibold text-gray-700">{formatISK(vat.totalInput, lang)}</span></span>
+          <span>{t('outputVAT')}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalOutput)}</span></span>
+          <span>{t('inputVAT')}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalInput)}</span></span>
         </div>
       </div>
 

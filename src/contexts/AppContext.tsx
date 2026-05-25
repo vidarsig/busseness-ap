@@ -8,7 +8,7 @@ import {
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
 import { COUNTRY_CONFIGS } from '../data/countries';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatISK } from '../utils/formatters';
 
 const STORAGE_KEY = 'bokhalds_app_v2';
 
@@ -174,6 +174,8 @@ interface AppContextValue {
   setLang: (l: Language) => void;
   cc: CountryConfig;
   fmt: (amount: number) => string;
+  /** Format an ISK-base amount (output of getTransactionISK) in the app's display currency */
+  fmtISK: (iskAmount: number) => string;
   syncStatus: SyncStatus;
   lastSyncedAt: string | null;
   syncNow: () => Promise<void>;
@@ -325,8 +327,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
   const fmt = useCallback((amount: number) => formatCurrency(amount, cc.currency, lang), [cc.currency, lang]);
 
+  // Converts an ISK-base amount (from getTransactionISK) → display currency → formatted string
+  const fmtISK = useCallback((iskAmount: number): string => {
+    const cur = (data.settings.defaultCurrency || 'ISK') as import('../types').Currency;
+    if (cur === 'ISK') return formatISK(iskAmount, lang);
+    const rate = (data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1;
+    return formatCurrency(Math.round(iskAmount / (rate || 1)), cur, lang);
+  }, [data.settings.defaultCurrency, data.settings.exchangeRates, lang]);
+
   return (
-    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, syncStatus, lastSyncedAt, syncNow }}>
+    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow }}>
       {children}
     </AppContext.Provider>
   );

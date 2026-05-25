@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { calcVATSummary, filterByMonth } from '../utils/calculations';
-import { formatISK } from '../utils/formatters';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 const PERIOD_MONTHS: Record<number, number[]> = {
@@ -10,7 +9,7 @@ const PERIOD_MONTHS: Record<number, number[]> = {
 };
 
 export default function VATReturn() {
-  const { data, t, lang, cc } = useApp();
+  const { data, t, lang, cc, fmtISK } = useApp();
   const [year, setYear] = useState(data.settings.fiscalYear);
   const [period, setPeriod] = useState<number>(() => Math.ceil(new Date().getMonth() / 2) || 1);
 
@@ -20,7 +19,7 @@ export default function VATReturn() {
     [data.transactions, year, period]);
 
   const vat = useMemo(() => calcVATSummary(periodTx, cc.vatRates), [periodTx, cc.vatRates]);
-  const fmt = (n: number) => formatISK(n, lang);
+  const fmt = (n: number) => fmtISK(n);
 
   const years = Array.from(new Set([year - 1, year, year + 1,
     ...data.transactions.map(tx => new Date(tx.date).getFullYear())])).sort((a, b) => b - a);

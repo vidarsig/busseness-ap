@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss } from '../utils/calculations';
-import { formatISK } from '../utils/formatters';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 export default function Reports() {
-  const { data, t, lang } = useApp();
+  const { data, t, lang, fmtISK } = useApp();
   const currentYear = data.settings.fiscalYear;
   const [year, setYear] = useState(currentYear);
 
@@ -101,7 +100,7 @@ export default function Reports() {
       <td className={`px-5 py-2 text-sm text-right font-mono ${bold ? 'font-bold' : ''} ${
         amount < 0 ? 'text-red-600' : isNegative ? 'text-gray-700' : 'text-gray-700'
       }`}>
-        {amount !== 0 ? formatISK(isNegative ? -amount : amount, lang) : '—'}
+        {amount !== 0 ? fmtISK(isNegative ? -amount : amount) : '—'}
       </td>
     </tr>
   );
@@ -208,7 +207,7 @@ export default function Reports() {
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-500">{lang === 'is' ? 'Upphæðir í íslenskum krónum (ISK)' : 'Amounts in Icelandic krónur (ISK)'}</span>
             <div className={`text-base font-bold ${pl.netResult >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {t('netResult')}: {formatISK(pl.netResult, lang)}
+              {t('netResult')}: {fmtISK(pl.netResult)}
             </div>
           </div>
         </div>

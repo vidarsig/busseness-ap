@@ -4,13 +4,13 @@ import {
 } from 'recharts';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary } from '../utils/calculations';
-import { formatISK, formatDate } from '../utils/formatters';
+import { formatDate } from '../utils/formatters';
 import { View } from '../types';
 
 interface Props { setView: (v: View) => void; }
 
 export default function Dashboard({ setView }: Props) {
-  const { data, t, lang } = useApp();
+  const { data, t, lang, fmtISK } = useApp();
   const year = data.settings.fiscalYear;
   const yearly = filterByYear(data.transactions, year);
 
@@ -35,7 +35,7 @@ export default function Dashboard({ setView }: Props) {
   const cards = [
     {
       label: t('totalIncome'),
-      value: formatISK(totalIncome, lang),
+      value: fmtISK(totalIncome),
       icon: TrendingUp,
       color: 'text-green-600',
       bg: 'bg-green-50',
@@ -43,7 +43,7 @@ export default function Dashboard({ setView }: Props) {
     },
     {
       label: t('totalExpenses'),
-      value: formatISK(totalExpenses, lang),
+      value: fmtISK(totalExpenses),
       icon: TrendingDown,
       color: 'text-red-600',
       bg: 'bg-red-50',
@@ -51,7 +51,7 @@ export default function Dashboard({ setView }: Props) {
     },
     {
       label: t('netProfit'),
-      value: formatISK(netProfit, lang),
+      value: fmtISK(netProfit),
       icon: DollarSign,
       color: netProfit >= 0 ? 'text-blue-600' : 'text-red-600',
       bg: netProfit >= 0 ? 'bg-blue-50' : 'bg-red-50',
@@ -59,7 +59,7 @@ export default function Dashboard({ setView }: Props) {
     },
     {
       label: vat.netVAT >= 0 ? t('vatOwed') : t('vatRefund'),
-      value: formatISK(Math.abs(vat.netVAT), lang),
+      value: fmtISK(Math.abs(vat.netVAT)),
       icon: Receipt,
       color: vat.netVAT >= 0 ? 'text-orange-600' : 'text-green-600',
       bg: vat.netVAT >= 0 ? 'bg-orange-50' : 'bg-green-50',
@@ -99,7 +99,7 @@ export default function Dashboard({ setView }: Props) {
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
             <Tooltip
-              formatter={(value: number) => formatISK(value, lang)}
+              formatter={(value: number) => fmtISK(value)}
               labelStyle={{ fontSize: 12 }}
               contentStyle={{ fontSize: 12 }}
             />
@@ -143,7 +143,7 @@ export default function Dashboard({ setView }: Props) {
                   </div>
                 </div>
                 <div className={`text-sm font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                  {tx.type === 'income' ? '+' : '-'}{formatISK(getTransactionISK(tx), lang)}
+                  {tx.type === 'income' ? '+' : '-'}{fmtISK(getTransactionISK(tx))}
                 </div>
               </div>
             ))}
