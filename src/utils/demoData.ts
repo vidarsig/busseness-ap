@@ -9,75 +9,98 @@ function isoAgo(n: number) { return new Date(Date.now() - n*24*60*60*1000).toISO
 
 export function generateDemoData(existing: AppData): Partial<AppData> {
 
+  const isIS  = existing.settings.language === 'is';
+  const cur   = isIS ? 'ISK' : (existing.settings.defaultCurrency === 'ISK' ? 'EUR' : existing.settings.defaultCurrency || 'EUR');
+  const rate  = existing.settings.exchangeRates?.EUR ?? 150;
+  // Convert ISK reference amount → target currency
+  const a = (isk: number) => cur === 'ISK' ? isk : Math.round(isk / rate);
+
   // ── Transactions ─────────────────────────────────────────
   const transactions: Transaction[] = [
-    { id:id('tx'), date:daysAgo(1),  description:'Þakviðgerð — Skólavörðustígur 12', category:'sala_thjonustu', type:'income',  amount:485000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(3),  description:'Pípulagnir — Laugavegur 45',        category:'sala_thjonustu', type:'income',  amount:320000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(5),  description:'Viðgerð á baðherbergi',             category:'sala_thjonustu', type:'income',  amount:195000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(7),  description:'Steinlagnir — Kópavogur',           category:'sala_thjonustu', type:'income',  amount:560000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(10), description:'Eldhúsuppsetning — Hafnarfjörður',  category:'sala_thjonustu', type:'income',  amount:720000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(12), description:'Byko — Timbur og einangrun',        category:'vorur',          type:'expense', amount:87500,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(14), description:'Rafmagnsfarir — verkfæri',          category:'vorur',          type:'expense', amount:34200,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(15), description:'Líftæknivörur — Pípuhlutir',        category:'vorur',          type:'expense', amount:52800,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(18), description:'Olía og bifreiðakostnaður',         category:'samgongur',      type:'expense', amount:28600,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(20), description:'Steypustöðin — Steypa',             category:'vorur',          type:'expense', amount:118000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(22), description:'Rafmagn og hiti — verkstaður',      category:'rafmagn_hiti',   type:'expense', amount:42000,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(25), description:'Sími og nettenging',                category:'simagjold',      type:'expense', amount:15900,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(28), description:'Bílastæðavinur — Þakviðgerð',      category:'sala_thjonustu', type:'income',  amount:280000, currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(30), description:'Tryggingar — atvinnuslys',          category:'fagthjonusta',   type:'expense', amount:68000,  currency:'ISK', eurToIskRate:150, vatRate:24 },
-    { id:id('tx'), date:daysAgo(32), description:'Hlíf — Bygg og byggingarefni',      category:'vorur',          type:'expense', amount:94500,  currency:'ISK', eurToIskRate:150, vatRate:24 },
+    { id:id('tx'), date:daysAgo(1),  description: isIS ? 'Þakviðgerð — Skólavörðustígur 12'   : 'Roof repair — 14 Oak Street',          category:'sala_thjonustu', type:'income',  amount:a(485000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(3),  description: isIS ? 'Pípulagnir — Laugavegur 45'          : 'Plumbing — High Street 45',            category:'sala_thjonustu', type:'income',  amount:a(320000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(5),  description: isIS ? 'Viðgerð á baðherbergi'               : 'Bathroom renovation',                  category:'sala_thjonustu', type:'income',  amount:a(195000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(7),  description: isIS ? 'Steinlagnir — Kópavogur'             : 'Concrete work — Northside',            category:'sala_thjonustu', type:'income',  amount:a(560000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(10), description: isIS ? 'Eldhúsuppsetning — Hafnarfjörður'    : 'Kitchen installation — Riverside',     category:'sala_thjonustu', type:'income',  amount:a(720000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(12), description: isIS ? 'Byko — Timbur og einangrun'          : 'Timber & insulation supplies',         category:'vorur',          type:'expense', amount:a(87500),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(14), description: isIS ? 'Rafmagnsfarir — verkfæri'            : 'Electrical tools & equipment',         category:'vorur',          type:'expense', amount:a(34200),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(15), description: isIS ? 'Líftæknivörur — Pípuhlutir'         : 'Plumbing parts & fittings',            category:'vorur',          type:'expense', amount:a(52800),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(18), description: isIS ? 'Olía og bifreiðakostnaður'           : 'Fuel & vehicle costs',                 category:'samgongur',      type:'expense', amount:a(28600),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(20), description: isIS ? 'Steypustöðin — Steypa'              : 'Ready-mix concrete',                   category:'vorur',          type:'expense', amount:a(118000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(22), description: isIS ? 'Rafmagn og hiti — verkstaður'        : 'Electricity & heating — site',         category:'rafmagn_hiti',   type:'expense', amount:a(42000),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(25), description: isIS ? 'Sími og nettenging'                  : 'Phone & internet',                     category:'simagjold',      type:'expense', amount:a(15900),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(28), description: isIS ? 'Bílastæðavinur — Þakviðgerð'        : 'Roof repair — Parkside Drive',         category:'sala_thjonustu', type:'income',  amount:a(280000), currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(30), description: isIS ? 'Tryggingar — atvinnuslys'            : 'Insurance — workplace cover',          category:'fagthjonusta',   type:'expense', amount:a(68000),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(32), description: isIS ? 'Hlíf — Bygg og byggingarefni'        : 'Building materials & supplies',        category:'vorur',          type:'expense', amount:a(94500),  currency:cur, eurToIskRate:rate, vatRate:24 },
   ];
 
   // ── Invoices ─────────────────────────────────────────────
+  const w1 = isIS ? 'Gunnar Sigurðsson' : 'James Mitchell';
+  const w2 = isIS ? 'Bjarni Ólafsson'   : 'Robert Clarke';
+  const w3 = isIS ? 'Anna Magnúsdóttir' : 'Sarah Thompson';
+
+  const c1 = isIS
+    ? { name:'Jón Gunnarsson',               email:'jon@example.is',     phone:'555-1234', address:'Skólavörðustígur 12, 101 Reykjavík' }
+    : { name:'James Harrington',             email:'james@example.co.uk',phone:'07700 900123', address:'14 Oak Street, London EC1A 1BB' };
+  const c2 = isIS
+    ? { name:'Sigríður Björnsdóttir',        email:'sigridur@example.is',phone:'555-5678', address:'Laugavegur 45, 105 Reykjavík' }
+    : { name:'Patricia Williams',           email:'pat@example.co.uk',  phone:'07700 900456', address:'45 High Street, Manchester M1 1AD' };
+  const c3 = isIS
+    ? { name:'Byggingafélag Suðurnesja ehf', email:'bygg@example.is',   phone:'555-9012', address:'Keflavíkurgata 8, 230 Reykjanesbær' }
+    : { name:'Northside Developments Ltd',  email:'info@northside.co.uk',phone:'020 7946 0001', address:'Northside Business Park, Bristol BS1 4DJ' };
+  const c4 = isIS
+    ? { name:'Arna Kristjánsdóttir',         email:'arna@example.is',   phone:'555-3456', address:'Barónsstígur 22, 101 Reykjavík' }
+    : { name:'Amanda Clarke',               email:'amanda@example.co.uk',phone:'07700 900789', address:'22 Riverside Close, Leeds LS1 2AB' };
+
   const invLines1: InvoiceLine[] = [
-    { id:id('il'), description:'Vinnulaun — Gunnar Sigurðsson (24h)',  quantity:24, unitPrice:5500, vatRate:24 },
-    { id:id('il'), description:'Vinnulaun — Bjarni Ólafsson (16h)',    quantity:16, unitPrice:5000, vatRate:24 },
-    { id:id('il'), description:'Þakpappar og einangrun',               quantity:1,  unitPrice:87500, vatRate:24 },
-    { id:id('il'), description:'Festingar og varahlutir',              quantity:1,  unitPrice:18000, vatRate:24 },
+    { id:id('il'), description: isIS ? `Vinnulaun — ${w1} (24h)` : `Labour — ${w1} (24h)`,   quantity:24, unitPrice:a(5500*24)/24,  vatRate:24 },
+    { id:id('il'), description: isIS ? `Vinnulaun — ${w2} (16h)` : `Labour — ${w2} (16h)`,   quantity:16, unitPrice:a(5000*16)/16,  vatRate:24 },
+    { id:id('il'), description: isIS ? 'Þakpappar og einangrun'  : 'Roofing felt & insulation', quantity:1, unitPrice:a(87500),    vatRate:24 },
+    { id:id('il'), description: isIS ? 'Festingar og varahlutir' : 'Fixings & spare parts',   quantity:1,  unitPrice:a(18000),    vatRate:24 },
   ];
   const invLines2: InvoiceLine[] = [
-    { id:id('il'), description:'Vinnulaun — Eldhúsuppsetning (32h)',   quantity:32, unitPrice:5500, vatRate:24 },
-    { id:id('il'), description:'Skápar og hurðir — IKEA Business',     quantity:1,  unitPrice:245000, vatRate:24 },
-    { id:id('il'), description:'Pípulagnir og rafmagn',                quantity:1,  unitPrice:68000, vatRate:24 },
+    { id:id('il'), description: isIS ? 'Vinnulaun — Eldhúsuppsetning (32h)' : 'Labour — Kitchen installation (32h)', quantity:32, unitPrice:a(5500*32)/32, vatRate:24 },
+    { id:id('il'), description: isIS ? 'Skápar og hurðir — IKEA Business'   : 'Cabinets & doors — IKEA Business',   quantity:1,  unitPrice:a(245000), vatRate:24 },
+    { id:id('il'), description: isIS ? 'Pípulagnir og rafmagn'              : 'Plumbing & electrical',               quantity:1,  unitPrice:a(68000),  vatRate:24 },
   ];
   const invLines3: InvoiceLine[] = [
-    { id:id('il'), description:'Vinnulaun — Steypuvinna (40h)',        quantity:40, unitPrice:5500, vatRate:24 },
-    { id:id('il'), description:'Steypa — 4 m³',                        quantity:4,  unitPrice:28000, vatRate:24 },
-    { id:id('il'), description:'Járn og járnakerfi',                   quantity:1,  unitPrice:95000, vatRate:24 },
+    { id:id('il'), description: isIS ? 'Vinnulaun — Steypuvinna (40h)' : 'Labour — Concrete work (40h)', quantity:40, unitPrice:a(5500*40)/40, vatRate:24 },
+    { id:id('il'), description: isIS ? 'Steypa — 4 m³'                 : 'Ready-mix concrete — 4 m³',   quantity:4,  unitPrice:a(28000),     vatRate:24 },
+    { id:id('il'), description: isIS ? 'Járn og járnakerfi'            : 'Steel & rebar framework',      quantity:1,  unitPrice:a(95000),     vatRate:24 },
   ];
 
   const invoices: Invoice[] = [
     {
       id:id('inv'), number:'R0042', type:'invoice',
       date:daysAgo(2), dueDate:daysAgo(-28),
-      customer:{ name:'Jón Gunnarsson', email:'jon@example.is', phone:'555-1234', address:'Skólavörðustígur 12, 101 Reykjavík' },
-      lines:invLines1, notes:'Þakviðgerð lokið. Greiðsla innan 30 daga.',
-      status:'sent', currency:'ISK', eurToIskRate:150,
+      customer:c1, lines:invLines1,
+      notes: isIS ? 'Þakviðgerð lokið. Greiðsla innan 30 daga.' : 'Roof repair completed. Payment due within 30 days.',
+      status:'sent', currency:cur, eurToIskRate:rate,
     },
     {
       id:id('inv'), number:'R0041', type:'invoice',
       date:daysAgo(10), dueDate:daysAgo(-20),
-      customer:{ name:'Sigríður Björnsdóttir', email:'sigridur@example.is', phone:'555-5678', address:'Laugavegur 45, 105 Reykjavík' },
-      lines:invLines2, notes:'Eldhúsuppsetning. Takk fyrir viðskiptin.',
-      status:'paid', currency:'ISK', eurToIskRate:150,
+      customer:c2, lines:invLines2,
+      notes: isIS ? 'Eldhúsuppsetning. Takk fyrir viðskiptin.' : 'Kitchen installation complete. Thank you for your business.',
+      status:'paid', currency:cur, eurToIskRate:rate,
     },
     {
       id:id('inv'), number:'R0040', type:'invoice',
       date:daysAgo(20), dueDate:daysAgo(10),
-      customer:{ name:'Byggingafélag Suðurnesja ehf', email:'bygg@example.is', phone:'555-9012', address:'Keflavíkurgata 8, 230 Reykjanesbær' },
-      lines:invLines3, notes:'Steypuvinna — 1. hluti af stærra verkefni.',
-      status:'overdue', currency:'ISK', eurToIskRate:150,
+      customer:c3, lines:invLines3,
+      notes: isIS ? 'Steypuvinna — 1. hluti af stærra verkefni.' : 'Concrete works — phase 1 of larger project.',
+      status:'overdue', currency:cur, eurToIskRate:rate,
     },
     {
       id:id('inv'), number:'R0043', type:'quote',
       date:daysAgo(1), dueDate:daysAgo(-14),
-      customer:{ name:'Arna Kristjánsdóttir', email:'arna@example.is', phone:'555-3456', address:'Barónsstígur 22, 101 Reykjavík' },
+      customer:c4,
       lines:[
-        { id:id('il'), description:'Baðherbergisuppsetning — vinnulaun', quantity:20, unitPrice:5500, vatRate:24 },
-        { id:id('il'), description:'Flísar og festingar',                quantity:1,  unitPrice:145000, vatRate:24 },
+        { id:id('il'), description: isIS ? 'Baðherbergisuppsetning — vinnulaun' : 'Bathroom renovation — labour', quantity:20, unitPrice:a(5500*20)/20, vatRate:24 },
+        { id:id('il'), description: isIS ? 'Flísar og festingar'                : 'Tiles & fixings',              quantity:1,  unitPrice:a(145000),      vatRate:24 },
       ],
-      notes:'Tilboð gilt í 14 daga.',
-      status:'draft', currency:'ISK', eurToIskRate:150,
+      notes: isIS ? 'Tilboð gilt í 14 daga.' : 'Quote valid for 14 days.',
+      status:'draft', currency:cur, eurToIskRate:rate,
     },
   ];
 
@@ -88,128 +111,144 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
 
   const jobs: Job[] = [
     {
-      id:job1Id, number:'JOB-2026-001', name:'Þakviðgerð — Skólavörðustígur',
-      clientName:'Jón Gunnarsson', clientEmail:'jon@example.is', clientPhone:'555-1234',
-      address:'Skólavörðustígur 12, 101 Reykjavík',
+      id:job1Id, number:'JOB-2026-001',
+      name:        isIS ? 'Þakviðgerð — Skólavörðustígur'        : 'Roof Repair — Oak Street',
+      clientName:  isIS ? 'Jón Gunnarsson'                        : 'James Harrington',
+      clientEmail: isIS ? 'jon@example.is'                        : 'james@example.co.uk',
+      clientPhone: isIS ? '555-1234'                              : '07700 900123',
+      address:     isIS ? 'Skólavörðustígur 12, 101 Reykjavík'   : '14 Oak Street, London EC1A 1BB',
       status:'complete', startDate:daysAgo(8), endDate:daysAgo(2),
-      quotedAmount:620000, currency:'ISK', description:'Viðgerð á þaki eftir stormskemmdir. Skipta um þakpappa og einangrun.',
-      notes:'Viðskiptavinur vill fá reikning strax.', createdAt:isoAgo(10), updatedAt:isoAgo(2),
+      quotedAmount:a(620000), currency:cur,
+      description: isIS ? 'Viðgerð á þaki eftir stormskemmdir. Skipta um þakpappa og einangrun.' : 'Roof repair after storm damage. Replace felt and insulation.',
+      notes:       isIS ? 'Viðskiptavinur vill fá reikning strax.' : 'Client requested invoice immediately.',
+      createdAt:isoAgo(10), updatedAt:isoAgo(2),
     },
     {
-      id:job2Id, number:'JOB-2026-002', name:'Eldhúsuppsetning — Hafnarfjörður',
-      clientName:'Sigríður Björnsdóttir', clientEmail:'sigridur@example.is', clientPhone:'555-5678',
-      address:'Suðurgata 7, 220 Hafnarfjörður',
+      id:job2Id, number:'JOB-2026-002',
+      name:        isIS ? 'Eldhúsuppsetning — Hafnarfjörður'      : 'Kitchen Installation — Riverside',
+      clientName:  isIS ? 'Sigríður Björnsdóttir'                 : 'Patricia Williams',
+      clientEmail: isIS ? 'sigridur@example.is'                   : 'pat@example.co.uk',
+      clientPhone: isIS ? '555-5678'                              : '07700 900456',
+      address:     isIS ? 'Suðurgata 7, 220 Hafnarfjörður'        : '45 High Street, Manchester M1 1AD',
       status:'active', startDate:daysAgo(5),
-      quotedAmount:890000, currency:'ISK', description:'Fullkomin eldhúsuppsetning. Nýir skápar, pípulagnir og rafmagn.',
-      notes:'Viðskiptavinur vill ljósa steinflísar.', createdAt:isoAgo(6), updatedAt:isoAgo(1),
+      quotedAmount:a(890000), currency:cur,
+      description: isIS ? 'Fullkomin eldhúsuppsetning. Nýir skápar, pípulagnir og rafmagn.' : 'Full kitchen refit. New cabinets, plumbing and electrics.',
+      notes:       isIS ? 'Viðskiptavinur vill ljósa steinflísar.' : 'Client requested light stone tiles.',
+      createdAt:isoAgo(6), updatedAt:isoAgo(1),
     },
     {
-      id:job3Id, number:'JOB-2026-003', name:'Steypuvinna — Kópavogur',
-      clientName:'Byggingafélag Suðurnesja ehf', clientEmail:'bygg@example.is', clientPhone:'555-9012',
-      address:'Hamraborg 5, 200 Kópavogur',
+      id:job3Id, number:'JOB-2026-003',
+      name:        isIS ? 'Steypuvinna — Kópavogur'               : 'Concrete Foundation — Northside',
+      clientName:  isIS ? 'Byggingafélag Suðurnesja ehf'          : 'Northside Developments Ltd',
+      clientEmail: isIS ? 'bygg@example.is'                       : 'info@northside.co.uk',
+      clientPhone: isIS ? '555-9012'                              : '020 7946 0001',
+      address:     isIS ? 'Hamraborg 5, 200 Kópavogur'            : 'Northside Business Park, Bristol BS1 4DJ',
       status:'quote', startDate:daysAgo(-7),
-      quotedAmount:1450000, currency:'ISK', description:'Steypugrunnur fyrir nýtt hús. 4 m³ steypa, járnakerfi.',
+      quotedAmount:a(1450000), currency:cur,
+      description: isIS ? 'Steypugrunnur fyrir nýtt hús. 4 m³ steypa, járnakerfi.' : 'Concrete foundation for new build. 4 m³ concrete, rebar framework.',
       createdAt:isoAgo(2), updatedAt:isoAgo(1),
     },
   ];
 
   // ── Time entries ──────────────────────────────────────────
   const timeEntries: TimeEntry[] = [
-    { id:id('te'), jobId:job1Id, date:daysAgo(8), employeeName:'Gunnar Sigurðsson', hours:8, hourlyRate:5500, description:'Rif gamlan þakpappa', createdAt:isoAgo(8) },
-    { id:id('te'), jobId:job1Id, date:daysAgo(7), employeeName:'Gunnar Sigurðsson', hours:8, hourlyRate:5500, description:'Lagði einangrun', createdAt:isoAgo(7) },
-    { id:id('te'), jobId:job1Id, date:daysAgo(6), employeeName:'Gunnar Sigurðsson', hours:8, hourlyRate:5500, description:'Festingarvinna', createdAt:isoAgo(6) },
-    { id:id('te'), jobId:job1Id, date:daysAgo(5), employeeName:'Bjarni Ólafsson',   hours:8, hourlyRate:5000, description:'Lokavinna og þrif', createdAt:isoAgo(5) },
-    { id:id('te'), jobId:job1Id, date:daysAgo(4), employeeName:'Bjarni Ólafsson',   hours:8, hourlyRate:5000, description:'Eftirskoðun og lokun', createdAt:isoAgo(4) },
-    { id:id('te'), jobId:job2Id, date:daysAgo(5), employeeName:'Gunnar Sigurðsson', hours:8, hourlyRate:5500, description:'Rif gamla eldhús', createdAt:isoAgo(5) },
-    { id:id('te'), jobId:job2Id, date:daysAgo(4), employeeName:'Gunnar Sigurðsson', hours:8, hourlyRate:5500, description:'Pípulagnir', createdAt:isoAgo(4) },
-    { id:id('te'), jobId:job2Id, date:daysAgo(3), employeeName:'Anna Magnúsdóttir', hours:6, hourlyRate:5000, description:'Flísalagnir', createdAt:isoAgo(3) },
-    { id:id('te'), jobId:job2Id, date:daysAgo(2), employeeName:'Anna Magnúsdóttir', hours:8, hourlyRate:5000, description:'Skápar og hurðir', createdAt:isoAgo(2) },
-    { id:id('te'), jobId:job2Id, date:daysAgo(1), employeeName:'Gunnar Sigurðsson', hours:6, hourlyRate:5500, description:'Rafmagnsvinna', createdAt:isoAgo(1) },
+    { id:id('te'), jobId:job1Id, date:daysAgo(8), employeeName:w1, hours:8, hourlyRate:a(5500), description: isIS ? 'Rif gamlan þakpappa'     : 'Stripped old roofing felt',   createdAt:isoAgo(8) },
+    { id:id('te'), jobId:job1Id, date:daysAgo(7), employeeName:w1, hours:8, hourlyRate:a(5500), description: isIS ? 'Lagði einangrun'          : 'Laid new insulation',         createdAt:isoAgo(7) },
+    { id:id('te'), jobId:job1Id, date:daysAgo(6), employeeName:w1, hours:8, hourlyRate:a(5500), description: isIS ? 'Festingarvinna'           : 'Fixing & fastening',          createdAt:isoAgo(6) },
+    { id:id('te'), jobId:job1Id, date:daysAgo(5), employeeName:w2, hours:8, hourlyRate:a(5000), description: isIS ? 'Lokavinna og þrif'        : 'Final work & clean-up',       createdAt:isoAgo(5) },
+    { id:id('te'), jobId:job1Id, date:daysAgo(4), employeeName:w2, hours:8, hourlyRate:a(5000), description: isIS ? 'Eftirskoðun og lokun'     : 'Inspection & sign-off',       createdAt:isoAgo(4) },
+    { id:id('te'), jobId:job2Id, date:daysAgo(5), employeeName:w1, hours:8, hourlyRate:a(5500), description: isIS ? 'Rif gamla eldhús'         : 'Stripped old kitchen',        createdAt:isoAgo(5) },
+    { id:id('te'), jobId:job2Id, date:daysAgo(4), employeeName:w1, hours:8, hourlyRate:a(5500), description: isIS ? 'Pípulagnir'               : 'Plumbing installation',       createdAt:isoAgo(4) },
+    { id:id('te'), jobId:job2Id, date:daysAgo(3), employeeName:w3, hours:6, hourlyRate:a(5000), description: isIS ? 'Flísalagnir'              : 'Tiling work',                 createdAt:isoAgo(3) },
+    { id:id('te'), jobId:job2Id, date:daysAgo(2), employeeName:w3, hours:8, hourlyRate:a(5000), description: isIS ? 'Skápar og hurðir'         : 'Cabinets & doors',            createdAt:isoAgo(2) },
+    { id:id('te'), jobId:job2Id, date:daysAgo(1), employeeName:w1, hours:6, hourlyRate:a(5500), description: isIS ? 'Rafmagnsvinna'            : 'Electrical work',             createdAt:isoAgo(1) },
   ];
 
   // ── Materials ─────────────────────────────────────────────
   const jobMaterials: JobMaterial[] = [
-    { id:id('jm'), jobId:job1Id, date:daysAgo(8), description:'Þakpappar — 120m²', qty:120, unit:'m²', unitCost:850,  supplierName:'Byko', createdAt:isoAgo(8) },
-    { id:id('jm'), jobId:job1Id, date:daysAgo(8), description:'Einangrun 200mm',    qty:24,  unit:'stk', unitCost:3200, supplierName:'Byko', createdAt:isoAgo(8) },
-    { id:id('jm'), jobId:job1Id, date:daysAgo(7), description:'Festingar og skrúfur', qty:1, unit:'pk',  unitCost:8500, supplierName:'Húsasmiðjan', createdAt:isoAgo(7) },
-    { id:id('jm'), jobId:job2Id, date:daysAgo(5), description:'Pípuhlutir — full sett', qty:1, unit:'sett', unitCost:68000, supplierName:'Líftækni', createdAt:isoAgo(5) },
-    { id:id('jm'), jobId:job2Id, date:daysAgo(4), description:'IKEA Metod skápar',  qty:8,  unit:'stk', unitCost:28000, supplierName:'IKEA',  createdAt:isoAgo(4) },
-    { id:id('jm'), jobId:job2Id, date:daysAgo(3), description:'Steinflísar — 20m²', qty:20, unit:'m²',  unitCost:6800, supplierName:'Flísaverið', createdAt:isoAgo(3) },
+    { id:id('jm'), jobId:job1Id, date:daysAgo(8), description: isIS ? 'Þakpappar — 120m²'       : 'Roofing felt — 120m²',       qty:120, unit:'m²',   unitCost:a(850),   supplierName: isIS ? 'Byko'        : 'Travis Perkins', createdAt:isoAgo(8) },
+    { id:id('jm'), jobId:job1Id, date:daysAgo(8), description: isIS ? 'Einangrun 200mm'          : 'Insulation 200mm',           qty:24,  unit:'pcs',  unitCost:a(3200),  supplierName: isIS ? 'Byko'        : 'Travis Perkins', createdAt:isoAgo(8) },
+    { id:id('jm'), jobId:job1Id, date:daysAgo(7), description: isIS ? 'Festingar og skrúfur'     : 'Fixings & screws pack',      qty:1,   unit:'pack', unitCost:a(8500),  supplierName: isIS ? 'Húsasmiðjan' : 'Screwfix',        createdAt:isoAgo(7) },
+    { id:id('jm'), jobId:job2Id, date:daysAgo(5), description: isIS ? 'Pípuhlutir — full sett'   : 'Plumbing kit — full set',    qty:1,   unit:'set',  unitCost:a(68000), supplierName: isIS ? 'Líftækni'    : 'Wolseley',        createdAt:isoAgo(5) },
+    { id:id('jm'), jobId:job2Id, date:daysAgo(4), description: isIS ? 'IKEA Metod skápar'        : 'IKEA Metod cabinets',        qty:8,   unit:'pcs',  unitCost:a(28000), supplierName: 'IKEA',                                    createdAt:isoAgo(4) },
+    { id:id('jm'), jobId:job2Id, date:daysAgo(3), description: isIS ? 'Steinflísar — 20m²'       : 'Stone tiles — 20m²',        qty:20,  unit:'m²',   unitCost:a(6800),  supplierName: isIS ? 'Flísaverið'  : 'Topps Tiles',     createdAt:isoAgo(3) },
   ];
 
   // ── Stock ─────────────────────────────────────────────────
   const stockItems: StockItem[] = [
-    { id:id('si'), sku:'TIM-001', name:'Timbur 2x4 — 3m',       category:'Timbur',   unit:'stk', qtyOnHand:45,  qtyReserved:10, reorderPoint:20, costPrice:1800,  sellPrice:2200,  currency:'ISK', vatRate:24, supplierName:'Byko',        createdAt:isoAgo(30), updatedAt:isoAgo(2) },
-    { id:id('si'), sku:'TIM-002', name:'Timbur 2x6 — 3m',       category:'Timbur',   unit:'stk', qtyOnHand:12,  qtyReserved:5,  reorderPoint:15, costPrice:2400,  sellPrice:2900,  currency:'ISK', vatRate:24, supplierName:'Byko',        createdAt:isoAgo(30), updatedAt:isoAgo(3) },
-    { id:id('si'), sku:'INS-001', name:'Einangrun 200mm',        category:'Einangrun',unit:'stk', qtyOnHand:8,   qtyReserved:0,  reorderPoint:10, costPrice:3200,  sellPrice:3900,  currency:'ISK', vatRate:24, supplierName:'Byko',        createdAt:isoAgo(30), updatedAt:isoAgo(5) },
-    { id:id('si'), sku:'PIP-001', name:'Koparrörir 22mm — 1m',  category:'Pípulagnir',unit:'stk',qtyOnHand:30,  qtyReserved:8,  reorderPoint:20, costPrice:1200,  sellPrice:1600,  currency:'ISK', vatRate:24, supplierName:'Líftækni',    createdAt:isoAgo(30), updatedAt:isoAgo(4) },
-    { id:id('si'), sku:'PIP-002', name:'Koparrörir 15mm — 1m',  category:'Pípulagnir',unit:'stk',qtyOnHand:55,  qtyReserved:12, reorderPoint:30, costPrice:850,   sellPrice:1100,  currency:'ISK', vatRate:24, supplierName:'Líftækni',    createdAt:isoAgo(30), updatedAt:isoAgo(4) },
-    { id:id('si'), sku:'CEM-001', name:'Sement — 25kg poki',    category:'Steypa',   unit:'stk', qtyOnHand:24,  qtyReserved:0,  reorderPoint:10, costPrice:2800,  sellPrice:3400,  currency:'ISK', vatRate:24, supplierName:'Íslenska steypan', createdAt:isoAgo(30), updatedAt:isoAgo(7) },
-    { id:id('si'), sku:'SCR-001', name:'Skrúfur 4x60 — 200stk', category:'Festar',   unit:'pk',  qtyOnHand:18,  qtyReserved:2,  reorderPoint:5,  costPrice:1500,  sellPrice:1900,  currency:'ISK', vatRate:24, supplierName:'Húsasmiðjan', createdAt:isoAgo(30), updatedAt:isoAgo(6) },
-    { id:id('si'), sku:'ROO-001', name:'Þakpappar — rúlla 20m²',category:'Þakefni',  unit:'rúlla',qtyOnHand:3,  qtyReserved:0,  reorderPoint:3,  costPrice:16000, sellPrice:19500, currency:'ISK', vatRate:24, supplierName:'Byko',        createdAt:isoAgo(30), updatedAt:isoAgo(2) },
+    { id:id('si'), sku:'TIM-001', name: isIS ? 'Timbur 2x4 — 3m'        : 'Timber 2x4 — 3m',         category: isIS ? 'Timbur'      : 'Timber',    unit:'pcs',  qtyOnHand:45, qtyReserved:10, reorderPoint:20, costPrice:a(1800),  sellPrice:a(2200),  currency:cur, vatRate:24, supplierName: isIS ? 'Byko' : 'Travis Perkins', createdAt:isoAgo(30), updatedAt:isoAgo(2) },
+    { id:id('si'), sku:'TIM-002', name: isIS ? 'Timbur 2x6 — 3m'        : 'Timber 2x6 — 3m',         category: isIS ? 'Timbur'      : 'Timber',    unit:'pcs',  qtyOnHand:12, qtyReserved:5,  reorderPoint:15, costPrice:a(2400),  sellPrice:a(2900),  currency:cur, vatRate:24, supplierName: isIS ? 'Byko' : 'Travis Perkins', createdAt:isoAgo(30), updatedAt:isoAgo(3) },
+    { id:id('si'), sku:'INS-001', name: isIS ? 'Einangrun 200mm'         : 'Insulation 200mm',         category: isIS ? 'Einangrun'   : 'Insulation',unit:'pcs',  qtyOnHand:8,  qtyReserved:0,  reorderPoint:10, costPrice:a(3200),  sellPrice:a(3900),  currency:cur, vatRate:24, supplierName: isIS ? 'Byko' : 'Travis Perkins', createdAt:isoAgo(30), updatedAt:isoAgo(5) },
+    { id:id('si'), sku:'PIP-001', name: isIS ? 'Koparrörir 22mm — 1m'   : 'Copper pipe 22mm — 1m',    category: isIS ? 'Pípulagnir'  : 'Plumbing',  unit:'pcs',  qtyOnHand:30, qtyReserved:8,  reorderPoint:20, costPrice:a(1200),  sellPrice:a(1600),  currency:cur, vatRate:24, supplierName: isIS ? 'Líftækni' : 'Wolseley', createdAt:isoAgo(30), updatedAt:isoAgo(4) },
+    { id:id('si'), sku:'PIP-002', name: isIS ? 'Koparrörir 15mm — 1m'   : 'Copper pipe 15mm — 1m',    category: isIS ? 'Pípulagnir'  : 'Plumbing',  unit:'pcs',  qtyOnHand:55, qtyReserved:12, reorderPoint:30, costPrice:a(850),   sellPrice:a(1100),  currency:cur, vatRate:24, supplierName: isIS ? 'Líftækni' : 'Wolseley', createdAt:isoAgo(30), updatedAt:isoAgo(4) },
+    { id:id('si'), sku:'CEM-001', name: isIS ? 'Sement — 25kg poki'     : 'Cement — 25kg bag',        category: isIS ? 'Steypa'      : 'Concrete',  unit:'pcs',  qtyOnHand:24, qtyReserved:0,  reorderPoint:10, costPrice:a(2800),  sellPrice:a(3400),  currency:cur, vatRate:24, supplierName: isIS ? 'Íslenska steypan' : 'Aggregate Industries', createdAt:isoAgo(30), updatedAt:isoAgo(7) },
+    { id:id('si'), sku:'SCR-001', name: isIS ? 'Skrúfur 4x60 — 200stk' : 'Screws 4x60 — 200pcs',     category: isIS ? 'Festar'      : 'Fixings',   unit:'pack', qtyOnHand:18, qtyReserved:2,  reorderPoint:5,  costPrice:a(1500),  sellPrice:a(1900),  currency:cur, vatRate:24, supplierName: isIS ? 'Húsasmiðjan' : 'Screwfix', createdAt:isoAgo(30), updatedAt:isoAgo(6) },
+    { id:id('si'), sku:'ROO-001', name: isIS ? 'Þakpappar — rúlla 20m²': 'Roofing felt — roll 20m²',  category: isIS ? 'Þakefni'     : 'Roofing',   unit:'roll', qtyOnHand:3,  qtyReserved:0,  reorderPoint:3,  costPrice:a(16000), sellPrice:a(19500), currency:cur, vatRate:24, supplierName: isIS ? 'Byko' : 'Jewson', createdAt:isoAgo(30), updatedAt:isoAgo(2) },
   ];
 
   const stockMovements: StockMovement[] = [
-    { id:id('sm'), itemId:stockItems[0].id, date:daysAgo(8),  type:'out',    qty:10, reference:'JOB-2026-001', createdAt:isoAgo(8) },
-    { id:id('sm'), itemId:stockItems[2].id, date:daysAgo(8),  type:'out',    qty:24, reference:'JOB-2026-001', createdAt:isoAgo(8) },
-    { id:id('sm'), itemId:stockItems[3].id, date:daysAgo(5),  type:'out',    qty:8,  reference:'JOB-2026-002', createdAt:isoAgo(5) },
-    { id:id('sm'), itemId:stockItems[0].id, date:daysAgo(3),  type:'in',     qty:30, reference:'PO-2026-045',  createdAt:isoAgo(3) },
-    { id:id('sm'), itemId:stockItems[1].id, date:daysAgo(3),  type:'in',     qty:20, reference:'PO-2026-045',  createdAt:isoAgo(3) },
-    { id:id('sm'), itemId:stockItems[7].id, date:daysAgo(10), type:'out',    qty:5,  reference:'JOB-2026-001', createdAt:isoAgo(10) },
+    { id:id('sm'), itemId:stockItems[0].id, date:daysAgo(8),  type:'out', qty:10, reference:'JOB-2026-001', createdAt:isoAgo(8) },
+    { id:id('sm'), itemId:stockItems[2].id, date:daysAgo(8),  type:'out', qty:24, reference:'JOB-2026-001', createdAt:isoAgo(8) },
+    { id:id('sm'), itemId:stockItems[3].id, date:daysAgo(5),  type:'out', qty:8,  reference:'JOB-2026-002', createdAt:isoAgo(5) },
+    { id:id('sm'), itemId:stockItems[0].id, date:daysAgo(3),  type:'in',  qty:30, reference:'PO-2026-045',  createdAt:isoAgo(3) },
+    { id:id('sm'), itemId:stockItems[1].id, date:daysAgo(3),  type:'in',  qty:20, reference:'PO-2026-045',  createdAt:isoAgo(3) },
+    { id:id('sm'), itemId:stockItems[7].id, date:daysAgo(10), type:'out', qty:5,  reference:'JOB-2026-001', createdAt:isoAgo(10) },
   ];
 
   // ── Payroll ───────────────────────────────────────────────
+  const month = new Date().toISOString().slice(0,7);
   const payrollEntries: PayrollEntry[] = [
-    { id:id('pe'), employeeName:'Gunnar Sigurðsson', month:new Date().toISOString().slice(0,7), grossWage:580000, taxWithheld:214252, employeePension:23200, employerPension:66700, socialInsurance:36830, netWage:342548, notes:'Fastráðinn starfsmaður' },
-    { id:id('pe'), employeeName:'Bjarni Ólafsson',   month:new Date().toISOString().slice(0,7), grossWage:480000, taxWithheld:177312, employeePension:19200, employerPension:55200, socialInsurance:30480, netWage:283488, notes:'Fastráðinn starfsmaður' },
-    { id:id('pe'), employeeName:'Anna Magnúsdóttir', month:new Date().toISOString().slice(0,7), grossWage:440000, taxWithheld:138380, employeePension:17600, employerPension:50600, socialInsurance:27940, netWage:284020, notes:'Hlutastarf — 80%' },
+    { id:id('pe'), employeeName:w1, month, grossWage:a(580000), taxWithheld:a(214252), employeePension:a(23200), employerPension:a(66700), socialInsurance:a(36830), netWage:a(342548), notes: isIS ? 'Fastráðinn starfsmaður' : 'Full-time employee' },
+    { id:id('pe'), employeeName:w2, month, grossWage:a(480000), taxWithheld:a(177312), employeePension:a(19200), employerPension:a(55200), socialInsurance:a(30480), netWage:a(283488), notes: isIS ? 'Fastráðinn starfsmaður' : 'Full-time employee' },
+    { id:id('pe'), employeeName:w3, month, grossWage:a(440000), taxWithheld:a(138380), employeePension:a(17600), employerPension:a(50600), socialInsurance:a(27940), netWage:a(284020), notes: isIS ? 'Hlutastarf — 80%'      : 'Part-time — 80%' },
   ];
 
   // ── Tasks ─────────────────────────────────────────────────
   const tasks: Task[] = [
-    { id:id('task'), title:'Senda reikning R0042 til Jóns', priority:'high',   status:'open', dueDate:daysAgo(-1), linkedView:'invoices', createdAt:isoAgo(2) },
-    { id:id('task'), title:'Kaupa meira timbur — lager lægur',  priority:'high',   status:'open', dueDate:daysAgo(-2), linkedView:'stock',    createdAt:isoAgo(1) },
-    { id:id('task'), title:'Ljúka við eldhús — Hafnarfjörður',  priority:'medium', status:'open', dueDate:daysAgo(-5), linkedView:'jobs',     createdAt:isoAgo(3) },
-    { id:id('task'), title:'Skoða VSK-skil fyrir apríl',        priority:'medium', status:'open', dueDate:daysAgo(-3), linkedView:'vatreturn', createdAt:isoAgo(4) },
-    { id:id('task'), title:'Fá undirskrift á tilboð — Kópavogur', priority:'low', status:'open', dueDate:daysAgo(-7), linkedView:'jobs',     createdAt:isoAgo(1) },
-    { id:id('task'), title:'Uppfæra launaskrá fyrir Maí',        priority:'low',   status:'done', completedAt:isoAgo(1), createdAt:isoAgo(6) },
+    { id:id('task'), title: isIS ? 'Senda reikning R0042 til Jóns'          : 'Send invoice R0042 to James',         priority:'high',   status:'open', dueDate:daysAgo(-1), linkedView:'invoices',  createdAt:isoAgo(2) },
+    { id:id('task'), title: isIS ? 'Kaupa meira timbur — lager lægur'       : 'Order more timber — stock running low',priority:'high',   status:'open', dueDate:daysAgo(-2), linkedView:'stock',     createdAt:isoAgo(1) },
+    { id:id('task'), title: isIS ? 'Ljúka við eldhús — Hafnarfjörður'       : 'Complete kitchen — Riverside job',     priority:'medium', status:'open', dueDate:daysAgo(-5), linkedView:'jobs',      createdAt:isoAgo(3) },
+    { id:id('task'), title: isIS ? 'Skoða VSK-skil fyrir apríl'             : 'Review VAT return for April',          priority:'medium', status:'open', dueDate:daysAgo(-3), linkedView:'vatreturn', createdAt:isoAgo(4) },
+    { id:id('task'), title: isIS ? 'Fá undirskrift á tilboð — Kópavogur'    : 'Get quote signed — Northside job',     priority:'low',    status:'open', dueDate:daysAgo(-7), linkedView:'jobs',      createdAt:isoAgo(1) },
+    { id:id('task'), title: isIS ? 'Uppfæra launaskrá fyrir Maí'            : 'Update payroll for May',               priority:'low',    status:'done', completedAt:isoAgo(1),                       createdAt:isoAgo(6) },
   ];
 
   // ── Budget ────────────────────────────────────────────────
   const year = new Date().getFullYear();
   const budgetLines: BudgetLine[] = [
-    { id:id('bl'), year, category:'sala_thjonustu', type:'income',  amounts:[2200000,2300000,2500000,2400000,2600000,2800000,2500000,2400000,2600000,2700000,2500000,2300000] },
-    { id:id('bl'), year, category:'vorur',          type:'expense', amounts:[350000,380000,400000,360000,420000,440000,400000,380000,410000,430000,390000,360000] },
-    { id:id('bl'), year, category:'laun',           type:'expense', amounts:[1100000,1100000,1100000,1100000,1100000,1100000,1100000,1100000,1100000,1100000,1100000,1100000] },
-    { id:id('bl'), year, category:'samgongur',      type:'expense', amounts:[70000,75000,80000,72000,85000,90000,80000,75000,82000,88000,76000,70000] },
-    { id:id('bl'), year, category:'simagjold',      type:'expense', amounts:[20000,20000,20000,20000,20000,20000,20000,20000,20000,20000,20000,20000] },
+    { id:id('bl'), year, category:'sala_thjonustu', type:'income',  amounts:[a(2200000),a(2300000),a(2500000),a(2400000),a(2600000),a(2800000),a(2500000),a(2400000),a(2600000),a(2700000),a(2500000),a(2300000)] },
+    { id:id('bl'), year, category:'vorur',          type:'expense', amounts:[a(350000),a(380000),a(400000),a(360000),a(420000),a(440000),a(400000),a(380000),a(410000),a(430000),a(390000),a(360000)] },
+    { id:id('bl'), year, category:'laun',           type:'expense', amounts:[a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000),a(1100000)] },
+    { id:id('bl'), year, category:'samgongur',      type:'expense', amounts:[a(70000),a(75000),a(80000),a(72000),a(85000),a(90000),a(80000),a(75000),a(82000),a(88000),a(76000),a(70000)] },
+    { id:id('bl'), year, category:'simagjold',      type:'expense', amounts:[a(20000),a(20000),a(20000),a(20000),a(20000),a(20000),a(20000),a(20000),a(20000),a(20000),a(20000),a(20000)] },
   ];
 
-  // Strip previously loaded demo items (id contains '_demo_') before adding fresh ones
+  // Strip old demo data, merge fresh
   const isDemo = (item: { id: string }) => item.id.includes('_demo_');
   return {
-    transactions:  [...(existing.transactions  ?? []).filter(x => !isDemo(x)), ...transactions],
-    invoices:      [...(existing.invoices      ?? []).filter(x => !isDemo(x)), ...invoices],
-    jobs:          [...(existing.jobs          ?? []).filter(x => !isDemo(x)), ...jobs],
-    timeEntries:   [...(existing.timeEntries   ?? []).filter(x => !isDemo(x)), ...timeEntries],
-    jobMaterials:  [...(existing.jobMaterials  ?? []).filter(x => !isDemo(x)), ...jobMaterials],
-    stockItems:    [...(existing.stockItems    ?? []).filter(x => !isDemo(x)), ...stockItems],
-    stockMovements:[...(existing.stockMovements ?? []).filter(x => !isDemo(x)), ...stockMovements],
-    payrollEntries:[...(existing.payrollEntries ?? []).filter(x => !isDemo(x)), ...payrollEntries],
-    tasks:         [...(existing.tasks         ?? []).filter(x => !isDemo(x)), ...tasks],
-    budgetLines:   [...(existing.budgetLines   ?? []).filter(x => !isDemo(x)), ...budgetLines],
+    transactions:   [...(existing.transactions   ?? []).filter(x => !isDemo(x)), ...transactions],
+    invoices:       [...(existing.invoices        ?? []).filter(x => !isDemo(x)), ...invoices],
+    jobs:           [...(existing.jobs            ?? []).filter(x => !isDemo(x)), ...jobs],
+    timeEntries:    [...(existing.timeEntries     ?? []).filter(x => !isDemo(x)), ...timeEntries],
+    jobMaterials:   [...(existing.jobMaterials    ?? []).filter(x => !isDemo(x)), ...jobMaterials],
+    stockItems:     [...(existing.stockItems      ?? []).filter(x => !isDemo(x)), ...stockItems],
+    stockMovements: [...(existing.stockMovements  ?? []).filter(x => !isDemo(x)), ...stockMovements],
+    payrollEntries: [...(existing.payrollEntries  ?? []).filter(x => !isDemo(x)), ...payrollEntries],
+    tasks:          [...(existing.tasks           ?? []).filter(x => !isDemo(x)), ...tasks],
+    budgetLines:    [...(existing.budgetLines     ?? []).filter(x => !isDemo(x)), ...budgetLines],
     settings: {
       ...existing.settings,
+      defaultCurrency: cur,
       company: {
         ...existing.settings.company,
-        name: existing.settings.company.name || 'Sigurður Builders ehf',
-        kennitala: existing.settings.company.kennitala || '550892-2349',
-        address: existing.settings.company.address || 'Klapparstígur 25',
-        postalCode: existing.settings.company.postalCode || '101',
-        city: existing.settings.company.city || 'Reykjavík',
-        email: existing.settings.company.email || 'sigurdur@builders.is',
-        phone: existing.settings.company.phone || '555-8800',
-        vskNumber: existing.settings.company.vskNumber || 'IS123456',
+        name:        existing.settings.company.name        || (isIS ? 'Sigurður Builders ehf'  : 'Sigurdur Builders Ltd'),
+        kennitala:   existing.settings.company.kennitala   || (isIS ? '550892-2349'             : ''),
+        address:     existing.settings.company.address     || (isIS ? 'Klapparstígur 25'        : '25 Harbour Road'),
+        postalCode:  existing.settings.company.postalCode  || (isIS ? '101'                     : 'EC1A 1BB'),
+        city:        existing.settings.company.city        || (isIS ? 'Reykjavík'               : 'London'),
+        email:       existing.settings.company.email       || (isIS ? 'sigurdur@builders.is'    : 'info@sigurdurbuilders.co.uk'),
+        phone:       existing.settings.company.phone       || (isIS ? '555-8800'                : '+44 20 7946 0800'),
+        vskNumber:   existing.settings.company.vskNumber   || (isIS ? 'IS123456'                : 'GB123456789'),
       },
       invoiceLastNumber: Math.max(existing.settings.invoiceLastNumber ?? 0, 43),
     },
