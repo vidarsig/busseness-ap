@@ -561,8 +561,10 @@ export default function Settings() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const demo = generateDemoData(data);
-                  dispatch({ type: 'LOAD', payload: { ...data, ...demo } });
+                  // Use form (unsaved) settings so currency change takes effect immediately
+                  const dataWithForm = { ...data, settings: form };
+                  const demo = generateDemoData(dataWithForm);
+                  dispatch({ type: 'LOAD', payload: { ...dataWithForm, ...demo } });
                 }}
                 className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition">
                 <FlaskConical className="w-3.5 h-3.5" />
@@ -572,7 +574,7 @@ export default function Settings() {
                 onClick={() => {
                   const isDemo = (item: { id: string }) => item.id.includes('_demo_');
                   dispatch({ type: 'LOAD', payload: {
-                    ...data,
+                    ...data, settings: form,
                     transactions:   (data.transactions   ?? []).filter(x => !isDemo(x)),
                     invoices:       (data.invoices       ?? []).filter(x => !isDemo(x)),
                     jobs:           (data.jobs           ?? []).filter(x => !isDemo(x)),
