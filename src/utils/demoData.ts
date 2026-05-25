@@ -10,47 +10,63 @@ function isoAgo(n: number) { return new Date(Date.now() - n*24*60*60*1000).toISO
 export function generateDemoData(existing: AppData): Partial<AppData> {
 
   const isIS  = existing.settings.language === 'is';
-  const cur   = isIS ? 'ISK' : (existing.settings.defaultCurrency === 'ISK' ? 'EUR' : existing.settings.defaultCurrency || 'EUR');
-  const rate  = existing.settings.exchangeRates?.EUR ?? 150;
-  // Convert ISK reference amount → target currency
-  const a = (isk: number) => cur === 'ISK' ? isk : Math.round(isk / rate);
+  const rawCur = existing.settings.defaultCurrency || 'ISK';
+  const cur   = isIS ? 'ISK' : (rawCur === 'ISK' ? 'USD' : rawCur);
+  const isUSD = cur === 'USD';
+  const isEUR = cur === 'EUR';
+  // ISK reference rates: 1 USD ≈ 138 ISK, 1 EUR ≈ 150 ISK
+  const iskRate = isUSD ? 138 : (existing.settings.exchangeRates?.EUR ?? 150);
+  const a = (isk: number) => cur === 'ISK' ? isk : Math.round(isk / iskRate);
+
+  // Locale flavour
+  const isEN_US = isUSD;
+
+  const enDesc = (uk: string, us: string) => isIS ? '' : (isEN_US ? us : uk);
 
   // ── Transactions ─────────────────────────────────────────
   const transactions: Transaction[] = [
-    { id:id('tx'), date:daysAgo(1),  description: isIS ? 'Þakviðgerð — Skólavörðustígur 12'   : 'Roof repair — 14 Oak Street',          category:'sala_thjonustu', type:'income',  amount:a(485000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(3),  description: isIS ? 'Pípulagnir — Laugavegur 45'          : 'Plumbing — High Street 45',            category:'sala_thjonustu', type:'income',  amount:a(320000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(5),  description: isIS ? 'Viðgerð á baðherbergi'               : 'Bathroom renovation',                  category:'sala_thjonustu', type:'income',  amount:a(195000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(7),  description: isIS ? 'Steinlagnir — Kópavogur'             : 'Concrete work — Northside',            category:'sala_thjonustu', type:'income',  amount:a(560000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(10), description: isIS ? 'Eldhúsuppsetning — Hafnarfjörður'    : 'Kitchen installation — Riverside',     category:'sala_thjonustu', type:'income',  amount:a(720000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(12), description: isIS ? 'Byko — Timbur og einangrun'          : 'Timber & insulation supplies',         category:'vorur',          type:'expense', amount:a(87500),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(14), description: isIS ? 'Rafmagnsfarir — verkfæri'            : 'Electrical tools & equipment',         category:'vorur',          type:'expense', amount:a(34200),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(15), description: isIS ? 'Líftæknivörur — Pípuhlutir'         : 'Plumbing parts & fittings',            category:'vorur',          type:'expense', amount:a(52800),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(18), description: isIS ? 'Olía og bifreiðakostnaður'           : 'Fuel & vehicle costs',                 category:'samgongur',      type:'expense', amount:a(28600),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(20), description: isIS ? 'Steypustöðin — Steypa'              : 'Ready-mix concrete',                   category:'vorur',          type:'expense', amount:a(118000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(22), description: isIS ? 'Rafmagn og hiti — verkstaður'        : 'Electricity & heating — site',         category:'rafmagn_hiti',   type:'expense', amount:a(42000),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(25), description: isIS ? 'Sími og nettenging'                  : 'Phone & internet',                     category:'simagjold',      type:'expense', amount:a(15900),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(28), description: isIS ? 'Bílastæðavinur — Þakviðgerð'        : 'Roof repair — Parkside Drive',         category:'sala_thjonustu', type:'income',  amount:a(280000), currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(30), description: isIS ? 'Tryggingar — atvinnuslys'            : 'Insurance — workplace cover',          category:'fagthjonusta',   type:'expense', amount:a(68000),  currency:cur, eurToIskRate:rate, vatRate:24 },
-    { id:id('tx'), date:daysAgo(32), description: isIS ? 'Hlíf — Bygg og byggingarefni'        : 'Building materials & supplies',        category:'vorur',          type:'expense', amount:a(94500),  currency:cur, eurToIskRate:rate, vatRate:24 },
+    { id:id('tx'), date:daysAgo(1),  description: isIS ? 'Þakviðgerð — Skólavörðustígur 12'   : enDesc('Roof repair — 14 Oak Street',        'Roof repair — 123 Main St, Brooklyn'),     category:'sala_thjonustu', type:'income',  amount:a(485000), currency:cur, eurToIskRate:iskRate, vatRate:isIS ? 24 : 0 },
+    { id:id('tx'), date:daysAgo(3),  description: isIS ? 'Pípulagnir — Laugavegur 45'          : enDesc('Plumbing — High Street 45',          'Plumbing — 456 Oak Ave, Queens'),          category:'sala_thjonustu', type:'income',  amount:a(320000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(5),  description: isIS ? 'Viðgerð á baðherbergi'               : enDesc('Bathroom renovation',                'Bathroom remodel — Riverside Dr'),         category:'sala_thjonustu', type:'income',  amount:a(195000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(7),  description: isIS ? 'Steinlagnir — Kópavogur'             : enDesc('Concrete work — Northside',          'Concrete work — Staten Island'),           category:'sala_thjonustu', type:'income',  amount:a(560000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(10), description: isIS ? 'Eldhúsuppsetning — Hafnarfjörður'    : enDesc('Kitchen installation — Riverside',   'Kitchen remodel — Park Slope, BK'),        category:'sala_thjonustu', type:'income',  amount:a(720000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(12), description: isIS ? 'Byko — Timbur og einangrun'          : enDesc('Timber & insulation supplies',       'Home Depot — Lumber & insulation'),        category:'vorur',          type:'expense', amount:a(87500),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(14), description: isIS ? 'Rafmagnsfarir — verkfæri'            : enDesc('Electrical tools & equipment',       'Electrical tools & equipment'),            category:'vorur',          type:'expense', amount:a(34200),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(15), description: isIS ? 'Líftæknivörur — Pípuhlutir'         : enDesc('Plumbing parts & fittings',          'Plumbing parts & fittings'),               category:'vorur',          type:'expense', amount:a(52800),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(18), description: isIS ? 'Olía og bifreiðakostnaður'           : enDesc('Fuel & vehicle costs',               'Fuel & truck expenses'),                   category:'samgongur',      type:'expense', amount:a(28600),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(20), description: isIS ? 'Steypustöðin — Steypa'              : enDesc('Ready-mix concrete',                 'Ready-mix concrete — 4 yards'),            category:'vorur',          type:'expense', amount:a(118000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(22), description: isIS ? 'Rafmagn og hiti — verkstaður'        : enDesc('Electricity & heating — site',       'Utilities — job site'),                    category:'rafmagn_hiti',   type:'expense', amount:a(42000),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(25), description: isIS ? 'Sími og nettenging'                  : enDesc('Phone & internet',                   'Phone & internet'),                        category:'simagjold',      type:'expense', amount:a(15900),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(28), description: isIS ? 'Bílastæðavinur — Þakviðgerð'        : enDesc('Roof repair — Parkside Drive',       'Roof repair — Jersey City, NJ'),           category:'sala_thjonustu', type:'income',  amount:a(280000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(30), description: isIS ? 'Tryggingar — atvinnuslys'            : enDesc('Insurance — workplace cover',        'General liability insurance'),             category:'fagthjonusta',   type:'expense', amount:a(68000),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
+    { id:id('tx'), date:daysAgo(32), description: isIS ? 'Hlíf — Bygg og byggingarefni'        : enDesc('Building materials & supplies',      'Lowe\'s — Building materials'),            category:'vorur',          type:'expense', amount:a(94500),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
   ];
 
-  // ── Invoices ─────────────────────────────────────────────
-  const w1 = isIS ? 'Gunnar Sigurðsson' : 'James Mitchell';
-  const w2 = isIS ? 'Bjarni Ólafsson'   : 'Robert Clarke';
-  const w3 = isIS ? 'Anna Magnúsdóttir' : 'Sarah Thompson';
+  // ── Workers & clients ─────────────────────────────────────
+  const w1 = isIS ? 'Gunnar Sigurðsson' : (isEN_US ? 'James Mitchell'  : 'James Mitchell');
+  const w2 = isIS ? 'Bjarni Ólafsson'   : (isEN_US ? 'Robert Clark'    : 'Robert Clarke');
+  const w3 = isIS ? 'Anna Magnúsdóttir' : (isEN_US ? 'Sarah Thompson'  : 'Sarah Thompson');
 
   const c1 = isIS
-    ? { name:'Jón Gunnarsson',               email:'jon@example.is',     phone:'555-1234', address:'Skólavörðustígur 12, 101 Reykjavík' }
-    : { name:'James Harrington',             email:'james@example.co.uk',phone:'07700 900123', address:'14 Oak Street, London EC1A 1BB' };
+    ? { name:'Jón Gunnarsson',               email:'jon@example.is',      phone:'555-1234',     address:'Skólavörðustígur 12, 101 Reykjavík' }
+    : isEN_US
+    ? { name:'James Harrington',             email:'james@example.com',   phone:'(718) 555-0123', address:'123 Main Street, Brooklyn, NY 11201' }
+    : { name:'James Harrington',             email:'james@example.co.uk', phone:'07700 900123',  address:'14 Oak Street, London EC1A 1BB' };
   const c2 = isIS
-    ? { name:'Sigríður Björnsdóttir',        email:'sigridur@example.is',phone:'555-5678', address:'Laugavegur 45, 105 Reykjavík' }
-    : { name:'Patricia Williams',           email:'pat@example.co.uk',  phone:'07700 900456', address:'45 High Street, Manchester M1 1AD' };
+    ? { name:'Sigríður Björnsdóttir',        email:'sigridur@example.is', phone:'555-5678',     address:'Laugavegur 45, 105 Reykjavík' }
+    : isEN_US
+    ? { name:'Patricia Williams',            email:'pat@example.com',     phone:'(917) 555-0456', address:'456 Oak Avenue, Queens, NY 11354' }
+    : { name:'Patricia Williams',            email:'pat@example.co.uk',   phone:'07700 900456',  address:'45 High Street, Manchester M1 1AD' };
   const c3 = isIS
-    ? { name:'Byggingafélag Suðurnesja ehf', email:'bygg@example.is',   phone:'555-9012', address:'Keflavíkurgata 8, 230 Reykjanesbær' }
-    : { name:'Northside Developments Ltd',  email:'info@northside.co.uk',phone:'020 7946 0001', address:'Northside Business Park, Bristol BS1 4DJ' };
+    ? { name:'Byggingafélag Suðurnesja ehf', email:'bygg@example.is',    phone:'555-9012',     address:'Keflavíkurgata 8, 230 Reykjanesbær' }
+    : isEN_US
+    ? { name:'Riverside Developments LLC',   email:'info@riverside.com',  phone:'(212) 555-0789', address:'789 Park Drive, Manhattan, NY 10001' }
+    : { name:'Northside Developments Ltd',   email:'info@northside.co.uk',phone:'020 7946 0001', address:'Northside Business Park, Bristol BS1 4DJ' };
   const c4 = isIS
-    ? { name:'Arna Kristjánsdóttir',         email:'arna@example.is',   phone:'555-3456', address:'Barónsstígur 22, 101 Reykjavík' }
-    : { name:'Amanda Clarke',               email:'amanda@example.co.uk',phone:'07700 900789', address:'22 Riverside Close, Leeds LS1 2AB' };
+    ? { name:'Arna Kristjánsdóttir',         email:'arna@example.is',    phone:'555-3456',     address:'Barónsstígur 22, 101 Reykjavík' }
+    : isEN_US
+    ? { name:'Amanda Clarke',                email:'amanda@example.com',  phone:'(347) 555-0321', address:'321 Riverside Drive, Jersey City, NJ 07302' }
+    : { name:'Amanda Clarke',                email:'amanda@example.co.uk',phone:'07700 900789',  address:'22 Riverside Close, Leeds LS1 2AB' };
 
   const invLines1: InvoiceLine[] = [
     { id:id('il'), description: isIS ? `Vinnulaun — ${w1} (24h)` : `Labour — ${w1} (24h)`,   quantity:24, unitPrice:a(5500*24)/24,  vatRate:24 },
@@ -241,14 +257,14 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
       defaultCurrency: cur,
       company: {
         ...existing.settings.company,
-        name:        existing.settings.company.name        || (isIS ? 'Sigurður Builders ehf'  : 'Sigurdur Builders Ltd'),
-        kennitala:   existing.settings.company.kennitala   || (isIS ? '550892-2349'             : ''),
-        address:     existing.settings.company.address     || (isIS ? 'Klapparstígur 25'        : '25 Harbour Road'),
-        postalCode:  existing.settings.company.postalCode  || (isIS ? '101'                     : 'EC1A 1BB'),
-        city:        existing.settings.company.city        || (isIS ? 'Reykjavík'               : 'London'),
-        email:       existing.settings.company.email       || (isIS ? 'sigurdur@builders.is'    : 'info@sigurdurbuilders.co.uk'),
-        phone:       existing.settings.company.phone       || (isIS ? '555-8800'                : '+44 20 7946 0800'),
-        vskNumber:   existing.settings.company.vskNumber   || (isIS ? 'IS123456'                : 'GB123456789'),
+        name:        existing.settings.company.name        || (isIS ? 'Sigurður Builders ehf'       : isEN_US ? 'Sigurdur Builders LLC'          : 'Sigurdur Builders Ltd'),
+        kennitala:   existing.settings.company.kennitala   || (isIS ? '550892-2349'                : ''),
+        address:     existing.settings.company.address     || (isIS ? 'Klapparstígur 25'           : isEN_US ? '30 N Gould St, Sheridan'        : '25 Harbour Road'),
+        postalCode:  existing.settings.company.postalCode  || (isIS ? '101'                        : isEN_US ? 'WY 82801'                       : 'EC1A 1BB'),
+        city:        existing.settings.company.city        || (isIS ? 'Reykjavík'                  : isEN_US ? 'New York'                       : 'London'),
+        email:       existing.settings.company.email       || (isIS ? 'sigurdur@builders.is'       : isEN_US ? 'info@sigurdurbuilders.com'       : 'info@sigurdurbuilders.co.uk'),
+        phone:       existing.settings.company.phone       || (isIS ? '555-8800'                   : isEN_US ? '(307) 555-0800'                 : '+44 20 7946 0800'),
+        vskNumber:   existing.settings.company.vskNumber   || (isIS ? 'IS123456'                   : isEN_US ? 'EIN 82-1234567'                 : 'GB123456789'),
       },
       invoiceLastNumber: Math.max(existing.settings.invoiceLastNumber ?? 0, 43),
     },
