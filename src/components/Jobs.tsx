@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Job, JobStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency } from '../types';
+import { isJobLimitReached } from '../utils/planLimits';
+import PlanLimitModal from './PlanLimitModal';
 
 function newId(prefix: string) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function nowISO() { return new Date().toISOString(); }
@@ -52,6 +54,12 @@ export default function Jobs() {
   const [expandedId, setExpandedId]     = useState<string | null>(null);
   const [tab, setTab]                   = useState<Record<string, TabType>>({});
   const [jobForm, setJobForm]           = useState<JobFormState>({ open: false });
+  const [limitModal, setLimitModal]     = useState(false);
+
+  function openNewJob() {
+    if (isJobLimitReached(data)) { setLimitModal(true); return; }
+    setJobForm({ open: true, job: emptyJob() });
+  }
   const [timeForm, setTimeForm]         = useState<TimeFormState>({ open: false, jobId: '' });
   const [matForm, setMatForm]           = useState<MatFormState>({ open: false, jobId: '' });
   const [lightbox, setLightbox]         = useState<JobPhoto | null>(null);
@@ -254,7 +262,7 @@ export default function Jobs() {
             {t('Verkefni · Tímar · Efni · Myndir → Reikningur', 'Jobs · Hours · Materials · Photos → Invoice')}
           </p>
         </div>
-        <button onClick={() => setJobForm({ open:true, job:emptyJob() })}
+        <button onClick={openNewJob}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
           <Plus className="w-4 h-4" />
           {t('Nýtt verkefni', 'New job')}
@@ -823,6 +831,11 @@ export default function Jobs() {
           </div>
         </div>
       )}
+      <PlanLimitModal
+        open={limitModal} onClose={() => setLimitModal(false)}
+        limitText="You've reached 2 active jobs on the Free plan."
+        limitTextIs="Þú hefur náð 2 virkum verkefnum á Free plani."
+      />
     </div>
   );
 }

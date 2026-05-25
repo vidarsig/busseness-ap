@@ -4,6 +4,8 @@ import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import { exportPDF } from '../utils/exports';
+import { isInvoiceLimitReached } from '../utils/planLimits';
+import PlanLimitModal from './PlanLimitModal';
 
 function newId() { return `inv_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function lineId() { return `ln_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -349,7 +351,13 @@ function emailInvoice(inv: Invoice, companyName: string, lang: string) {
 export default function Invoices() {
   const { data, dispatch, t, lang, cc } = useApp();
   const [modal, setModal] = useState<{ open: boolean; inv?: Invoice; defaultType?: 'invoice' | 'quote' }>({ open: false });
+  const [limitModal, setLimitModal] = useState(false);
   const [printInv, setPrintInv] = useState<Invoice | null>(null);
+
+  function openAddModal(defaultType: 'invoice' | 'quote') {
+    if (isInvoiceLimitReached(data)) { setLimitModal(true); return; }
+    setModal({ open: true, defaultType });
+  }
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [docType, setDocType] = useState<'all' | 'invoice' | 'quote'>('all');
   const [filterStatus, setFilterStatus] = useState<Invoice['status'] | 'all'>('all');
@@ -448,11 +456,11 @@ export default function Invoices() {
           )}
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setModal({ open: true, defaultType: 'quote' })}
+          <button onClick={() => openAddModal('quote')}
             className="flex items-center gap-1.5 border border-purple-300 text-purple-700 bg-purple-50 px-3 py-2 rounded-lg text-sm font-medium hover:bg-purple-100">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">{t('addQuote')}</span>
           </button>
-          <button onClick={() => setModal({ open: true, defaultType: 'invoice' })}
+          <button onClick={() => openAddModal('invoice')}
             className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">{t('addInvoice')}</span>
           </button>
@@ -569,6 +577,11 @@ export default function Invoices() {
         />
       )}
       {printInv && <PrintableInvoice inv={printInv} />}
+      <PlanLimitModal
+        open={limitModal} onClose={() => setLimitModal(false)}
+        limitText="You've reached 5 invoices this month on the Free plan."
+        limitTextIs="Þú hefur náð 5 reikningum þennan mánuð á Free plani."
+      />
       {deleteId && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">

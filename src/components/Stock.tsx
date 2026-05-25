@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 import { Plus, Pencil, Trash2, X, Package, AlertTriangle, TrendingDown, TrendingUp, Upload, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { StockItem, StockMovement, Currency } from '../types';
+import { isStockLimitReached } from '../utils/planLimits';
+import PlanLimitModal from './PlanLimitModal';
 
 function newId() { return `stk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`; }
 function mvId()  { return `smv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`; }
@@ -40,7 +42,13 @@ export default function Stock() {
   const [catFilter, setCatFilter] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
   const [modal, setModal] = useState<{ open: boolean; item?: Partial<StockItem> }>({ open: false });
+  const [limitModal, setLimitModal] = useState(false);
   const [mv, setMv] = useState<MovementFormState>({ open: false, itemId: '', type: 'in', qty: '', reference: '', note: '', date: todayISO() });
+
+  function openAddItem() {
+    if (isStockLimitReached(data)) { setLimitModal(true); return; }
+    setModal({ open: true, item: emptyItem() });
+  }
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -143,7 +151,7 @@ export default function Stock() {
           <button onClick={() => setImportOpen(true)} className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
             <Upload className="w-4 h-4" />{isIS ? 'Innflutningur' : 'Import CSV'}
           </button>
-          <button onClick={() => setModal({ open: true, item: emptyItem() })} className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
+          <button onClick={openAddItem} className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             <Plus className="w-4 h-4" />{isIS ? 'Bæta við hlut' : 'Add item'}
           </button>
         </div>
@@ -418,6 +426,11 @@ export default function Stock() {
           </div>
         </div>
       )}
+      <PlanLimitModal
+        open={limitModal} onClose={() => setLimitModal(false)}
+        limitText="You've reached 20 stock items on the Free plan."
+        limitTextIs="Þú hefur náð 20 birgðahlutum á Free plani."
+      />
     </div>
   );
 }

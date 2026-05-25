@@ -62,6 +62,13 @@ function AppInner() {
     });
   }, [supabaseConfigured, supabaseUrl, supabaseKey]);
 
+  // Listen for upgrade navigation from plan-limit modals
+  useEffect(() => {
+    const handler = () => setView('upgrade');
+    window.addEventListener('navigate-upgrade', handler);
+    return () => window.removeEventListener('navigate-upgrade', handler);
+  }, []);
+
   // Country onboarding first
   if (!data.settings.country) return <CountryOnboarding />;
 

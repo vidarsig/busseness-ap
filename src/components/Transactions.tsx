@@ -8,6 +8,8 @@ import {
 } from '../types';
 import { getTransactionISK, getVATAmountISK } from '../utils/calculations';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
+import { isTransactionLimitReached } from '../utils/planLimits';
+import PlanLimitModal from './PlanLimitModal';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 const EMPTY_FORM: Omit<Transaction, 'id'> = {
@@ -225,7 +227,13 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 export default function Transactions() {
   const { data, dispatch, t, lang } = useApp();
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
+  const [limitModal, setLimitModal] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+
+  function openAddModal() {
+    if (isTransactionLimitReached(data)) { setLimitModal(true); return; }
+    setModal({ open: true });
+  }
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
@@ -337,7 +345,7 @@ export default function Transactions() {
             <Camera className="w-4 h-4" />
             <span className="hidden sm:inline">{lang === 'is' ? 'Skanna' : 'Scan'}</span>
           </button>
-          <button onClick={() => setModal({ open: true })}
+          <button onClick={openAddModal}
             className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">{t('addTransaction')}</span>
@@ -409,7 +417,7 @@ export default function Transactions() {
         {filtered.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 py-12 text-center">
             <p className="text-gray-400 text-sm">{t('noTransactions')}</p>
-            <button onClick={() => setModal({ open: true })}
+            <button onClick={openAddModal}
               className="mt-3 text-blue-600 text-sm font-medium">{t('addFirst')}</button>
           </div>
         ) : (
@@ -558,6 +566,11 @@ export default function Transactions() {
         />
       )}
       {scannerOpen && <ReceiptScanner onClose={() => setScannerOpen(false)} />}
+      <PlanLimitModal
+        open={limitModal} onClose={() => setLimitModal(false)}
+        limitText="You've reached 50 transactions this month on the Free plan."
+        limitTextIs="Þú hefur náð 50 færslum þennan mánuð á Free plani."
+      />
 
       {/* Delete confirm */}
       {deleteId && (

@@ -4,6 +4,8 @@ import { useApp } from '../contexts/AppContext';
 import { PayrollEntry } from '../types';
 import { formatISK } from '../utils/formatters';
 import { exportPDF, exportExcel } from '../utils/exports';
+import { isPayrollLimitReached } from '../utils/planLimits';
+import PlanLimitModal from './PlanLimitModal';
 
 function downloadCSV(filename: string, rows: string[][]) {
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -140,8 +142,14 @@ function PayrollModal({ initial, onSave, onClose }: {
 export default function Payroll() {
   const { data, dispatch, t, lang } = useApp();
   const [modal, setModal] = useState<{ open: boolean; entry?: PayrollEntry }>({ open: false });
+  const [limitModal, setLimitModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterMonth, setFilterMonth] = useState(thisMonth());
+
+  function openAddPayroll() {
+    if (isPayrollLimitReached(data)) { setLimitModal(true); return; }
+    setModal({ open: true });
+  }
 
   function handleSave(entry: PayrollEntry) {
     dispatch(data.payrollEntries.find(p => p.id === entry.id)
@@ -239,7 +247,7 @@ export default function Payroll() {
               <Download className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
             </button>
           </>)}
-          <button onClick={() => setModal({ open: true })}
+          <button onClick={openAddPayroll}
             className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium">
             <Plus className="w-4 h-4" /><span className="hidden sm:inline">{t('addPayroll')}</span>
           </button>
@@ -324,6 +332,11 @@ export default function Payroll() {
           </div>
         </div>
       )}
+      <PlanLimitModal
+        open={limitModal} onClose={() => setLimitModal(false)}
+        limitText="You've reached 2 workers in payroll on the Free plan."
+        limitTextIs="Þú hefur náð 2 starfsmönnum í launaskrá á Free plani."
+      />
     </div>
   );
 }
