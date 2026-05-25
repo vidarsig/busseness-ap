@@ -3,7 +3,7 @@ import {
   BookOpen, LayoutDashboard, List, Calculator, BarChart2, FileText,
   Settings, Globe, Menu, X, RefreshCw, Upload, Receipt,
   BookMarked, TrendingUp, Users, ClipboardList, Zap, CheckSquare,
-  Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle, Crown,
+  Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle, Crown, Star,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { signOut } from '../utils/supabase';
@@ -50,6 +50,7 @@ const sections: NavSection[] = [
   ]},
   { label: 'AI', items: [
     { id: 'ai', icon: Bot },
+    { id: 'reviews', icon: Star },
   ]},
   { items: [{ id: 'settings', icon: Settings }] },
   { items: [{ id: 'users', icon: Users }] },

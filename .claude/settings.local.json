@@ -24,7 +24,18 @@
       "WebFetch(domain:www.whois.com)",
       "WebFetch(domain:rdap.verisign.com)",
       "WebFetch(domain:rdap.registry.google)",
-      "WebFetch(domain:rdap.afilias.net)"
+      "WebFetch(domain:rdap.afilias.net)",
+      "WebFetch(domain:jobboks.app)",
+      "Bash(git commit *)",
+      "WebSearch",
+      "WebFetch(domain:play.google.com)",
+      "WebFetch(domain:www.getjobber.com)",
+      "WebFetch(domain:squote.app)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__javascript_tool",
+      "Bash(powershell -Command \"\\(Get-Content src\\\\components\\\\AnnualAccounts.tsx -Raw\\) -replace 'formatISK\\\\\\(amount, lang\\\\\\)', 'fmtISK\\(amount\\)' -replace 'formatISK\\\\\\(isNeg \\\\? -amount : amount, lang\\\\\\)', 'fmtISK\\(isNeg ? -amount : amount\\)' -replace 'formatISK\\\\\\(item\\\\.amount, lang\\\\\\)', 'fmtISK\\(item.amount\\)' | Set-Content src\\\\components\\\\AnnualAccounts.tsx -Encoding utf8\")",
+      "Bash(powershell -Command '@ *)"
     ]
   }
 }

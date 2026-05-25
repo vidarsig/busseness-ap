@@ -22,6 +22,7 @@ import Stock from './components/Stock';
 import Jobs from './components/Jobs';
 import Users from './components/Users';
 import Upgrade from './components/Upgrade';
+import ReviewManager from './components/ReviewManager';
 import Login from './components/Login';
 import { View } from './types';
 import { getSession } from './utils/supabase';
@@ -113,6 +114,7 @@ function AppInner() {
       {view === 'jobs'         && <Jobs />}
       {view === 'users'        && <Users sessionUser={sessionUser} />}
       {view === 'upgrade'      && <Upgrade />}
+      {view === 'reviews'      && <ReviewManager />}
     </Layout>
   );
 }
