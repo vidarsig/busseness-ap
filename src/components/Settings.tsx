@@ -560,12 +560,8 @@ export default function Settings() {
             </p>
             <button
               onClick={() => {
-                if (confirm(lang === 'is'
-                  ? 'Bæta sýnigögnum við? Núverandi gögn haldast.'
-                  : 'Load demo data? Your existing data will be kept.')) {
-                  const demo = generateDemoData(data);
-                  dispatch({ type: 'LOAD', payload: { ...data, ...demo } });
-                }
+                const demo = generateDemoData(data);
+                dispatch({ type: 'LOAD', payload: { ...data, ...demo } });
               }}
               className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition">
               <FlaskConical className="w-3.5 h-3.5" />
