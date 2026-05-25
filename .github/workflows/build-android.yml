@@ -58,24 +58,51 @@ jobs:
               -dname "CN=Jobboks, OU=Dev, O=Jobboks, L=Reykjavik, ST=IS, C=IS"
           fi
 
-      - name: Print signing fingerprint
+      - name: Save keystore info as files
         working-directory: android
         run: |
-          echo ""
-          echo "╔══════════════════════════════════════════════════════════╗"
-          echo "║  SHA-256 fingerprint — copy this into assetlinks.json   ║"
-          echo "╚══════════════════════════════════════════════════════════╝"
-          keytool -list -v \
+          mkdir -p keystore-info
+
+          # Extract SHA-256 fingerprint
+          FINGERPRINT=$(keytool -list -v \
             -keystore android.keystore \
             -alias jobboks \
             -storepass jobboks123 2>/dev/null \
-            | grep "SHA256:"
-          echo ""
-          echo "╔══════════════════════════════════════════════════════════╗"
-          echo "║  Save as GitHub secret: KEYSTORE_BASE64                 ║"
-          echo "╚══════════════════════════════════════════════════════════╝"
-          base64 -w 0 android.keystore
-          echo ""
+            | grep "SHA256:" | awk '{print $2}')
+
+          echo "$FINGERPRINT" > keystore-info/fingerprint.txt
+          echo "SHA-256 fingerprint saved: $FINGERPRINT"
+
+          # Save keystore as base64 (for use as GitHub secret)
+          base64 -w 0 android.keystore > keystore-info/KEYSTORE_BASE64.txt
+
+          # Write a human-readable README
+          cat > keystore-info/README.txt << EOF
+          JOBBOKS ANDROID SIGNING KEYSTORE
+          =================================
+
+          SHA-256 Fingerprint (for assetlinks.json):
+          $FINGERPRINT
+
+          Steps to save this permanently:
+          1. Go to: github.com/vidarsig/busseness-ap/settings/secrets/actions
+          2. Click "New repository secret"
+          3. Name:  KEYSTORE_BASE64
+          4. Value: paste the contents of KEYSTORE_BASE64.txt
+          5. Save — future builds will reuse this key automatically
+
+          IMPORTANT: Keep the keystore safe. If you lose it you cannot
+          update your Play Store app with the same package ID.
+          EOF
+
+          echo "Done. Files saved to keystore-info/"
+
+      - name: Upload keystore info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystore-info
+          path: android/keystore-info/
+          retention-days: 7
 
       # ── Copy launcher icons from web assets ───────────────────────
       - name: Set up launcher icons
@@ -99,6 +126,34 @@ jobs:
 
       - name: List built APKs
         run: find android -name "*.apk" | head -10
+
+      # ── Auto-update assetlinks.json with real fingerprint ─────────
+      - name: Update assetlinks.json
+        run: |
+          FINGERPRINT=$(cat android/keystore-info/fingerprint.txt)
+          cat > public/.well-known/assetlinks.json << EOF
+          [{
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+              "namespace": "android_app",
+              "package_name": "app.jobboks.twa",
+              "sha256_cert_fingerprints": ["$FINGERPRINT"]
+            }
+          }]
+          EOF
+          echo "assetlinks.json updated with fingerprint: $FINGERPRINT"
+
+      - name: Commit updated assetlinks.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/.well-known/assetlinks.json
+          if git diff --cached --quiet; then
+            echo "No change to assetlinks.json (fingerprint unchanged)"
+          else
+            git commit -m "chore: update assetlinks.json with signing fingerprint [skip ci]"
+            git push
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
