@@ -13,7 +13,6 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
   const rawCur = existing.settings.defaultCurrency || 'ISK';
   const cur   = isIS ? 'ISK' : (rawCur === 'ISK' ? 'USD' : rawCur);
   const isUSD = cur === 'USD';
-  const isEUR = cur === 'EUR';
   // ISK reference rates: 1 USD ≈ 138 ISK, 1 EUR ≈ 150 ISK
   const iskRate = isUSD ? 138 : (existing.settings.exchangeRates?.EUR ?? 150);
   const a = (isk: number) => cur === 'ISK' ? isk : Math.round(isk / iskRate);
@@ -91,21 +90,21 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
       date:daysAgo(2), dueDate:daysAgo(-28),
       customer:c1, lines:invLines1,
       notes: isIS ? 'Þakviðgerð lokið. Greiðsla innan 30 daga.' : 'Roof repair completed. Payment due within 30 days.',
-      status:'sent', currency:cur, eurToIskRate:rate,
+      status:'sent', currency:cur, eurToIskRate:iskRate,
     },
     {
       id:id('inv'), number:'R0041', type:'invoice',
       date:daysAgo(10), dueDate:daysAgo(-20),
       customer:c2, lines:invLines2,
       notes: isIS ? 'Eldhúsuppsetning. Takk fyrir viðskiptin.' : 'Kitchen installation complete. Thank you for your business.',
-      status:'paid', currency:cur, eurToIskRate:rate,
+      status:'paid', currency:cur, eurToIskRate:iskRate,
     },
     {
       id:id('inv'), number:'R0040', type:'invoice',
       date:daysAgo(20), dueDate:daysAgo(10),
       customer:c3, lines:invLines3,
       notes: isIS ? 'Steypuvinna — 1. hluti af stærra verkefni.' : 'Concrete works — phase 1 of larger project.',
-      status:'overdue', currency:cur, eurToIskRate:rate,
+      status:'overdue', currency:cur, eurToIskRate:iskRate,
     },
     {
       id:id('inv'), number:'R0043', type:'quote',
@@ -116,7 +115,7 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
         { id:id('il'), description: isIS ? 'Flísar og festingar'                : 'Tiles & fixings',              quantity:1,  unitPrice:a(145000),      vatRate:24 },
       ],
       notes: isIS ? 'Tilboð gilt í 14 daga.' : 'Quote valid for 14 days.',
-      status:'draft', currency:cur, eurToIskRate:rate,
+      status:'draft', currency:cur, eurToIskRate:iskRate,
     },
   ];
 

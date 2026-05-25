@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import {
   Zap, Check, X, Crown, Star, Building2, ArrowRight,
-  Users, Cloud, Shield, Headphones, ChevronDown, ChevronUp,
+  Shield, Headphones, ChevronDown, ChevronUp,
   FileText, Download, Camera, CreditCard,
 } from 'lucide-react';
 
