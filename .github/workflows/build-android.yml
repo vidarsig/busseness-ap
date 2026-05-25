@@ -1,0 +1,103 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:          # manual trigger from GitHub UI
+  push:
+    branches: [main]
+    paths:
+      - 'android/twa-manifest.json'
+      - '.github/workflows/build-android.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Set up Android SDK (accept licenses)
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "build-tools;34.0.0" \
+            "platforms;android-34" 2>/dev/null || true
+
+      # ── Keystore: restore from secret or generate a fresh one ──
+      - name: Set up signing keystore
+        run: |
+          mkdir -p android
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "Restoring keystore from secret…"
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/android.keystore
+          else
+            echo "No KEYSTORE_BASE64 secret found — generating a new keystore…"
+            keytool -genkeypair \
+              -v \
+              -keystore android/android.keystore \
+              -alias jobboks \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass jobboks123 \
+              -keypass jobboks123 \
+              -dname "CN=Jobboks, OU=Dev, O=Jobboks, L=Reykjavik, S=IS, C=IS"
+            echo ""
+            echo "======================================================="
+            echo "NEW KEYSTORE CREATED — save this as GitHub secret KEYSTORE_BASE64:"
+            echo "======================================================="
+            base64 -w 0 android/android.keystore
+            echo ""
+            echo "======================================================="
+          fi
+
+      - name: Print SHA-256 fingerprint
+        run: |
+          keytool -list -v \
+            -keystore android/android.keystore \
+            -alias jobboks \
+            -storepass jobboks123 2>/dev/null \
+            | grep "SHA256:"
+
+      # Copy manifest into working directory expected by bubblewrap
+      - name: Prepare bubblewrap working directory
+        run: |
+          cp android/twa-manifest.json twa-manifest.json
+
+      - name: Build APK with Bubblewrap
+        working-directory: ${{ github.workspace }}
+        run: |
+          bubblewrap build \
+            --skipPwaValidation \
+            --manifest twa-manifest.json \
+            --signingKeyPath android/android.keystore \
+            --signingKeyAlias jobboks \
+            --signingKeyPassphrase jobboks123 \
+            --signingStorePassphrase jobboks123
+
+      - name: Find APK
+        run: find . -name "*.apk" -o -name "*.aab" 2>/dev/null | head -20
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jobboks-android
+          path: |
+            **/*.apk
+            **/*.aab
+          retention-days: 30
+          if-no-files-found: warn
