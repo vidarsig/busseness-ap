@@ -224,7 +224,7 @@ export default function Upgrade() {
           <p className="text-sm text-green-800">
             {t(`Þú ert á ${currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} plani`, `You are on the ${currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} plan`)}
             {' — '}
-            <a href="mailto:hello@jobboks.com" className="underline font-medium">
+            <a href="mailto:hello@jobboks.app" className="underline font-medium">
               {t('Hafa samband til að breyta', 'Contact us to change')}
             </a>
           </p>
@@ -370,7 +370,7 @@ export default function Upgrade() {
       {/* Contact */}
       <div className="text-center text-xs text-gray-400">
         {t('Spurningar? Skrifaðu okkur á', 'Questions? Email us at')}{' '}
-        <a href="mailto:hello@jobboks.com" className="text-blue-600 font-medium">hello@jobboks.com</a>
+        <a href="mailto:hello@jobboks.app" className="text-blue-600 font-medium">hello@jobboks.app</a>
       </div>
     </div>
   );

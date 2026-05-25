@@ -11,7 +11,7 @@ export default defineConfig({
       manifest: {
         name: 'Jobboks',
         short_name: 'Jobboks',
-        description: 'Accounting on the go — for contractors, architects and engineers. bookasugo.com',
+        description: 'Accounting on the go — for contractors, architects and engineers. jobboks.app',
         theme_color: '#1e3a8a',
         background_color: '#f8fafc',
         display: 'standalone',

@@ -23,7 +23,8 @@
       "WebFetch(domain:instantdomainsearch.com)",
       "WebFetch(domain:www.whois.com)",
       "WebFetch(domain:rdap.verisign.com)",
-      "WebFetch(domain:rdap.registry.google)"
+      "WebFetch(domain:rdap.registry.google)",
+      "WebFetch(domain:rdap.afilias.net)"
     ]
   }
 }

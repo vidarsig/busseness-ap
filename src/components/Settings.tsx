@@ -528,19 +528,19 @@ export default function Settings() {
                 : 'Accounting app compliant with Icelandic law, including Act No. 3/2006 on Annual Accounts. VAT rates: 24% (standard) and 11% (food, books, etc.). Data is stored in browser storage (localStorage).'}
             </p>
             <div className="flex flex-wrap gap-3 text-xs">
-              <a href="https://jobboks.com/privacy.html" target="_blank" rel="noopener noreferrer"
+              <a href="https://jobboks.app/privacy.html" target="_blank" rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2">
                 {lang === 'is' ? 'Persónuverndarstefna' : 'Privacy Policy'}
               </a>
               <span className="text-blue-300">·</span>
-              <a href="https://jobboks.com/terms.html" target="_blank" rel="noopener noreferrer"
+              <a href="https://jobboks.app/terms.html" target="_blank" rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2">
                 {lang === 'is' ? 'Notkunarskilmálar' : 'Terms of Service'}
               </a>
               <span className="text-blue-300">·</span>
-              <a href="mailto:hello@jobboks.com"
+              <a href="mailto:hello@jobboks.app"
                 className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2">
-                hello@jobboks.com
+                hello@jobboks.app
               </a>
             </div>
             <p className="text-[10px] text-blue-500 mt-2">Jobboks v1.0 · © 2026</p>
