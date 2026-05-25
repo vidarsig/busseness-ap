@@ -1,7 +1,7 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:          # run manually from GitHub Actions tab
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -22,140 +22,120 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle 8.4
+      # Install Gradle (no gradlew in repo, so we use the action)
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.4'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licences
-        run: yes | sdkmanager --licenses || true
-
-      - name: Install required SDK components
+      # Accept SDK licences and install needed components
+      # (Android SDK is pre-installed on ubuntu-latest at $ANDROID_HOME)
+      - name: Install Android SDK components
         run: |
-          sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "build-tools;34.0.0" \
+            "platforms;android-34" 2>/dev/null || true
 
-      # ── Keystore setup ────────────────────────────────────────────
-      - name: Set up signing keystore
+      # ── Signing keystore ──────────────────────────────────────────
+      - name: Set up keystore
         working-directory: android
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            echo "Restoring keystore from secret…"
+            echo "Using saved keystore from secret"
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android.keystore
           else
-            echo "No KEYSTORE_BASE64 secret — generating a fresh keystore…"
-            keytool -genkeypair \
-              -v \
+            echo "Generating new keystore (first run)"
+            keytool -genkeypair -v \
               -keystore android.keystore \
               -alias jobboks \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass jobboks123 \
-              -keypass jobboks123 \
-              -dname "CN=Jobboks, OU=Dev, O=Jobboks, L=Reykjavik, ST=IS, C=IS"
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass jobboks123 -keypass jobboks123 \
+              -dname "CN=Jobboks,O=Jobboks,L=Reykjavik,C=IS"
           fi
 
-      - name: Save keystore info as files
+      - name: Save keystore info as downloadable files
         working-directory: android
         run: |
           mkdir -p keystore-info
-
-          # Extract SHA-256 fingerprint
-          FINGERPRINT=$(keytool -list -v \
+          FP=$(keytool -list -v \
             -keystore android.keystore \
             -alias jobboks \
-            -storepass jobboks123 2>/dev/null \
-            | grep "SHA256:" | awk '{print $2}')
+            -storepass jobboks123 2>/dev/null | grep "SHA256:" | awk '{print $2}')
 
-          echo "$FINGERPRINT" > keystore-info/fingerprint.txt
-          echo "SHA-256 fingerprint saved: $FINGERPRINT"
-
-          # Save keystore as base64 (for use as GitHub secret)
+          echo "$FP" > keystore-info/fingerprint.txt
           base64 -w 0 android.keystore > keystore-info/KEYSTORE_BASE64.txt
 
-          # Write a human-readable README
-          cat > keystore-info/README.txt << EOF
-          JOBBOKS ANDROID SIGNING KEYSTORE
-          =================================
+          cat > keystore-info/INSTRUCTIONS.txt << EOF
+          ========================================
+          JOBBOKS ANDROID KEYSTORE — SAVE THIS!
+          ========================================
 
-          SHA-256 Fingerprint (for assetlinks.json):
-          $FINGERPRINT
+          SHA-256 Fingerprint (goes in assetlinks.json):
+          $FP
 
-          Steps to save this permanently:
-          1. Go to: github.com/vidarsig/busseness-ap/settings/secrets/actions
-          2. Click "New repository secret"
-          3. Name:  KEYSTORE_BASE64
-          4. Value: paste the contents of KEYSTORE_BASE64.txt
-          5. Save — future builds will reuse this key automatically
+          HOW TO SAVE THE KEYSTORE PERMANENTLY:
+          1. Go to github.com/vidarsig/busseness-ap
+          2. Settings → Secrets and variables → Actions
+          3. New repository secret
+             Name:  KEYSTORE_BASE64
+             Value: (contents of KEYSTORE_BASE64.txt — one long line)
+          4. Click Add secret
 
-          IMPORTANT: Keep the keystore safe. If you lose it you cannot
-          update your Play Store app with the same package ID.
+          Future builds will reuse this key automatically.
+          WARNING: If you lose this key, you cannot update the app on Play Store!
           EOF
 
-          echo "Done. Files saved to keystore-info/"
+          echo "Fingerprint: $FP"
 
-      - name: Upload keystore info artifact
+      # ── Copy icons from web assets ────────────────────────────────
+      - name: Copy launcher icons
+        run: |
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p android/app/src/main/res/mipmap-$d
+            cp public/icon-192.png android/app/src/main/res/mipmap-$d/ic_launcher.png
+            cp public/icon-192.png android/app/src/main/res/mipmap-$d/ic_launcher_round.png
+          done
+
+      # ── Build ─────────────────────────────────────────────────────
+      - name: Build release APK
+        working-directory: android
+        env:
+          STORE_PASSWORD: jobboks123
+          KEY_ALIAS: jobboks
+          KEY_PASSWORD: jobboks123
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Confirm APK was created
+        run: |
+          APK=$(find android -name "*.apk" | head -1)
+          if [ -z "$APK" ]; then echo "ERROR: No APK found!"; exit 1; fi
+          echo "APK built: $APK ($(du -h $APK | cut -f1))"
+
+      # ── Auto-update assetlinks.json ───────────────────────────────
+      - name: Update assetlinks.json with fingerprint
+        run: |
+          FP=$(cat android/keystore-info/fingerprint.txt)
+          printf '[{\n  "relation": ["delegate_permission/common.handle_all_urls"],\n  "target": {\n    "namespace": "android_app",\n    "package_name": "app.jobboks.twa",\n    "sha256_cert_fingerprints": ["%s"]\n  }\n}]\n' "$FP" > public/.well-known/assetlinks.json
+          echo "assetlinks.json updated: $FP"
+
+      - name: Commit assetlinks.json if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/.well-known/assetlinks.json
+          git diff --cached --quiet || \
+            git commit -m "chore: update assetlinks.json fingerprint [skip ci]" && \
+            git push
+
+      # ── Upload artifacts ──────────────────────────────────────────
+      - name: Upload keystore info
         uses: actions/upload-artifact@v4
         with:
           name: keystore-info
           path: android/keystore-info/
           retention-days: 7
 
-      # ── Copy launcher icons from web assets ───────────────────────
-      - name: Set up launcher icons
-        run: |
-          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            mkdir -p android/app/src/main/res/mipmap-$density
-            cp public/icon-192.png android/app/src/main/res/mipmap-$density/ic_launcher.png
-            cp public/icon-192.png android/app/src/main/res/mipmap-$density/ic_launcher_round.png
-          done
-
-      # ── Gradle build ──────────────────────────────────────────────
-      - name: Build release APK
-        working-directory: android
-        env:
-          KEYSTORE_PATH: android.keystore
-          STORE_PASSWORD: jobboks123
-          KEY_ALIAS: jobboks
-          KEY_PASSWORD: jobboks123
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-        run: gradle assembleRelease --stacktrace --no-daemon
-
-      - name: List built APKs
-        run: find android -name "*.apk" | head -10
-
-      # ── Auto-update assetlinks.json with real fingerprint ─────────
-      - name: Update assetlinks.json
-        run: |
-          FINGERPRINT=$(cat android/keystore-info/fingerprint.txt)
-          cat > public/.well-known/assetlinks.json << EOF
-          [{
-            "relation": ["delegate_permission/common.handle_all_urls"],
-            "target": {
-              "namespace": "android_app",
-              "package_name": "app.jobboks.twa",
-              "sha256_cert_fingerprints": ["$FINGERPRINT"]
-            }
-          }]
-          EOF
-          echo "assetlinks.json updated with fingerprint: $FINGERPRINT"
-
-      - name: Commit updated assetlinks.json
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/.well-known/assetlinks.json
-          if git diff --cached --quiet; then
-            echo "No change to assetlinks.json (fingerprint unchanged)"
-          else
-            git commit -m "chore: update assetlinks.json with signing fingerprint [skip ci]"
-            git push
-          fi
-
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: jobboks-android-${{ github.run_number }}
