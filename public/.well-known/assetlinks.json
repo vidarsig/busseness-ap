@@ -3,8 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "app.jobboks.twa",
-    "sha256_cert_fingerprints": [
-      "PLACEHOLDER_REPLACE_AFTER_FIRST_BUILD"
-    ]
+    "sha256_cert_fingerprints": ["B1:89:4B:82:DC:CA:99:14:B7:E5:D4:D5:97:3E:A6:55:B4:B0:1A:B8:EA:5E:24:9D:81:18:50:F2:15:9A:2D:62"]
   }
 }]
