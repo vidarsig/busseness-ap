@@ -1,3 +1,12 @@
+[[redirects]]
+  from = "/api/claude"
+  to = "/.netlify/functions/claude"
+  status = 200
+
+[[edge_functions]]
+  path = "/api/claude-stream"
+  function = "claude-stream"
+
 [[headers]]
   for = "/.well-known/assetlinks.json"
   [headers.values]

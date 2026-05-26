@@ -40,7 +40,6 @@ export default function ReceiptScanner({ onClose }: Props) {
   const [form, setForm] = useState<Partial<Transaction>>({});
   const [saved, setSaved] = useState(false);
 
-  const apiKey = data.settings.anthropicKey;
   const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES] as string[];
   const vatRates = cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates;
 
@@ -53,7 +52,7 @@ export default function ReceiptScanner({ onClose }: Props) {
     setScanning(true);
     try {
       const { base64, mediaType } = await resizeImage(file);
-      const scanned = await scanReceipt(apiKey, base64, mediaType, allCategories, vatRates, lang);
+      const scanned = await scanReceipt(base64, mediaType, allCategories, vatRates, lang);
       setResult(scanned);
       setForm({
         id: newId(),

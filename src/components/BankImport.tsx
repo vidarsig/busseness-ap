@@ -117,13 +117,11 @@ export default function BankImport() {
   }
 
   async function aiCategorizeAll() {
-    const apiKey = data.settings.anthropicKey;
-    if (!apiKey || aiLoading) return;
+    if (aiLoading) return;
     setAiLoading(true);
     try {
       const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES] as string[];
       const results = await categorizeBatch(
-        apiKey,
         rows.map(r => ({ description: r.description, amount: r.amount, detectedType: r.type })),
         allCategories,
         cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates,

@@ -25,14 +25,12 @@ export default function AIAssistant() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const apiKey = data.settings.anthropicKey;
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   async function sendMessage() {
-    if (!input.trim() || loading || !apiKey) return;
+    if (!input.trim() || loading) return;
     const userMsg: ChatMessage = { role: 'user', content: input.trim() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -46,7 +44,6 @@ export default function AIAssistant() {
 
     try {
       await streamClaude(
-        apiKey,
         buildChatSystem(data, lang),
         allMessages,
         chunk => {
@@ -67,14 +64,14 @@ export default function AIAssistant() {
   }
 
   async function doGenerateInsights() {
-    if (!apiKey || insightsLoading) return;
+    if (insightsLoading) return;
     setInsights('');
     setInsightsLoading(true);
     setError('');
     const context = buildContext(data, lang);
     let text = '';
     try {
-      await generateInsights(apiKey, context, lang, chunk => {
+      await generateInsights(context, lang, chunk => {
         text += chunk;
         setInsights(text);
       });
@@ -87,28 +84,6 @@ export default function AIAssistant() {
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  }
-
-  if (!apiKey) {
-    return (
-      <div>
-        <div className="flex items-center gap-3 mb-6">
-          <Bot className="w-7 h-7 text-blue-600" />
-          <h1 className="text-2xl font-bold text-gray-900">{t('ai')}</h1>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">{t('aiNoKey')}</p>
-            <p className="text-xs text-amber-600 mt-1">
-              {lang === 'is'
-                ? 'Fáðu API lykil á console.anthropic.com — greiddu aðeins fyrir notkun (venjulega nokkrir sentir á samtal).'
-                : 'Get an API key at console.anthropic.com — pay only for usage (typically a few cents per conversation).'}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (

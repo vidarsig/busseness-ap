@@ -84,8 +84,6 @@ export default function ReviewManager() {
   const [expandedReply, setExpandedReply] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'bugs' | 'improvements' | 'cantfix' | 'replies' | 'report'>('bugs');
 
-  const apiKey = data.settings.anthropicKey;
-
   function handleParse() {
     const parsed = parseReviews(rawText);
     setReviews(parsed);
@@ -94,7 +92,6 @@ export default function ReviewManager() {
   }
 
   async function handleAnalyze() {
-    if (!apiKey) { setError('Add your Anthropic API key in Settings first.'); return; }
     if (reviews.length === 0) { setError('Parse reviews first.'); return; }
 
     setLoading(true);
@@ -142,13 +139,10 @@ Analyze these reviews and respond with a JSON object (no markdown, just raw JSON
 Be specific and actionable. For bugs, focus on what developers can actually fix in a React PWA.`;
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/claude', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-calls': 'true',
         },
         body: JSON.stringify({
           model: 'claude-opus-4-5',
@@ -265,16 +259,6 @@ Be specific and actionable. For bugs, focus on what developers can actually fix 
         )}
       </div>
 
-      {!apiKey && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">Anthropic API key required</p>
-            <p className="text-xs text-amber-700 mt-0.5">Add your API key in Settings → AI Assistant to use Review Intelligence.</p>
-          </div>
-        </div>
-      )}
-
       {/* Input */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
         <h2 className="text-sm font-bold text-gray-800 mb-1">Paste Reviews</h2>
@@ -295,7 +279,7 @@ Be specific and actionable. For bugs, focus on what developers can actually fix 
             <MessageSquare className="w-4 h-4" />
             Parse Reviews
           </button>
-          <button onClick={handleAnalyze} disabled={loading || reviews.length === 0 || !apiKey}
+          <button onClick={handleAnalyze} disabled={loading || reviews.length === 0}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             {loading ? 'Analyzing…' : `Analyze with AI${reviews.length > 0 ? ` (${reviews.length} reviews)` : ''}`}

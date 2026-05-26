@@ -1,30 +1,25 @@
 import { AppData } from '../types';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+const CLAUDE_URL = '/api/claude';
+const CLAUDE_STREAM_URL = '/api/claude-stream';
 
 export interface ChatMessage { role: 'user' | 'assistant'; content: string; }
 
-async function apiPost(apiKey: string, body: object): Promise<Response> {
-  return fetch(API_URL, {
+async function apiPost(body: object): Promise<Response> {
+  return fetch(CLAUDE_URL, {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
 
 async function callClaude(
-  apiKey: string,
   system: string,
   messages: ChatMessage[],
   model = 'claude-haiku-4-5-20251001',
   maxTokens = 1024,
 ): Promise<string> {
-  const res = await apiPost(apiKey, { model, max_tokens: maxTokens, system, messages });
+  const res = await apiPost({ model, max_tokens: maxTokens, system, messages });
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(err?.error?.message ?? `API error ${res.status}`);
@@ -34,13 +29,16 @@ async function callClaude(
 }
 
 export async function streamClaude(
-  apiKey: string,
   system: string,
   messages: ChatMessage[],
   onChunk: (text: string) => void,
   model = 'claude-sonnet-4-6',
 ): Promise<void> {
-  const res = await apiPost(apiKey, { model, max_tokens: 2048, stream: true, system, messages });
+  const res = await fetch(CLAUDE_STREAM_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model, max_tokens: 2048, stream: true, system, messages }),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(err?.error?.message ?? `API error ${res.status}`);
@@ -119,7 +117,6 @@ ${buildContext(data, lang)}`;
 }
 
 export async function categorizeBatch(
-  apiKey: string,
   rows: Array<{ description: string; amount: number; detectedType: string }>,
   categories: string[],
   vatRates: number[],
@@ -135,7 +132,7 @@ No explanation, just the JSON array.`;
     `${i + 1}. "${r.description}" amount:${r.amount} detected:${r.detectedType}`
   ).join('\n');
 
-  const text = await callClaude(apiKey, system, [{ role: 'user', content: userMsg }], 'claude-haiku-4-5-20251001', 2048);
+  const text = await callClaude(system, [{ role: 'user', content: userMsg }], 'claude-haiku-4-5-20251001', 2048);
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) throw new Error('AI returned unexpected format');
   return JSON.parse(match[0]) as Array<{ type: 'income' | 'expense'; category: string; vatRate: number }>;
@@ -152,7 +149,6 @@ export interface ScannedReceipt {
 }
 
 export async function scanReceipt(
-  apiKey: string,
   base64Image: string,
   mediaType: string,
   categories: string[],
@@ -176,14 +172,9 @@ Rules:
 - vatRate: pick the closest match from available VAT rates
 - type: almost always "expense" for receipts; "income" only if it's a payment received`;
 
-  const res = await fetch(API_URL, {
+  const res = await fetch(CLAUDE_URL, {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
       max_tokens: 512,
@@ -209,7 +200,6 @@ Rules:
 }
 
 export async function generateInsights(
-  apiKey: string,
   context: string,
   lang: string,
   onChunk: (text: string) => void,
@@ -222,7 +212,6 @@ Respond in ${lang === 'is' ? 'Icelandic' : 'English'} using markdown formatting.
     : 'Analyze this company\'s financial data. Use sections: ## Summary, ## Key Findings, ## Warnings, ## Recommendations';
 
   await streamClaude(
-    apiKey,
     `${system}\n\nFINANCIAL DATA:\n${context}`,
     [{ role: 'user', content: prompt }],
     onChunk,
