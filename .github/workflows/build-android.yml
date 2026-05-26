@@ -36,8 +36,8 @@ jobs:
       - name: Install Android SDK components
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
-            "build-tools;34.0.0" \
-            "platforms;android-34" 2>/dev/null || true
+            "build-tools;35.0.0" \
+            "platforms;android-35" 2>/dev/null || true
 
       # ── Signing keystore ──────────────────────────────────────────
       - name: Set up keystore
