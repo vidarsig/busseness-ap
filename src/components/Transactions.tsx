@@ -341,8 +341,9 @@ export default function Transactions() {
             <Download className="w-4 h-4" />CSV
           </button>
           <button onClick={() => setScannerOpen(true)}
-            className="flex items-center gap-1.5 border border-purple-300 bg-purple-50 text-purple-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-purple-100">
-            <Camera className="w-4 h-4" />
+            className="flex items-center gap-2 bg-gray-900 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+            title={lang === 'is' ? 'Skanna kvittun' : 'Scan receipt'}>
+            <Camera className="w-5 h-5" />
             <span className="hidden sm:inline">{lang === 'is' ? 'Skanna' : 'Scan'}</span>
           </button>
           <button onClick={openAddModal}
