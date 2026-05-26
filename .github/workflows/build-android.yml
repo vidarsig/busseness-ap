@@ -100,11 +100,26 @@ jobs:
       # ── Build ─────────────────────────────────────────────────────
       - name: Build release APK
         working-directory: android
-        env:
-          STORE_PASSWORD: jobboks123
-          KEY_ALIAS: jobboks
-          KEY_PASSWORD: jobboks123
-        run: gradle assembleRelease --no-daemon --stacktrace
+        continue-on-error: true
+        run: |
+          echo "=== Gradle version ===" | tee /tmp/build.log
+          gradle --version 2>&1 | tee -a /tmp/build.log
+          echo "=== ANDROID_HOME: $ANDROID_HOME ===" | tee -a /tmp/build.log
+          echo "=== Project files ===" | tee -a /tmp/build.log
+          ls -la 2>&1 | tee -a /tmp/build.log
+          echo "=== Building ===" | tee -a /tmp/build.log
+          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee -a /tmp/build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "=== Build exit code: $BUILD_EXIT ===" | tee -a /tmp/build.log
+          exit $BUILD_EXIT
+
+      - name: Upload build log (always — helps diagnose failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: /tmp/build.log
+          retention-days: 3
 
       - name: Confirm APK was created
         run: |
