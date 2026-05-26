@@ -2,7 +2,7 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "is.jobboks.app",
+    "package_name": "app.jobboks.twa",
     "sha256_cert_fingerprints": ["6F:DD:76:F9:BF:8C:A0:1D:39:2A:AD:F4:8A:54:31:D0:79:30:33:87:A7:53:B1:83:DA:B6:55:A8:4A:EA:7E:63"]
   }
 }]

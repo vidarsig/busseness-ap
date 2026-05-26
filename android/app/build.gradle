@@ -2,10 +2,10 @@ apply plugin: 'com.android.application'
 
 android {
     compileSdkVersion 35
-    namespace 'is.jobboks.app'
+    namespace 'app.jobboks.twa'
 
     defaultConfig {
-        applicationId "is.jobboks.app"
+        applicationId "app.jobboks.twa"
         minSdkVersion 24
         targetSdkVersion 35
         versionCode 1

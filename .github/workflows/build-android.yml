@@ -133,7 +133,7 @@ jobs:
       - name: Update assetlinks.json with fingerprint
         run: |
           FP=$(cat android/keystore-info/fingerprint.txt)
-          printf '[{\n  "relation": ["delegate_permission/common.handle_all_urls"],\n  "target": {\n    "namespace": "android_app",\n    "package_name": "is.jobboks.app",\n    "sha256_cert_fingerprints": ["%s"]\n  }\n}]\n' "$FP" > public/.well-known/assetlinks.json
+          printf '[{\n  "relation": ["delegate_permission/common.handle_all_urls"],\n  "target": {\n    "namespace": "android_app",\n    "package_name": "app.jobboks.twa",\n    "sha256_cert_fingerprints": ["%s"]\n  }\n}]\n' "$FP" > public/.well-known/assetlinks.json
           echo "assetlinks.json updated: $FP"
 
       - name: Commit assetlinks.json if changed
