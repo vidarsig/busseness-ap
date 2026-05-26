@@ -3,6 +3,6 @@
   "target": {
     "namespace": "android_app",
     "package_name": "app.jobboks.twa",
-    "sha256_cert_fingerprints": ["6F:DD:76:F9:BF:8C:A0:1D:39:2A:AD:F4:8A:54:31:D0:79:30:33:87:A7:53:B1:83:DA:B6:55:A8:4A:EA:7E:63"]
+    "sha256_cert_fingerprints": ["E8:CA:5D:A8:AA:F4:A0:45:40:1E:97:43:FE:6D:94:56:32:B5:C4:AC:07:A3:D3:1A:F8:90:DD:48:A2:2B:CA:4C"]
   }
 }]
