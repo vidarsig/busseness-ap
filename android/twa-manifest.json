@@ -22,7 +22,7 @@
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://jobboks.app/",
-  "minSdkVersion": 19,
+  "minSdkVersion": 24,
   "fingerprints": [],
   "fallbackType": "customtabs",
   "features": {},
