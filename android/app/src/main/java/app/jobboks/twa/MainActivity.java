@@ -10,6 +10,8 @@ import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebChromeClient;
+import android.webkit.PermissionRequest;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
@@ -45,6 +47,14 @@ public class MainActivity extends Activity {
         // Allow cookies (needed for app state / auth)
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+
+        // Grant camera access to the WebView
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                request.grant(request.getResources());
+            }
+        });
 
         // Stay inside the app — don't open links in the system browser
         webView.setWebViewClient(new WebViewClient() {
