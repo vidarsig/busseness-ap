@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit assetlinks.json back to repo
 
     steps:
       - name: Checkout
@@ -145,6 +147,7 @@ jobs:
 
       # ── Upload artifacts ──────────────────────────────────────────
       - name: Upload keystore info
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: keystore-info
@@ -152,6 +155,7 @@ jobs:
           retention-days: 7
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jobboks-android-${{ github.run_number }}
