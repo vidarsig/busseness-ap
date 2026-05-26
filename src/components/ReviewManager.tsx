@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import {
   Star, MessageSquare, Bug, Lightbulb, XCircle, Copy, Check,
-  ChevronDown, ChevronUp, Loader2, AlertTriangle, Download, Send,
+  ChevronDown, ChevronUp, Loader2, Download, Send,
 } from 'lucide-react';
 
 interface Review {
@@ -75,7 +75,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export default function ReviewManager() {
-  const { data, lang } = useApp();
+  const { lang } = useApp();
   const [rawText, setRawText] = useState('');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);

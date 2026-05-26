@@ -110,16 +110,9 @@ export default function ReceiptScanner({ onClose }: Props) {
         </div>
 
         <div className="p-4 space-y-4">
-          {!apiKey && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              {lang === 'is' ? 'Settu inn Anthropic API lykil í Stillingar → AI.' : 'Add your Anthropic API key in Settings → AI.'}
-            </div>
-          )}
-
           {/* Camera / upload trigger */}
           {!preview && (
-            <div className={`space-y-3 ${!apiKey ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="space-y-3">
               {/* Camera button */}
               <label className="flex items-center justify-center gap-3 border-2 border-blue-300 bg-blue-50 hover:bg-blue-100 rounded-xl p-4 cursor-pointer transition-colors">
                 <Camera className="w-6 h-6 text-blue-600 flex-shrink-0" />
@@ -132,7 +125,7 @@ export default function ReceiptScanner({ onClose }: Props) {
                   </div>
                 </div>
                 <input ref={cameraRef} type="file" accept="image/*" capture="environment"
-                  className="sr-only" onChange={handleFileChange} disabled={!apiKey} />
+                  className="sr-only" onChange={handleFileChange} />
               </label>
               {/* Gallery / file button */}
               <label className="flex items-center justify-center gap-3 border-2 border-dashed border-gray-300 hover:border-gray-400 hover:bg-gray-50 rounded-xl p-4 cursor-pointer transition-colors">
@@ -148,7 +141,7 @@ export default function ReceiptScanner({ onClose }: Props) {
                   </div>
                 </div>
                 <input ref={fileRef} type="file" accept="image/*,application/pdf"
-                  className="sr-only" onChange={handleFileChange} disabled={!apiKey} />
+                  className="sr-only" onChange={handleFileChange} />
               </label>
             </div>
           )}
