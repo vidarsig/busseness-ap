@@ -1,21 +1,23 @@
 package app.jobboks.twa;
 
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebChromeClient;
-import android.webkit.PermissionRequest;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
 
+    private static final int CAMERA_PERMISSION_REQUEST = 100;
+    private PermissionRequest pendingPermissionRequest;
     private WebView webView;
 
     @Override
@@ -43,16 +45,28 @@ public class MainActivity extends Activity {
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setAllowFileAccess(false);
         settings.setGeolocationEnabled(false);
+        settings.setMediaPlaybackRequiresUserGesture(false);
 
         // Allow cookies (needed for app state / auth)
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
-        // Grant camera access to the WebView
+        // Handle camera permission requests from the web page
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(PermissionRequest request) {
-                request.grant(request.getResources());
+                // Check if Android has granted camera permission
+                if (checkSelfPermission(android.Manifest.permission.CAMERA)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    request.grant(request.getResources());
+                } else {
+                    // Store request and ask Android for permission
+                    pendingPermissionRequest = request;
+                    requestPermissions(
+                        new String[]{android.Manifest.permission.CAMERA},
+                        CAMERA_PERMISSION_REQUEST
+                    );
+                }
             }
         });
 
@@ -61,7 +75,6 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Keep jobboks.app links inside the WebView
                 if (url.startsWith("https://jobboks.app") || url.startsWith("http://jobboks.app")) {
                     return false;
                 }
@@ -73,6 +86,18 @@ public class MainActivity extends Activity {
             webView.restoreState(savedInstanceState);
         } else {
             webView.loadUrl("https://jobboks.app/");
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == CAMERA_PERMISSION_REQUEST && pendingPermissionRequest != null) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
+            } else {
+                pendingPermissionRequest.deny();
+            }
+            pendingPermissionRequest = null;
         }
     }
 
