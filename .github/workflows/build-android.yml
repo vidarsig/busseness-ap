@@ -110,7 +110,7 @@ jobs:
           echo "=== Project files ===" | tee -a /tmp/build.log
           ls -la 2>&1 | tee -a /tmp/build.log
           echo "=== Building ===" | tee -a /tmp/build.log
-          gradle assembleRelease --no-daemon --stacktrace 2>&1 | tee -a /tmp/build.log
+          gradle bundleRelease --no-daemon --stacktrace 2>&1 | tee -a /tmp/build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           echo "=== Build exit code: $BUILD_EXIT ===" | tee -a /tmp/build.log
           exit $BUILD_EXIT
@@ -125,9 +125,9 @@ jobs:
 
       - name: Confirm APK was created
         run: |
-          APK=$(find android -name "*.apk" | head -1)
-          if [ -z "$APK" ]; then echo "ERROR: No APK found!"; exit 1; fi
-          echo "APK built: $APK ($(du -h $APK | cut -f1))"
+          AAB=$(find android -name "*.aab" | head -1)
+          if [ -z "$AAB" ]; then echo "ERROR: No AAB found!"; exit 1; fi
+          echo "AAB built: $AAB ($(du -h $AAB | cut -f1))"
 
       # ── Auto-update assetlinks.json ───────────────────────────────
       - name: Update assetlinks.json with fingerprint
@@ -154,11 +154,11 @@ jobs:
           path: android/keystore-info/
           retention-days: 7
 
-      - name: Upload APK
+      - name: Upload AAB
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jobboks-android-${{ github.run_number }}
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/bundle/release/*.aab
           retention-days: 30
           if-no-files-found: error
