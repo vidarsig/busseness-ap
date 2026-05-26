@@ -16,7 +16,6 @@ android {
 
     signingConfigs {
         release {
-            // keystore sits at android/android.keystore (project root, one level up from app/)
             storeFile rootProject.file(System.getenv('KEYSTORE_PATH') ?: 'android.keystore')
             storePassword System.getenv('STORE_PASSWORD') ?: 'jobboks123'
             keyAlias System.getenv('KEY_ALIAS') ?: 'jobboks'
@@ -37,6 +36,5 @@ android {
     }
 }
 
-dependencies {
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
-}
+// No external dependencies — uses only the Android SDK framework
+dependencies {}
