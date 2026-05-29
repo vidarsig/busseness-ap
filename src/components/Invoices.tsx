@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, Landmark } from 'lucide-react';
+import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
@@ -348,49 +348,6 @@ function emailInvoice(inv: Invoice, companyName: string, lang: string) {
   window.location.href = url;
 }
 
-// Generate a bank claim file (CSV) for one invoice. The user uploads /
-// hands this to their bank to register the claim (kröfu). Bank-agnostic:
-// one header row + one claim row with the fields a bank needs.
-function downloadClaimCSV(inv: Invoice, company: { name?: string; kennitala?: string; bankAccount?: string }, lang: string) {
-  const isIS = lang === 'is';
-  const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
-  const amount = Math.round(total); // claims are whole ISK
-
-  const esc = (v: unknown) => {
-    const s = String(v ?? '');
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-
-  const headers = isIS
-    ? ['Kröfunúmer', 'Greiðandi', 'Kennitala greiðanda', 'Upphæð', 'Mynt', 'Útgáfudagur', 'Gjalddagi', 'Eindagi', 'Kröfuhafi', 'Kennitala kröfuhafa', 'Reikningur kröfuhafa']
-    : ['Claim number', 'Payer', 'Payer ID (kennitala)', 'Amount', 'Currency', 'Issue date', 'Due date', 'Final due date', 'Creditor', 'Creditor ID', 'Creditor account'];
-
-  const row = [
-    inv.number,
-    inv.customer.name,
-    inv.customer.kennitala ?? '',
-    amount,
-    inv.currency,
-    inv.date,
-    inv.dueDate,
-    inv.dueDate,
-    company.name ?? '',
-    company.kennitala ?? '',
-    company.bankAccount ?? '',
-  ];
-
-  // Prepend BOM so Excel reads UTF-8 (Icelandic characters) correctly.
-  const csv = '﻿' + [headers, row].map(r => r.map(esc).join(',')).join('\r\n') + '\r\n';
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `krafa_${inv.number}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(link.href);
-}
-
 export default function Invoices() {
   const { data, dispatch, t, lang, cc } = useApp();
   const [modal, setModal] = useState<{ open: boolean; inv?: Invoice; defaultType?: 'invoice' | 'quote' }>({ open: false });
@@ -584,13 +541,6 @@ export default function Invoices() {
                     <button onClick={() => emailInvoice(inv, data.settings.company.name || '', lang)}
                       className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
                       <Mail className="w-3.5 h-3.5" /> {isQuote ? t('emailQuote') : t('emailInvoice')}
-                    </button>
-                  )}
-                  {/* Bank claim CSV — invoices only */}
-                  {!isQuote && (
-                    <button onClick={() => downloadClaimCSV(inv, data.settings.company, lang)}
-                      className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
-                      <Landmark className="w-3.5 h-3.5" /> {lang === 'is' ? 'Krafa (CSV)' : 'Claim (CSV)'}
                     </button>
                   )}
                   {/* PDF */}
