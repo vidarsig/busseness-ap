@@ -448,14 +448,26 @@ export default function BankImport() {
                       </td>
                       <td className="px-2 py-2">
                         <select value={row.type} className={inp}
-                          onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, type: e.target.value as 'income' | 'expense', category: e.target.value === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold', matchedRule: undefined } : r))}>
+                          onChange={e => {
+                            const type = e.target.value as 'income' | 'expense';
+                            setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
+                            setRows(prev => prev.map((r, j) => j === i
+                              ? { ...r, type, category: type === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold', matchedRule: undefined, learnOpen: true }
+                              : { ...r, learnOpen: false }));
+                          }}>
                           <option value="income">{t('income')}</option>
                           <option value="expense">{t('expense')}</option>
                         </select>
                       </td>
                       <td className="px-2 py-2">
                         <select value={row.category} className={inp}
-                          onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, category: e.target.value, matchedRule: undefined } : r))}>
+                          onChange={e => {
+                            const category = e.target.value;
+                            setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
+                            setRows(prev => prev.map((r, j) => j === i
+                              ? { ...r, category, matchedRule: undefined, learnOpen: true }
+                              : { ...r, learnOpen: false }));
+                          }}>
                           {(row.type === 'income'
                             ? ['sala_vara','sala_thjonustu','fjarmagns_tekjur','adrar_tekjur']
                             : EXPENSE_CATEGORIES
@@ -489,7 +501,7 @@ export default function BankImport() {
                           <div className="flex items-center gap-2">
                             <Zap className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
                             <span className="text-xs font-medium text-blue-800">
-                              {lang === 'is' ? 'Vista sem sjálfvirka reglu:' : 'Save as auto-rule:'}
+                              {lang === 'is' ? 'Muna þetta næst? Regla fyrir:' : 'Remember this next time? Rule for:'}
                             </span>
                             <input
                               className="flex-1 border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white max-w-[200px]"
