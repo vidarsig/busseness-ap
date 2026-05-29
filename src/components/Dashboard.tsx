@@ -1,4 +1,5 @@
-import { TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare, AlertTriangle, Circle } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare, AlertTriangle, Circle, Download, Check } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
@@ -11,7 +12,21 @@ interface Props { setView: (v: View) => void; }
 
 export default function Dashboard({ setView }: Props) {
   const { data, t, lang, fmtISK } = useApp();
+  const [backedUp, setBackedUp] = useState(false);
   const year = data.settings.fiscalYear;
+
+  function backupNow() {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jobboks_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setBackedUp(true);
+    setTimeout(() => setBackedUp(false), 3000);
+  }
   const yearly = filterByYear(data.transactions, year);
 
   const totalIncome = yearly.filter(t => t.type === 'income').reduce((s, t) => s + getTransactionISK(t), 0);
@@ -69,11 +84,29 @@ export default function Dashboard({ setView }: Props) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('dashboard')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{t('thisYear')}: {year}</p>
         </div>
+        <button
+          onClick={backupNow}
+          className={`flex items-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm shadow-sm transition-all flex-shrink-0 ${
+            backedUp
+              ? 'bg-green-600 text-white'
+              : 'bg-blue-600 hover:bg-blue-500 text-white'
+          }`}
+        >
+          {backedUp ? <Check className="w-5 h-5" /> : <Download className="w-5 h-5" />}
+          <span className="hidden sm:inline">
+            {backedUp
+              ? (lang === 'is' ? 'Afrit vistað!' : 'Backup saved!')
+              : (lang === 'is' ? 'Taka öryggisafrit' : 'Back up my data')}
+          </span>
+          <span className="sm:hidden">
+            {backedUp ? (lang === 'is' ? 'Vistað!' : 'Saved!') : (lang === 'is' ? 'Afrit' : 'Backup')}
+          </span>
+        </button>
       </div>
 
       {/* KPI cards */}
