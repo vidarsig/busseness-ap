@@ -138,6 +138,14 @@ export interface Invoice {
   currency: Currency;
   eurToIskRate: number;
   creditNoteOf?: string;  // invoice number this credit note corrects
+  photos?: InvoicePhoto[]; // attached photos (proof of work, etc.)
+}
+
+export interface InvoicePhoto {
+  id: string;
+  dataUrl: string;   // base64 image
+  caption?: string;
+  createdAt: string; // ISO datetime
 }
 
 export interface RecurringTransaction {

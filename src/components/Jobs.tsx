@@ -422,6 +422,11 @@ export default function Jobs({ sessionUser }: JobsProps) {
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
                         {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
+                      <button onClick={() => { setPhotoJobId(job.id); cameraRef.current?.click(); }}
+                        title={t('Taka mynd', 'Take photo')}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition">
+                        <Camera className="w-4 h-4" />
+                      </button>
                       <button onClick={() => setJobForm({ open:true, job:{ ...job } })}
                         className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition">
                         <Pencil className="w-4 h-4" />

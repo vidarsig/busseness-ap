@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, RotateCcw, Lock } from 'lucide-react';
+import { useState, useMemo, useRef } from 'react';
+import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, RotateCcw, Lock, Camera, Image } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Invoice, InvoiceLine, Currency } from '../types';
+import { Invoice, InvoiceLine, Currency, InvoicePhoto } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import { exportPDF } from '../utils/exports';
 import { isInvoiceLimitReached } from '../utils/planLimits';
@@ -51,6 +51,30 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
   const addLine = () => setForm(f => ({ ...f, lines: [...f.lines, { id: lineId(), description: '', quantity: 1, unitPrice: 0, vatRate: cc.standardRate }] }));
   const removeLine = (id: string) => setForm(f => ({ ...f, lines: f.lines.filter(l => l.id !== id) }));
 
+  // ── Photos ────────────────────────────────────────────────
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  function handlePhotoFiles(files: FileList | null) {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const photo: InvoicePhoto = {
+          id: `iphoto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          dataUrl: String(reader.result), createdAt: new Date().toISOString(),
+        };
+        setForm(f => ({ ...f, photos: [...(f.photos ?? []), photo] }));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  function removePhoto(id: string) {
+    setForm(f => ({ ...f, photos: (f.photos ?? []).filter(p => p.id !== id) }));
+  }
+  function setPhotoCaption(id: string, caption: string) {
+    setForm(f => ({ ...f, photos: (f.photos ?? []).map(p => p.id === id ? { ...p, caption } : p) }));
+  }
+
   function toggleType() {
     const newType = form.type === 'invoice' ? 'quote' : 'invoice';
     setForm(f => ({
@@ -95,6 +119,40 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
         </div>
 
         <div className="p-4 space-y-4">
+          {/* Photos — at the top, like the receipt scanner in Transactions */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <button type="button" onClick={() => cameraRef.current?.click()}
+                className="flex items-center gap-1.5 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
+                <Camera className="w-4 h-4" />{lang === 'is' ? 'Taka mynd' : 'Take photo'}
+              </button>
+              <button type="button" onClick={() => galleryRef.current?.click()}
+                className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+                <Image className="w-4 h-4" />{lang === 'is' ? 'Velja mynd' : 'Gallery'}
+              </button>
+            </div>
+            {(form.photos ?? []).length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {(form.photos ?? []).map(photo => (
+                  <div key={photo.id} className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                    <img src={photo.dataUrl} alt={photo.caption || ''} className="w-full aspect-square object-cover" />
+                    <button type="button" onClick={() => removePhoto(photo.id)}
+                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-red-600">
+                      <X className="w-3 h-3" />
+                    </button>
+                    <input value={photo.caption || ''} onChange={e => setPhotoCaption(photo.id, e.target.value)}
+                      placeholder={lang === 'is' ? 'Skýring' : 'Caption'}
+                      className="w-full text-[10px] px-1.5 py-1 border-t border-gray-200 focus:outline-none" />
+                  </div>
+                ))}
+              </div>
+            )}
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+              onChange={e => { handlePhotoFiles(e.target.files); e.target.value = ''; }} />
+            <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
+              onChange={e => { handlePhotoFiles(e.target.files); e.target.value = ''; }} />
+          </div>
+
           {/* Header */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
