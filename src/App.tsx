@@ -26,6 +26,7 @@ import ReviewManager from './components/ReviewManager';
 import Login from './components/Login';
 import { View } from './types';
 import { getSession } from './utils/supabase';
+import { resolvePermissions, canAccessView } from './utils/access';
 
 export interface SessionUser {
   id: string;
@@ -70,6 +71,14 @@ function AppInner() {
     return () => window.removeEventListener('navigate-upgrade', handler);
   }, []);
 
+  // Role-based access: constrain navigation to the logged-in user's permissions
+  const perms = resolvePermissions(sessionUser, data.appUsers ?? []);
+
+  // If the current view is not permitted, bounce back to the dashboard
+  useEffect(() => {
+    if (!canAccessView(view, perms)) setView('dashboard');
+  }, [view, perms]);
+
   // Country onboarding first
   if (!data.settings.country) return <CountryOnboarding />;
 
@@ -91,30 +100,34 @@ function AppInner() {
     );
   }
 
+  // Never render a screen the user can't access (covers the tick before the
+  // redirect effect fires)
+  const safeView: View = canAccessView(view, perms) ? view : 'dashboard';
+
   return (
-    <Layout view={view} setView={setView} sessionUser={sessionUser}
+    <Layout view={safeView} setView={setView} sessionUser={sessionUser} perms={perms}
       onSignOut={() => setSessionUser(null)}>
-      {view === 'dashboard'    && <Dashboard setView={setView} />}
-      {view === 'transactions' && <Transactions />}
-      {view === 'recurring'    && <Recurring />}
-      {view === 'bankimport'   && <BankImport />}
-      {view === 'rules'        && <AutoRules />}
-      {view === 'tasks'        && <Tasks setView={setView} />}
-      {view === 'invoices'     && <Invoices />}
-      {view === 'accounts'     && <ChartOfAccounts />}
-      {view === 'budget'       && <Budget />}
-      {view === 'payroll'      && <Payroll />}
-      {view === 'vat'          && <VAT />}
-      {view === 'vatreturn'    && <VATReturn />}
-      {view === 'reports'      && <Reports />}
-      {view === 'annual'       && <AnnualAccounts />}
-      {view === 'settings'     && <Settings />}
-      {view === 'ai'           && <AIAssistant />}
-      {view === 'stock'        && <Stock />}
-      {view === 'jobs'         && <Jobs sessionUser={sessionUser} />}
-      {view === 'users'        && <Users sessionUser={sessionUser} />}
-      {view === 'upgrade'      && <Upgrade />}
-      {view === 'reviews'      && <ReviewManager />}
+      {safeView === 'dashboard'    && <Dashboard setView={setView} />}
+      {safeView === 'transactions' && <Transactions />}
+      {safeView === 'recurring'    && <Recurring />}
+      {safeView === 'bankimport'   && <BankImport />}
+      {safeView === 'rules'        && <AutoRules />}
+      {safeView === 'tasks'        && <Tasks setView={setView} />}
+      {safeView === 'invoices'     && <Invoices />}
+      {safeView === 'accounts'     && <ChartOfAccounts />}
+      {safeView === 'budget'       && <Budget />}
+      {safeView === 'payroll'      && <Payroll />}
+      {safeView === 'vat'          && <VAT />}
+      {safeView === 'vatreturn'    && <VATReturn />}
+      {safeView === 'reports'      && <Reports />}
+      {safeView === 'annual'       && <AnnualAccounts />}
+      {safeView === 'settings'     && <Settings />}
+      {safeView === 'ai'           && <AIAssistant />}
+      {safeView === 'stock'        && <Stock />}
+      {safeView === 'jobs'         && <Jobs sessionUser={sessionUser} />}
+      {safeView === 'users'        && <Users sessionUser={sessionUser} />}
+      {safeView === 'upgrade'      && <Upgrade />}
+      {safeView === 'reviews'      && <ReviewManager />}
     </Layout>
   );
 }

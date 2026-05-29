@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { signOut } from '../utils/supabase';
-import { View } from '../types';
+import { View, UserPermissions } from '../types';
+import { canAccessView } from '../utils/access';
 import type { SessionUser } from '../App';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
   setView: (v: View) => void;
   children: React.ReactNode;
   sessionUser?: SessionUser | null;
+  perms?: UserPermissions | null;
   onSignOut?: () => void;
 }
 
@@ -83,7 +85,7 @@ function SyncIndicator() {
   );
 }
 
-export default function Layout({ view, setView, children, sessionUser, onSignOut }: Props) {
+export default function Layout({ view, setView, children, sessionUser, perms, onSignOut }: Props) {
   const { t, lang, setLang, data } = useApp();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const companyName = data.settings.company.name || t('appName');
@@ -120,7 +122,10 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
 
       <nav className="flex-1 py-3 px-2 overflow-y-auto">
         {sections.map((section, si) => {
-          const items = section.items.filter(item => item.id !== 'users' || supabaseConfigured);
+          const items = section.items.filter(item =>
+            (item.id !== 'users' || supabaseConfigured) &&
+            canAccessView(item.id, perms ?? null),
+          );
           if (items.length === 0) return null;
           return (
           <div key={si} className={si > 0 ? 'mt-1' : ''}>
@@ -240,7 +245,7 @@ export default function Layout({ view, setView, children, sessionUser, onSignOut
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 flex no-print safe-area-pb">
-        {bottomNavItems.map(({ id, icon: Icon }) => (
+        {bottomNavItems.filter(item => canAccessView(item.id, perms ?? null)).map(({ id, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setView(id)}
