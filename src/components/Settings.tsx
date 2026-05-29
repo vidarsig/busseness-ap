@@ -1,10 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2, FlaskConical } from 'lucide-react';
+import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2 } from 'lucide-react';
 import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
 import { COUNTRY_LIST } from '../data/countries';
-import { generateDemoData } from '../utils/demoData';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
@@ -553,54 +552,14 @@ export default function Settings() {
             <p className="text-[10px] text-blue-500 mt-2">Jobboks v1.0 · © 2026</p>
           </div>
 
-          {/* Demo data */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-            <h3 className="text-xs font-semibold text-amber-800 mb-1 flex items-center gap-1.5">
-              <FlaskConical className="w-3.5 h-3.5" />
-              {lang === 'is' ? 'Sýnigögn' : 'Demo data'}
+          {/* Data maintenance */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <h3 className="text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5" />
+              {lang === 'is' ? 'Gögn' : 'Data'}
             </h3>
-            <p className="text-xs text-amber-700 mb-3">
-              {lang === 'is'
-                ? 'Fyllir appið með raunhæfum sýnigögnum. Hentugt fyrir skjámyndir og kynningu.'
-                : 'Fills the app with realistic sample data. Useful for screenshots and demos.'}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  // Use form (unsaved) settings so currency change takes effect immediately
-                  const dataWithForm = { ...data, settings: form };
-                  const demo = generateDemoData(dataWithForm);
-                  dispatch({ type: 'LOAD', payload: { ...dataWithForm, ...demo } });
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition">
-                <FlaskConical className="w-3.5 h-3.5" />
-                {lang === 'is' ? 'Hlaða sýnigögnum' : 'Load demo data'}
-              </button>
-              <button
-                onClick={() => {
-                  const isDemo = (item: { id: string }) => item.id.includes('_demo_');
-                  dispatch({ type: 'LOAD', payload: {
-                    ...data, settings: form,
-                    transactions:   (data.transactions   ?? []).filter(x => !isDemo(x)),
-                    invoices:       (data.invoices       ?? []).filter(x => !isDemo(x)),
-                    jobs:           (data.jobs           ?? []).filter(x => !isDemo(x)),
-                    timeEntries:    (data.timeEntries    ?? []).filter(x => !isDemo(x)),
-                    jobMaterials:   (data.jobMaterials   ?? []).filter(x => !isDemo(x)),
-                    stockItems:     (data.stockItems     ?? []).filter(x => !isDemo(x)),
-                    stockMovements: (data.stockMovements ?? []).filter(x => !isDemo(x)),
-                    payrollEntries: (data.payrollEntries ?? []).filter(x => !isDemo(x)),
-                    tasks:          (data.tasks          ?? []).filter(x => !isDemo(x)),
-                    budgetLines:    (data.budgetLines    ?? []).filter(x => !isDemo(x)),
-                  }});
-                }}
-                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-700 rounded-lg text-xs font-medium transition">
-                {lang === 'is' ? 'Hreinsa sýnigögn' : 'Clear demo data'}
-              </button>
-            </div>
-
-            {/* Start fresh — keep only the imported bank transactions */}
-            <div className="mt-4 pt-4 border-t border-amber-200">
-              <p className="text-xs text-amber-700 mb-2">
+            <div>
+              <p className="text-xs text-slate-600 mb-2">
                 {lang === 'is'
                   ? 'Byrja upp á nýtt: hreinsar ALLT annað (reikninga, verk, birgðir, laun o.fl.) en heldur innfluttu bankafærslunum þínum.'
                   : 'Start fresh: clears EVERYTHING else (invoices, jobs, stock, payroll, etc.) but keeps your imported bank transactions.'}
