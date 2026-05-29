@@ -44,7 +44,9 @@
       "Bash(gh run *)",
       "mcp__Claude_in_Chrome__list_connected_browsers",
       "mcp__Claude_in_Chrome__select_browser",
-      "Bash(git revert *)"
+      "Bash(git revert *)",
+      "PowerShell($env:PATH += \";C:\\\\Program Files\\\\GitHub CLI\"; gh run list --workflow=build-android.yml --limit 8 2>&1 | Select-Object -First 20)",
+      "Bash(xxd extracted/base/manifest/AndroidManifest.xml)"
     ]
   }
 }
