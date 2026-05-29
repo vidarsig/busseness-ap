@@ -35,15 +35,29 @@ function parseCsv(text: string): string[][] {
 }
 
 function parseDate(raw: string): string {
-  if (!raw) return todayISO();
-  const cleaned = raw.replace(/[."]/g, '').trim();
-  const dd = cleaned.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (raw == null || raw === '') return todayISO();
+  // Strip quotes/whitespace only — keep the . / - separators (Arion uses dots).
+  const cleaned = String(raw).replace(/['"]/g, '').trim();
+  // yyyy-mm-dd / yyyy.mm.dd / yyyy/mm/dd  (ISO-ish, year first)
+  const iso = cleaned.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2,'0')}-${iso[3].padStart(2,'0')}`;
+  // dd.mm.yyyy / dd/mm/yyyy / dd-mm-yyyy  (day first — Icelandic banks)
+  const dd = cleaned.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
   if (dd) {
     const y = dd[3].length === 2 ? `20${dd[3]}` : dd[3];
     return `${y}-${dd[2].padStart(2,'0')}-${dd[1].padStart(2,'0')}`;
   }
-  const iso = cleaned.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  // Excel serial date (days since 1899-12-30) — safety net if a cell comes raw.
+  if (/^\d+(\.\d+)?$/.test(cleaned)) {
+    const serial = parseFloat(cleaned);
+    if (serial > 59 && serial < 200000) {
+      const d = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    }
+  }
+  // Last resort: let the engine try.
+  const p = new Date(cleaned);
+  if (!isNaN(p.getTime())) return p.toISOString().split('T')[0];
   return todayISO();
 }
 
