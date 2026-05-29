@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, RotateCcw, Lock, Camera, Image } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency, InvoicePhoto } from '../types';
@@ -23,8 +23,8 @@ const statusColor: Record<Invoice['status'], string> = {
   overdue: 'bg-red-100 text-red-700',
 };
 
-function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
-  initial?: Invoice; defaultType?: 'invoice' | 'quote'; onSave: (inv: Invoice) => void; onClose: () => void;
+function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, onSave, onClose }: {
+  initial?: Invoice; defaultType?: 'invoice' | 'quote'; autoCamera?: boolean; onSave: (inv: Invoice) => void; onClose: () => void;
 }) {
   const { data, t, cc, lang } = useApp();
   const nextInvNum = `${data.settings.invoicePrefix}${String(data.settings.invoiceLastNumber + 1).padStart(4, '0')}`;
@@ -74,6 +74,10 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
   function setPhotoCaption(id: string, caption: string) {
     setForm(f => ({ ...f, photos: (f.photos ?? []).map(p => p.id === id ? { ...p, caption } : p) }));
   }
+  // When opened via the top-bar camera button, launch the camera straight away.
+  useEffect(() => {
+    if (autoCamera) cameraRef.current?.click();
+  }, [autoCamera]);
 
   function toggleType() {
     const newType = form.type === 'invoice' ? 'quote' : 'invoice';
@@ -408,13 +412,13 @@ function emailInvoice(inv: Invoice, companyName: string, lang: string) {
 
 export default function Invoices() {
   const { data, dispatch, t, lang, cc } = useApp();
-  const [modal, setModal] = useState<{ open: boolean; inv?: Invoice; defaultType?: 'invoice' | 'quote' }>({ open: false });
+  const [modal, setModal] = useState<{ open: boolean; inv?: Invoice; defaultType?: 'invoice' | 'quote'; autoCamera?: boolean }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [printInv, setPrintInv] = useState<Invoice | null>(null);
 
-  function openAddModal(defaultType: 'invoice' | 'quote') {
+  function openAddModal(defaultType: 'invoice' | 'quote', autoCamera = false) {
     if (isInvoiceLimitReached(data)) { setLimitModal(true); return; }
-    setModal({ open: true, defaultType });
+    setModal({ open: true, defaultType, autoCamera });
   }
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [docType, setDocType] = useState<'all' | 'invoice' | 'quote'>('all');
@@ -624,6 +628,10 @@ export default function Invoices() {
           )}
         </div>
         <div className="flex gap-2">
+          <button onClick={() => openAddModal('invoice', true)} title={lang === 'is' ? 'Nýr reikningur með mynd' : 'New invoice with photo'}
+            className="flex items-center gap-1.5 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
+            <Camera className="w-4 h-4" /> <span className="hidden sm:inline">{lang === 'is' ? 'Taka mynd' : 'Take photo'}</span>
+          </button>
           <button onClick={() => openAddModal('quote')}
             className="flex items-center gap-1.5 border border-purple-300 text-purple-700 bg-purple-50 px-3 py-2 rounded-lg text-sm font-medium hover:bg-purple-100">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">{t('addQuote')}</span>
@@ -844,6 +852,7 @@ export default function Invoices() {
         <InvoiceModal
           initial={modal.inv}
           defaultType={modal.defaultType ?? 'invoice'}
+          autoCamera={modal.autoCamera}
           onSave={handleSave}
           onClose={() => setModal({ open: false })}
         />
