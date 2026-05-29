@@ -239,6 +239,7 @@ export interface AppSettings {
   personalDeductionMonthly: number;
   country: string;
   salesTaxRate: number;
+  corporateTaxRate: number;
   vatRates: number[];
   standardRate: number;
   vatTerm: string;
@@ -441,6 +442,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   personalDeductionMonthly: 62596,
   country: '',
   salesTaxRate: 8,
+  corporateTaxRate: 20,
   vatRates: [24, 11, 0],
   standardRate: 24,
   vatTerm: 'VSK',

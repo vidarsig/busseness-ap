@@ -398,6 +398,12 @@ export default function Settings() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className={labelCls}>{lang === 'is' ? 'Tekjuskattur fyrirtækja (%)' : 'Corporate income tax (%)'}</label>
+                <input type="number" className={inputCls} value={form.corporateTaxRate}
+                  onChange={e => setTop('corporateTaxRate', parseFloat(e.target.value) || 0)} min={0} max={100} step="0.01" />
+                <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Notað í ársreikningi og rekstrarniðurstöðu' : 'Used in annual accounts and profit/loss'}</p>
+              </div>
             </div>
           </div>
 

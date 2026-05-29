@@ -35,7 +35,16 @@
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__javascript_tool",
       "Bash(powershell -Command \"\\(Get-Content src\\\\components\\\\AnnualAccounts.tsx -Raw\\) -replace 'formatISK\\\\\\(amount, lang\\\\\\)', 'fmtISK\\(amount\\)' -replace 'formatISK\\\\\\(isNeg \\\\? -amount : amount, lang\\\\\\)', 'fmtISK\\(isNeg ? -amount : amount\\)' -replace 'formatISK\\\\\\(item\\\\.amount, lang\\\\\\)', 'fmtISK\\(item.amount\\)' | Set-Content src\\\\components\\\\AnnualAccounts.tsx -Encoding utf8\")",
-      "Bash(powershell -Command '@ *)"
+      "Bash(powershell -Command '@ *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\vidar\\\\Claude bussines app\" -Recurse -Depth 2)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(git stash *)",
+      "Bash(git pull *)",
+      "Bash(gh run *)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__select_browser",
+      "Bash(git revert *)"
     ]
   }
 }

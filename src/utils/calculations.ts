@@ -94,7 +94,7 @@ export interface ProfitLoss {
   netResult: number;
 }
 
-export function calcProfitLoss(transactions: Transaction[]): ProfitLoss {
+export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 20): ProfitLoss {
   const sumCat = (type: 'income' | 'expense', category: string) =>
     transactions
       .filter(t => t.type === type && t.category === category)
@@ -124,7 +124,7 @@ export function calcProfitLoss(transactions: Transaction[]): ProfitLoss {
 
   const operatingProfit = totalRevenue - totalOperatingExpenses;
   const profitBeforeTax = operatingProfit - fjarmagnsgjold;
-  const incomeTax = profitBeforeTax > 0 ? profitBeforeTax * 0.20 : 0;
+  const incomeTax = profitBeforeTax > 0 ? profitBeforeTax * (corporateTaxRate / 100) : 0;
   const netResult = profitBeforeTax - incomeTax;
 
   return {

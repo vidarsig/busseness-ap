@@ -76,7 +76,7 @@ export default function AnnualAccounts() {
   const year = data.settings.fiscalYear;
   const company = data.settings.company;
   const txs = filterByYear(data.transactions, year);
-  const pl = calcProfitLoss(txs);
+  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
 
   const [bsModal, setBsModal] = useState<{ open: boolean; item?: BalanceSheetItem }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);

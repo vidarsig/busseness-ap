@@ -211,6 +211,7 @@ function migrateData(parsed: Partial<AppData>): AppData {
       company: { ...DEFAULT_SETTINGS.company, ...parsed.settings?.company },
       country: parsed.settings?.country ?? '',
       salesTaxRate: parsed.settings?.salesTaxRate ?? 8,
+      corporateTaxRate: parsed.settings?.corporateTaxRate ?? 20,
       quoteLastNumber: parsed.settings?.quoteLastNumber ?? 0,
       supabaseUrl: parsed.settings?.supabaseUrl ?? '',
       supabaseKey: parsed.settings?.supabaseKey ?? '',

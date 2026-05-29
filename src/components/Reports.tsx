@@ -88,7 +88,7 @@ export default function Reports() {
   if (!years.includes(currentYear)) years.unshift(currentYear);
 
   const txs = filterByYear(data.transactions, year);
-  const pl = calcProfitLoss(txs);
+  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
 
   const Row = ({ label, amount, bold, indent, isNegative }: {
     label: string; amount: number; bold?: boolean; indent?: boolean; isNegative?: boolean;
