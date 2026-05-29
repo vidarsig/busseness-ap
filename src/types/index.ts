@@ -282,15 +282,14 @@ export interface AppSettings {
 }
 
 // ── Jobs / Work Accounting ───────────────────────────────────
-// Site-visit-first pipeline:
+// Site-visit-first pipeline. Offers/quotes live in Invoices, not here.
 //   survey    → foreman visits the site, takes photos, gathers info
-//   waiting   → an offer OR an hourly arrangement was sent; awaiting customer yes/no
 //   scheduled → customer said yes; plan when the work happens
-//   active    → work being done
+//   active    → work being done (logs hours/materials/photos)
 //   paused    → active job temporarily stopped
 //   complete  → finished → becomes an invoice
-//   cancelled → customer said no / job dropped
-export type JobStatus = 'survey' | 'waiting' | 'scheduled' | 'active' | 'paused' | 'complete' | 'cancelled';
+//   cancelled → customer said no / job dropped (reachable from any stage)
+export type JobStatus = 'survey' | 'scheduled' | 'active' | 'paused' | 'complete' | 'cancelled';
 
 // Report approval workflow: a worker submits the job report (time + photos),
 // a manager/owner approves it, and ONLY then can the job become an invoice.

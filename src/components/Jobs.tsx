@@ -21,7 +21,6 @@ const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ou
 
 const STATUS_COLORS: Record<JobStatus, string> = {
   survey:    'bg-purple-100 text-purple-700 border border-purple-200',
-  waiting:   'bg-yellow-100 text-yellow-700 border border-yellow-200',
   scheduled: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
   active:    'bg-green-100 text-green-700 border border-green-200',
   paused:    'bg-amber-100 text-amber-700 border border-amber-200',
@@ -30,14 +29,13 @@ const STATUS_COLORS: Record<JobStatus, string> = {
 };
 
 const STATUS_ICONS: Record<JobStatus, React.ElementType> = {
-  survey: Search, waiting: Clock, scheduled: Calendar, active: HardHat,
+  survey: Search, scheduled: Calendar, active: HardHat,
   paused: PauseCircle, complete: CheckCircle, cancelled: XCircle,
 };
 
 // Plain-language stage names. Survey-first pipeline the foreman actually follows.
 const STATUS_LABELS: Record<JobStatus, { is: string; en: string }> = {
   survey:    { is: 'Vettvangsskoðun', en: 'Site visit' },
-  waiting:   { is: 'Bíður svars',     en: 'Waiting for customer' },
   scheduled: { is: 'Tímaskipulag',    en: 'Scheduling' },
   active:    { is: 'Í vinnslu',       en: 'Active' },
   paused:    { is: 'Á bið',           en: 'Paused' },
@@ -351,7 +349,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
 
   // ── filter ────────────────────────────────────────────────
   const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => j.status === statusFilter);
-  const STATUSES: JobStatus[] = ['survey','waiting','scheduled','active','paused','complete','cancelled'];
+  const STATUSES: JobStatus[] = ['survey','scheduled','active','paused','complete','cancelled'];
 
   return (
     <div className="space-y-5">
@@ -393,7 +391,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       {jobs.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: t('Bíður svars', 'Waiting'), count: jobs.filter(j=>j.status==='survey'||j.status==='waiting').length, color:'text-yellow-600' },
+            { label: t('Vettvangsskoðun', 'Site visits'), count: jobs.filter(j=>j.status==='survey').length, color:'text-purple-600' },
             { label: t('Virk', 'Active'), count: jobs.filter(j=>j.status==='active').length, color:'text-green-600' },
             { label: t('Lokið', 'Complete'), count: jobs.filter(j=>j.status==='complete').length, color:'text-blue-600' },
             { label: t('Myndir', 'Photos'), count: photos.length, color:'text-orange-600' },

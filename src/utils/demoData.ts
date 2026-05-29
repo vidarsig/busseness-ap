@@ -158,7 +158,7 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
       clientEmail: isIS ? 'bygg@example.is'                     : isEN_US ? 'info@riverside.com'                   : 'info@northside.co.uk',
       clientPhone: isIS ? '555-9012'                            : isEN_US ? '(212) 555-0789'                       : '020 7946 0001',
       address:     isIS ? 'Hamraborg 5, 200 Kópavogur'          : isEN_US ? '789 Park Drive, Manhattan, NY 10001'  : 'Northside Business Park, Bristol BS1 4DJ',
-      status:'waiting', startDate:daysAgo(-7),
+      status:'survey', startDate:daysAgo(-7),
       quotedAmount:a(1450000), currency:cur,
       description: isIS ? 'Steypugrunnur fyrir nýtt hús. 4 m³ steypa, járnakerfi.' : 'Concrete foundation for new build. 4 m³ concrete, rebar framework.',
       createdAt:isoAgo(2), updatedAt:isoAgo(1),
