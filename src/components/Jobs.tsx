@@ -77,6 +77,27 @@ export default function Jobs({ sessionUser }: JobsProps) {
     if (isJobLimitReached(data)) { setLimitModal(true); return; }
     setJobForm({ open: true, job: emptyJob() });
   }
+
+  // Top-bar camera: create a new job right away, open its editor, and launch
+  // the camera so the photo attaches to that brand-new job. The user then
+  // fills in the name/client and saves.
+  function openNewJobWithCamera() {
+    if (isJobLimitReached(data)) { setLimitModal(true); return; }
+    const now = nowISO();
+    const id = newId('job');
+    const job = {
+      ...emptyJob(),
+      id,
+      number: nextJobNumber(),
+      name: t('Nýtt verkefni', 'New job'),
+      createdAt: now,
+      updatedAt: now,
+    } as Job;
+    dispatch({ type: 'ADD_JOB', payload: job });
+    setPhotoJobId(id);
+    setJobForm({ open: true, job });
+    setTimeout(() => cameraRef.current?.click(), 150);
+  }
   const [timeForm, setTimeForm]         = useState<TimeFormState>({ open: false, jobId: '' });
   const [matForm, setMatForm]           = useState<MatFormState>({ open: false, jobId: '' });
   const [lightbox, setLightbox]         = useState<JobPhoto | null>(null);
@@ -332,11 +353,18 @@ export default function Jobs({ sessionUser }: JobsProps) {
             {t('Verkefni · Tímar · Efni · Myndir → Reikningur', 'Jobs · Hours · Materials · Photos → Invoice')}
           </p>
         </div>
-        <button onClick={openNewJob}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
-          <Plus className="w-4 h-4" />
-          {t('Nýtt verkefni', 'New job')}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={openNewJobWithCamera} title={t('Nýtt verkefni með mynd', 'New job with photo')}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition">
+            <Camera className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('Taka mynd', 'Take photo')}</span>
+          </button>
+          <button onClick={openNewJob}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">{t('Nýtt verkefni', 'New job')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats bar */}
