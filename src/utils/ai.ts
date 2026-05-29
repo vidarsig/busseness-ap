@@ -1,4 +1,5 @@
 import { AppData } from '../types';
+import { calcProfitLoss, calcVATSummary, filterByYear } from './calculations';
 
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
@@ -66,36 +67,65 @@ export async function streamClaude(
   }
 }
 
-export function buildContext(data: AppData, lang: string): string {
-  const year = data.settings.fiscalYear;
-  const yearTx = data.transactions.filter(tx => new Date(tx.date).getFullYear() === year);
-  const income = yearTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const expenses = yearTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+const fmtNum = (n: number) => Math.round(n).toLocaleString();
+
+// Full profit & loss summary for a single year, computed with the SAME engine
+// the Reports / Annual Accounts screens use, so the AI's figures reconcile exactly.
+function yearSummary(data: AppData, year: number): string {
+  const txs = filterByYear(data.transactions, year);
+  if (txs.length === 0) return '';
+  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
+  const vat = calcVATSummary(txs, data.settings.vatRates);
   const catBreakdown: Record<string, number> = {};
-  yearTx.forEach(tx => { catBreakdown[tx.category] = (catBreakdown[tx.category] ?? 0) + tx.amount; });
+  txs.forEach(tx => { catBreakdown[tx.category] = (catBreakdown[tx.category] ?? 0) + tx.amount; });
+
+  return `── YEAR ${year} (${txs.length} transactions) ──
+Total revenue: ${fmtNum(pl.totalRevenue)}
+Total operating expenses: ${fmtNum(pl.totalOperatingExpenses)}
+Operating profit: ${fmtNum(pl.operatingProfit)}
+Financial expenses: ${fmtNum(pl.fjarmagnsgjold)}
+Profit before tax: ${fmtNum(pl.profitBeforeTax)}
+Income tax (${data.settings.corporateTaxRate}%): ${fmtNum(pl.incomeTax)}
+Net result: ${fmtNum(pl.netResult)}
+VAT — output: ${fmtNum(vat.totalOutput)} | input: ${fmtNum(vat.totalInput)} | net payable: ${fmtNum(vat.netVAT)}
+Category breakdown:
+${Object.entries(catBreakdown).map(([c, a]) => `  ${c}: ${fmtNum(a)}`).join('\n')}`;
+}
+
+export function buildContext(data: AppData, lang: string): string {
+  // Every year that actually has transactions, newest first — so the AI can
+  // analyse and compare any year (e.g. 2024 vs 2025), not just the fiscal year.
+  const years = [...new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))]
+    .sort((a, b) => b - a);
+
+  const perYear = years
+    .map(y => yearSummary(data, y))
+    .filter(Boolean)
+    .join('\n\n') || '  No transactions recorded yet.';
 
   const openInvoices = data.invoices.filter(i => i.type === 'invoice' && (i.status === 'sent' || i.status === 'overdue'));
   const recent = [...data.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 50);
 
   return `COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
-FISCAL YEAR: ${year} | LANGUAGE: ${lang === 'is' ? 'Icelandic' : 'English'}
+FISCAL YEAR (default): ${data.settings.fiscalYear} | CORPORATE TAX RATE: ${data.settings.corporateTaxRate}%
+LANGUAGE: ${lang === 'is' ? 'Icelandic' : 'English'}
+YEARS WITH DATA: ${years.join(', ') || 'none'}
 
-YEAR-TO-DATE ${year}:
-Income: ${Math.round(income).toLocaleString()} | Expenses: ${Math.round(expenses).toLocaleString()} | Net: ${Math.round(income - expenses).toLocaleString()}
-Transactions: ${yearTx.length}
+These per-year totals are calculated by the same engine as the Reports and Annual
+Accounts screens, so they reconcile exactly. Use them when asked about any year.
 
-CATEGORY BREAKDOWN:
-${Object.entries(catBreakdown).map(([c, a]) => `  ${c}: ${Math.round(a).toLocaleString()}`).join('\n')}
+FULL-YEAR FINANCIAL SUMMARIES:
+${perYear}
 
 OPEN INVOICES (${openInvoices.length}):
 ${openInvoices.map(i => {
     const total = i.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
-    return `  ${i.number} — ${i.customer.name}: ${Math.round(total).toLocaleString()} (${i.status})`;
+    return `  ${i.number} — ${i.customer.name}: ${fmtNum(total)} (${i.status})`;
   }).join('\n') || '  None'}
 
 RECENT TRANSACTIONS (last 50):
-${recent.map(tx => `  ${tx.date} | ${tx.type} | ${tx.category} | ${Math.round(tx.amount).toLocaleString()} | ${tx.description}`).join('\n')}`;
+${recent.map(tx => `  ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description}`).join('\n')}`;
 }
 
 export function buildChatSystem(data: AppData, lang: string): string {
@@ -107,6 +137,10 @@ You have access to their financial data and can help with:
 - Budget analysis
 - Identifying unusual patterns or concerns
 - Bookkeeping best practices
+- Comparing whole years (e.g. 2024 vs 2025) and preparing year-end financial summaries
+
+You have full-year totals for every year that has data. When the user asks about a
+specific year, use that year's summary. When comparing years, reference both.
 
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
