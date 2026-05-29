@@ -78,10 +78,18 @@ export default function Jobs({ sessionUser }: JobsProps) {
     setJobForm({ open: true, job: emptyJob() });
   }
 
-  // Top-bar camera: create a new job right away, open its editor, and launch
-  // the camera so the photo attaches to that brand-new job. The user then
-  // fills in the name/client and saves.
+  // Top-bar camera: pick which job the photo belongs to (any job, old or new),
+  // then launch the camera so the photo attaches to that job.
+  function pickJobForPhoto(jobId: string) {
+    setPhotoPicker(false);
+    setPhotoJobId(jobId);
+    setTimeout(() => cameraRef.current?.click(), 150);
+  }
+
+  // "New job + photo" from inside the picker: create a job, open its editor,
+  // and launch the camera so the photo attaches to that brand-new job.
   function openNewJobWithCamera() {
+    setPhotoPicker(false);
     if (isJobLimitReached(data)) { setLimitModal(true); return; }
     const now = nowISO();
     const id = newId('job');
@@ -102,6 +110,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const [matForm, setMatForm]           = useState<MatFormState>({ open: false, jobId: '' });
   const [lightbox, setLightbox]         = useState<JobPhoto | null>(null);
   const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null);
+  const [photoPicker, setPhotoPicker]   = useState(false);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -354,7 +363,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={openNewJobWithCamera} title={t('Nýtt verkefni með mynd', 'New job with photo')}
+          <button onClick={() => setPhotoPicker(true)} title={t('Taka mynd fyrir verkefni', 'Take photo for a job')}
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition">
             <Camera className="w-4 h-4" />
             <span className="hidden sm:inline">{t('Taka mynd', 'Take photo')}</span>
@@ -819,6 +828,46 @@ export default function Jobs({ sessionUser }: JobsProps) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Photo: pick which job ── */}
+      {photoPicker && (
+        <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50" onClick={() => setPhotoPicker(false)}>
+          <div className="bg-white w-full md:max-w-md md:rounded-2xl rounded-t-2xl shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Camera className="w-5 h-5 text-orange-500" />
+                {t('Velja verkefni fyrir mynd', 'Choose a job for the photo')}
+              </h2>
+              <button onClick={() => setPhotoPicker(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-2">
+              <button onClick={openNewJobWithCamera}
+                className="w-full flex items-center gap-2 px-3 py-3 mb-1 rounded-lg bg-blue-50 text-blue-700 font-medium text-sm hover:bg-blue-100 transition">
+                <Plus className="w-4 h-4 flex-shrink-0" />
+                {t('Nýtt verkefni', 'New job')}
+              </button>
+              {jobs.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">{t('Engin verkefni ennþá', 'No jobs yet')}</p>
+              ) : (
+                [...jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(job => (
+                  <button key={job.id} onClick={() => pickJobForPhoto(job.id)}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-left transition">
+                    <Camera className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-gray-800 truncate">{job.name}</div>
+                      <div className="text-xs text-gray-400 truncate">
+                        {job.number}{job.clientName ? ` · ${job.clientName}` : ''} · {jobPhotos(job.id).length} {t('myndir', 'photos')}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 
