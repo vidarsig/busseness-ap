@@ -32,6 +32,7 @@ public class MainActivity extends Activity {
     private PermissionRequest pendingPermissionRequest;
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraImageUri;
+    private boolean pendingCaptureMode;
     private WebView webView;
 
     @Override
@@ -90,10 +91,12 @@ public class MainActivity extends Activity {
                     filePathCallback.onReceiveValue(null);
                 }
                 filePathCallback = callback;
+                // The "Take photo" input sets capture; the gallery input does not.
+                pendingCaptureMode = params != null && params.isCaptureEnabled();
 
                 if (checkSelfPermission(android.Manifest.permission.CAMERA)
                         == PackageManager.PERMISSION_GRANTED) {
-                    launchChooser(true);
+                    launchChooser(true, pendingCaptureMode);
                 } else {
                     requestPermissions(
                         new String[]{android.Manifest.permission.CAMERA},
@@ -123,33 +126,47 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void launchChooser(boolean withCamera) {
-        Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
-        contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
-        contentIntent.setType("image/*");
-
-        Intent chooser = new Intent(Intent.ACTION_CHOOSER);
-        chooser.putExtra(Intent.EXTRA_INTENT, contentIntent);
-        chooser.putExtra(Intent.EXTRA_TITLE, "Select receipt");
-
+    private void launchChooser(boolean withCamera, boolean captureMode) {
         cameraImageUri = null;
+
+        // Build the camera intent if allowed and available
+        Intent cameraIntent = null;
         if (withCamera) {
-            Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-            if (cameraIntent.resolveActivity(getPackageManager()) != null) {
+            Intent ci = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            if (ci.resolveActivity(getPackageManager()) != null) {
                 File photoFile = createImageFile();
                 if (photoFile != null) {
                     cameraImageUri = FileProvider.getUriForFile(
                         this, getPackageName() + ".fileprovider", photoFile);
-                    cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
-                    cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    ci.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
+                    ci.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                         | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+                    cameraIntent = ci;
                 }
             }
         }
 
+        Intent launch;
+        if (captureMode && cameraIntent != null) {
+            // "Take photo" button — go straight to the camera
+            launch = cameraIntent;
+        } else {
+            // Gallery / generic file input — show picker (with camera option if available)
+            Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
+            contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+            contentIntent.setType("image/*");
+
+            Intent chooser = new Intent(Intent.ACTION_CHOOSER);
+            chooser.putExtra(Intent.EXTRA_INTENT, contentIntent);
+            chooser.putExtra(Intent.EXTRA_TITLE, "Select receipt");
+            if (cameraIntent != null) {
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+            }
+            launch = chooser;
+        }
+
         try {
-            startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
+            startActivityForResult(launch, FILE_CHOOSER_REQUEST);
         } catch (Exception e) {
             if (filePathCallback != null) {
                 filePathCallback.onReceiveValue(null);
@@ -200,8 +217,8 @@ public class MainActivity extends Activity {
         } else if (requestCode == FILECHOOSER_CAMERA_PERMISSION_REQUEST) {
             boolean granted = grantResults.length > 0
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            // Launch with camera if granted, gallery-only otherwise
-            launchChooser(granted);
+            // Launch with camera if granted; if denied, fall back to gallery picker
+            launchChooser(granted, granted && pendingCaptureMode);
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
