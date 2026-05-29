@@ -34,16 +34,17 @@ export interface UserPermissions {
   canViewJobs: boolean;
   canEditJobs: boolean;
   canLogTime: boolean;           // clock in/out on jobs
+  canApproveJobReports: boolean; // approve a job report & convert it to an invoice
   canViewSettings: boolean;
   canExportData: boolean;
 }
 
 export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {
-  owner: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:true, canViewInvoices:true, canEditInvoices:true, canViewStock:true, canEditStock:true, canViewJobs:true, canEditJobs:true, canLogTime:true, canViewSettings:true, canExportData:true },
-  manager: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:false, canViewInvoices:true, canEditInvoices:true, canViewStock:true, canEditStock:true, canViewJobs:true, canEditJobs:true, canLogTime:true, canViewSettings:false, canExportData:true },
-  accountant: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:true, canViewInvoices:true, canEditInvoices:true, canViewStock:false, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:false, canViewSettings:false, canExportData:true },
-  staff: { canViewFinancials:false, canEditTransactions:false, canViewPayroll:false, canEditPayroll:false, canViewInvoices:false, canEditInvoices:false, canViewStock:true, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:true, canViewSettings:false, canExportData:false },
-  viewer: { canViewFinancials:true, canEditTransactions:false, canViewPayroll:false, canEditPayroll:false, canViewInvoices:true, canEditInvoices:false, canViewStock:true, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:false, canViewSettings:false, canExportData:false },
+  owner: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:true, canViewInvoices:true, canEditInvoices:true, canViewStock:true, canEditStock:true, canViewJobs:true, canEditJobs:true, canLogTime:true, canApproveJobReports:true, canViewSettings:true, canExportData:true },
+  manager: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:false, canViewInvoices:true, canEditInvoices:true, canViewStock:true, canEditStock:true, canViewJobs:true, canEditJobs:true, canLogTime:true, canApproveJobReports:true, canViewSettings:false, canExportData:true },
+  accountant: { canViewFinancials:true, canEditTransactions:true, canViewPayroll:true, canEditPayroll:true, canViewInvoices:true, canEditInvoices:true, canViewStock:false, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:false, canApproveJobReports:true, canViewSettings:false, canExportData:true },
+  staff: { canViewFinancials:false, canEditTransactions:false, canViewPayroll:false, canEditPayroll:false, canViewInvoices:false, canEditInvoices:false, canViewStock:true, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:true, canApproveJobReports:false, canViewSettings:false, canExportData:false },
+  viewer: { canViewFinancials:true, canEditTransactions:false, canViewPayroll:false, canEditPayroll:false, canViewInvoices:true, canEditInvoices:false, canViewStock:true, canEditStock:false, canViewJobs:true, canEditJobs:false, canLogTime:false, canApproveJobReports:false, canViewSettings:false, canExportData:false },
 };
 
 export type TaskPriority = 'low' | 'medium' | 'high';

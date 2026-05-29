@@ -6,7 +6,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency, UserRole } from '../types';
+import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import type { SessionUser } from '../App';
@@ -48,18 +48,18 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const isIS = lang === 'is';
   const t = (is: string, en: string) => isIS ? is : en;
 
-  // ── Current user role (for report approval gate) ──
-  // In single-user / local mode (no matching appUser) default to 'owner'
-  // so the solo tradesperson is never locked out of their own jobs.
+  // ── Report-approval permission ──
+  // Who may approve a job report and convert it to an invoice is set per
+  // worker in Settings → Users (canApproveJobReports). In single-user /
+  // local mode (no app users configured) the solo tradesperson can approve,
+  // so they are never locked out of their own jobs.
   const appUsers = data.appUsers ?? [];
-  const currentRole: UserRole = (() => {
-    if (sessionUser?.email) {
-      const u = appUsers.find(au => au.email.toLowerCase() === sessionUser.email.toLowerCase());
-      if (u) return u.role;
-    }
-    return appUsers.length === 0 ? 'owner' : 'staff';
-  })();
-  const canApprove = currentRole === 'owner' || currentRole === 'manager';
+  const currentAppUser = sessionUser?.email
+    ? appUsers.find(au => au.email.toLowerCase() === sessionUser.email.toLowerCase())
+    : undefined;
+  const canApprove = currentAppUser
+    ? !!currentAppUser.permissions?.canApproveJobReports
+    : appUsers.length === 0; // local/solo mode → allowed
   const currentUserName = sessionUser?.name || sessionUser?.email || t('Starfsmaður','Worker');
 
   const jobs      = data.jobs ?? [];

@@ -33,6 +33,7 @@ const PERMISSION_LABELS: { key: keyof UserPermissions; labelEn: string; labelIs:
   { key: 'canViewJobs',          labelEn: 'View jobs',             labelIs: 'Sjá verkefni' },
   { key: 'canEditJobs',          labelEn: 'Edit jobs',             labelIs: 'Breyta verkefnum' },
   { key: 'canLogTime',           labelEn: 'Log time',              labelIs: 'Skrá tíma' },
+  { key: 'canApproveJobReports', labelEn: 'Approve & invoice jobs', labelIs: 'Samþykkja & reikningsfæra verk' },
   { key: 'canViewSettings',      labelEn: 'View settings',         labelIs: 'Sjá stillingar' },
   { key: 'canExportData',        labelEn: 'Export data',           labelIs: 'Flytja út gögn' },
 ];
