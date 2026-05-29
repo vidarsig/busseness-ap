@@ -3,7 +3,7 @@ import { pushData, pullData } from '../utils/supabase';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
-  StockItem, StockMovement, Supplier, Job, TimeEntry, JobMaterial, JobPhoto, AppUser,
+  StockItem, StockMovement, Supplier, Job, TimeEntry, JobMaterial, JobPhoto, AppUser, Employee,
   DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, Language, CountryConfig,
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
@@ -30,6 +30,7 @@ const defaultData: AppData = {
   recurringTransactions: [],
   budgetLines: [],
   payrollEntries: [],
+  employees: [],
   tasks: [],
   stockItems: [],
   stockMovements: [],
@@ -64,6 +65,9 @@ type Action =
   | { type: 'ADD_PAYROLL'; payload: PayrollEntry }
   | { type: 'UPDATE_PAYROLL'; payload: PayrollEntry }
   | { type: 'DELETE_PAYROLL'; payload: string }
+  | { type: 'ADD_EMPLOYEE'; payload: Employee }
+  | { type: 'UPDATE_EMPLOYEE'; payload: Employee }
+  | { type: 'DELETE_EMPLOYEE'; payload: string }
   | { type: 'ADD_RULE'; payload: CategoryRule }
   | { type: 'UPDATE_RULE'; payload: CategoryRule }
   | { type: 'DELETE_RULE'; payload: string }
@@ -122,6 +126,9 @@ function reducer(state: AppData, action: Action): AppData {
     case 'ADD_PAYROLL': return { ...state, payrollEntries: [...state.payrollEntries, action.payload] };
     case 'UPDATE_PAYROLL': return { ...state, payrollEntries: state.payrollEntries.map(p => p.id === action.payload.id ? action.payload : p) };
     case 'DELETE_PAYROLL': return { ...state, payrollEntries: state.payrollEntries.filter(p => p.id !== action.payload) };
+    case 'ADD_EMPLOYEE': return { ...state, employees: [...state.employees, action.payload] };
+    case 'UPDATE_EMPLOYEE': return { ...state, employees: state.employees.map(e => e.id === action.payload.id ? action.payload : e) };
+    case 'DELETE_EMPLOYEE': return { ...state, employees: state.employees.filter(e => e.id !== action.payload) };
     case 'ADD_RULE': return { ...state, categoryRules: [...state.categoryRules, action.payload] };
     case 'UPDATE_RULE': return { ...state, categoryRules: state.categoryRules.map(r => r.id === action.payload.id ? action.payload : r) };
     case 'DELETE_RULE': return { ...state, categoryRules: state.categoryRules.filter(r => r.id !== action.payload) };
@@ -194,6 +201,7 @@ function migrateData(parsed: Partial<AppData>): AppData {
     recurringTransactions: parsed.recurringTransactions ?? [],
     budgetLines: parsed.budgetLines ?? [],
     payrollEntries: parsed.payrollEntries ?? [],
+    employees: parsed.employees ?? [],
     categoryRules: parsed.categoryRules ?? [],
     tasks: parsed.tasks ?? [],
     stockItems: parsed.stockItems ?? [],

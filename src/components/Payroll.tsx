@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, X, Users, Download, FileText, FileSpreadsheet } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Users, Download, FileText, FileSpreadsheet, UserCog, Clock, Wallet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { PayrollEntry } from '../types';
+import { PayrollEntry, Employee } from '../types';
 import { exportPDF, exportExcel } from '../utils/exports';
 import { isPayrollLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
@@ -15,6 +15,76 @@ function downloadCSV(filename: string, rows: string[][]) {
 }
 
 function newId() { return `pay_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
+function newEmpId() { return `emp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
+
+function EmployeeModal({ initial, onSave, onClose }: {
+  initial?: Employee; onSave: (e: Employee) => void; onClose: () => void;
+}) {
+  const { t, lang } = useApp();
+  const [name, setName] = useState(initial?.name ?? '');
+  const [kennitala, setKennitala] = useState(initial?.kennitala ?? '');
+  const [monthlySalary, setMonthlySalary] = useState(initial?.monthlySalary ?? 0);
+  const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate ?? 0);
+  const [active, setActive] = useState(initial?.active ?? true);
+  const [notes, setNotes] = useState(initial?.notes ?? '');
+
+  const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  const lbl = 'block text-xs font-medium text-gray-600 mb-1';
+  const ktLabel = t('kennitala');
+
+  function handleSave() {
+    onSave({
+      id: initial?.id ?? newEmpId(), name, kennitala: kennitala || undefined,
+      monthlySalary, hourlyRate, active, notes: notes || undefined,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50">
+      <div className="bg-white w-full md:max-w-md md:rounded-2xl rounded-t-2xl shadow-xl p-5 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-gray-900">
+            {initial ? (lang === 'is' ? 'Breyta starfsmanni' : 'Edit employee') : (lang === 'is' ? 'Nýr starfsmaður' : 'New employee')}
+          </h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className={lbl}>{lang === 'is' ? 'Nafn starfsmanns' : 'Employee name'}</label>
+            <input className={inp} value={name} onChange={e => setName(e.target.value)} required />
+          </div>
+          <div>
+            <label className={lbl}>{ktLabel}</label>
+            <input className={inp} value={kennitala} onChange={e => setKennitala(e.target.value)} placeholder="000000-0000" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>{lang === 'is' ? 'Mánaðarlaun (ISK)' : 'Monthly salary (ISK)'}</label>
+              <input type="number" className={inp} value={monthlySalary || ''} onChange={e => setMonthlySalary(parseInt(e.target.value) || 0)} min={0} step={1000} />
+            </div>
+            <div>
+              <label className={lbl}>{lang === 'is' ? 'Tímakaup (ISK)' : 'Hourly rate (ISK)'}</label>
+              <input type="number" className={inp} value={hourlyRate || ''} onChange={e => setHourlyRate(parseInt(e.target.value) || 0)} min={0} step={50} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="w-4 h-4" />
+            {lang === 'is' ? 'Virkur starfsmaður' : 'Active employee'}
+          </label>
+          <div>
+            <label className={lbl}>{t('notes')}</label>
+            <input className={inp} value={notes} onChange={e => setNotes(e.target.value)} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={onClose} className="flex-1 border border-gray-300 py-3 rounded-xl text-sm">{t('cancel')}</button>
+            <button onClick={handleSave} disabled={!name}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm disabled:opacity-40">{t('save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function calcPayroll(gross: number, settings: { taxWithholdingRate: number; employeePensionRate: number; employerPensionRate: number; socialInsuranceRate: number; personalDeductionMonthly: number }) {
   const employeePension = Math.round(gross * settings.employeePensionRate / 100);
@@ -33,12 +103,30 @@ function PayrollModal({ initial, onSave, onClose }: {
 }) {
   const { t, lang, data, fmt } = useApp();
   const s = data.settings;
+  const activeEmployees = (data.employees ?? []).filter(e => e.active || e.id === initial?.employeeId);
+  const [employeeId, setEmployeeId] = useState<string>(initial?.employeeId ?? '');
   const [month, setMonth] = useState(initial?.month ?? thisMonth());
   const [name, setName] = useState(initial?.employeeName ?? '');
   const [kennitala, setKennitala] = useState(initial?.employeeKennitala ?? '');
   const [gross, setGross] = useState(initial?.grossWage ?? 0);
+  const [hours, setHours] = useState(0);
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [overrideTax, setOverrideTax] = useState<number | null>(initial ? initial.taxWithheld : null);
+
+  function selectEmployee(id: string) {
+    setEmployeeId(id);
+    const emp = activeEmployees.find(e => e.id === id);
+    if (emp) {
+      setName(emp.name);
+      setKennitala(emp.kennitala ?? '');
+      if (emp.monthlySalary > 0) { setGross(emp.monthlySalary); setHours(0); }
+    }
+  }
+  const selectedEmp = activeEmployees.find(e => e.id === employeeId);
+  function applyHours(h: number) {
+    setHours(h);
+    if (selectedEmp && selectedEmp.hourlyRate > 0) setGross(Math.round(h * selectedEmp.hourlyRate));
+  }
 
   const calc = useMemo(() => calcPayroll(gross, s), [gross, s]);
   const taxWithheld = overrideTax !== null ? overrideTax : calc.taxWithheld;
@@ -49,7 +137,8 @@ function PayrollModal({ initial, onSave, onClose }: {
 
   function handleSave() {
     const entry: PayrollEntry = {
-      id: initial?.id ?? newId(), month, employeeName: name, employeeKennitala: kennitala || undefined,
+      id: initial?.id ?? newId(), month, employeeId: employeeId || undefined,
+      employeeName: name, employeeKennitala: kennitala || undefined,
       grossWage: gross, employeePension: calc.employeePension, taxWithheld,
       employerPension: calc.employerPension, socialInsurance: calc.socialInsurance,
       netWage, notes: notes || undefined,
@@ -72,6 +161,17 @@ function PayrollModal({ initial, onSave, onClose }: {
           <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="space-y-3">
+          {activeEmployees.length > 0 && (
+            <div>
+              <label className={lbl}>{lang === 'is' ? 'Starfsmaður' : 'Employee'}</label>
+              <select className={inp} value={employeeId} onChange={e => selectEmployee(e.target.value)}>
+                <option value="">{lang === 'is' ? '— Slá inn handvirkt —' : '— Enter manually —'}</option>
+                {activeEmployees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>{lang === 'is' ? 'Mánuður' : 'Month'}</label>
@@ -86,9 +186,16 @@ function PayrollModal({ initial, onSave, onClose }: {
             <label className={lbl}>{lang === 'is' ? 'Nafn starfsmanns' : 'Employee name'}</label>
             <input className={inp} value={name} onChange={e => setName(e.target.value)} required />
           </div>
+          {selectedEmp && selectedEmp.hourlyRate > 0 && (
+            <div>
+              <label className={lbl}>{lang === 'is' ? `Tímar × ${fmt(selectedEmp.hourlyRate)}/klst` : `Hours × ${fmt(selectedEmp.hourlyRate)}/hr`}</label>
+              <input type="number" className={inp} value={hours || ''} onChange={e => applyHours(parseFloat(e.target.value) || 0)} min={0} step={0.5}
+                placeholder={lang === 'is' ? 'Fjöldi tíma' : 'Number of hours'} />
+            </div>
+          )}
           <div>
             <label className={lbl}>{lang === 'is' ? 'Brúttólaun (ISK)' : 'Gross wage (ISK)'}</label>
-            <input type="number" className={inp} value={gross || ''} onChange={e => setGross(parseInt(e.target.value) || 0)} min={0} step={1000} />
+            <input type="number" className={inp} value={gross || ''} onChange={e => { setGross(parseInt(e.target.value) || 0); }} min={0} step={1000} />
           </div>
 
           {gross > 0 && (
@@ -140,10 +247,22 @@ function PayrollModal({ initial, onSave, onClose }: {
 
 export default function Payroll() {
   const { data, dispatch, t, lang, fmt: fmtCur } = useApp();
+  const [tab, setTab] = useState<'runs' | 'employees'>('runs');
   const [modal, setModal] = useState<{ open: boolean; entry?: PayrollEntry }>({ open: false });
+  const [empModal, setEmpModal] = useState<{ open: boolean; employee?: Employee }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteEmpId, setDeleteEmpId] = useState<string | null>(null);
   const [filterMonth, setFilterMonth] = useState(thisMonth());
+
+  const employees = data.employees ?? [];
+
+  function handleSaveEmployee(emp: Employee) {
+    dispatch(employees.find(e => e.id === emp.id)
+      ? { type: 'UPDATE_EMPLOYEE', payload: emp }
+      : { type: 'ADD_EMPLOYEE', payload: emp });
+    setEmpModal({ open: false });
+  }
 
   function openAddPayroll() {
     if (isPayrollLimitReached(data)) { setLimitModal(true); return; }
@@ -232,7 +351,7 @@ export default function Payroll() {
           <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Launaútreikningur með íslenskum skattareglum' : 'Payroll with Icelandic tax rules'}</p>
         </div>
         <div className="flex gap-2">
-          {filtered.length > 0 && (<>
+          {tab === 'runs' && filtered.length > 0 && (<>
             <button onClick={exportToPDF}
               className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
               <FileText className="w-4 h-4" /><span className="hidden sm:inline">PDF</span>
@@ -246,13 +365,78 @@ export default function Payroll() {
               <Download className="w-4 h-4" /><span className="hidden sm:inline">CSV</span>
             </button>
           </>)}
-          <button onClick={openAddPayroll}
-            className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium">
-            <Plus className="w-4 h-4" /><span className="hidden sm:inline">{t('addPayroll')}</span>
-          </button>
+          {tab === 'runs' ? (
+            <button onClick={openAddPayroll}
+              className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium">
+              <Plus className="w-4 h-4" /><span className="hidden sm:inline">{t('addPayroll')}</span>
+            </button>
+          ) : (
+            <button onClick={() => setEmpModal({ open: true })}
+              className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium">
+              <Plus className="w-4 h-4" /><span className="hidden sm:inline">{lang === 'is' ? 'Nýr starfsmaður' : 'New employee'}</span>
+            </button>
+          )}
         </div>
       </div>
 
+      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+        <button onClick={() => setTab('runs')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium ${tab === 'runs' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
+          <Wallet className="w-4 h-4" />{lang === 'is' ? 'Launakeyrslur' : 'Payroll runs'}
+        </button>
+        <button onClick={() => setTab('employees')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium ${tab === 'employees' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>
+          <UserCog className="w-4 h-4" />{lang === 'is' ? 'Starfsmenn' : 'Employees'}
+        </button>
+      </div>
+
+      {tab === 'employees' ? (
+        <div>
+          <p className="text-xs text-gray-500 mb-3 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            {lang === 'is'
+              ? 'Trúnaðarupplýsingar — umsamin laun hvers starfsmanns (mánaðarlaun og tímakaup).'
+              : 'Sensitive — each employee’s agreed pay (monthly salary and hourly rate).'}
+          </p>
+          {employees.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 py-12 text-center text-gray-400 text-sm">
+              <UserCog className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              {lang === 'is' ? 'Engir starfsmenn skráðir' : 'No employees registered yet'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {[...employees].sort((a, b) => a.name.localeCompare(b.name)).map(emp => (
+                <div key={emp.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-gray-800 flex items-center gap-2">
+                        {emp.name}
+                        {!emp.active && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{lang === 'is' ? 'Óvirkur' : 'Inactive'}</span>}
+                      </p>
+                      {emp.kennitala && <p className="text-xs text-gray-400">{emp.kennitala}</p>}
+                      {emp.notes && <p className="text-xs text-gray-500 mt-0.5 italic">{emp.notes}</p>}
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => setEmpModal({ open: true, employee: emp })}
+                        className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteEmpId(emp.id)}
+                        className="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-50 text-xs">
+                    <div><span className="text-gray-500">{lang === 'is' ? 'Mánaðarlaun' : 'Monthly salary'}</span><div className="font-semibold font-mono">{emp.monthlySalary > 0 ? fmt(emp.monthlySalary) : '—'}</div></div>
+                    <div><span className="text-gray-500">{lang === 'is' ? 'Tímakaup' : 'Hourly rate'}</span><div className="font-semibold font-mono">{emp.hourlyRate > 0 ? fmt(emp.hourlyRate) : '—'}</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (<>
       <div className="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex items-center gap-3">
         <label className="text-xs font-medium text-gray-600">{lang === 'is' ? 'Mánuður' : 'Month'}:</label>
         <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -317,8 +501,22 @@ export default function Payroll() {
           </div>
         </>
       )}
+      </>)}
 
       {modal.open && <PayrollModal initial={modal.entry} onSave={handleSave} onClose={() => setModal({ open: false })} />}
+      {empModal.open && <EmployeeModal initial={empModal.employee} onSave={handleSaveEmployee} onClose={() => setEmpModal({ open: false })} />}
+      {deleteEmpId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
+            <h3 className="font-semibold mb-2">{t('warning')}</h3>
+            <p className="text-sm text-gray-600 mb-5">{t('confirmDelete')}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteEmpId(null)} className="flex-1 border border-gray-300 py-2 rounded-xl text-sm">{t('cancel')}</button>
+              <button onClick={() => { dispatch({ type: 'DELETE_EMPLOYEE', payload: deleteEmpId }); setDeleteEmpId(null); }} className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm">{t('delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {deleteId && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">

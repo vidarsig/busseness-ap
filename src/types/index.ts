@@ -168,6 +168,7 @@ export interface BudgetLine {
 export interface PayrollEntry {
   id: string;
   month: string; // YYYY-MM
+  employeeId?: string; // links to Employee master record when chosen
   employeeName: string;
   employeeKennitala?: string;
   grossWage: number;
@@ -176,6 +177,19 @@ export interface PayrollEntry {
   employerPension: number;
   socialInsurance: number;
   netWage: number;
+  notes?: string;
+}
+
+// Employee master record. Holds the agreed pay for each individual —
+// BOTH a monthly salary and an hourly rate — so a payroll run can be
+// started from either basis. Sensitive material (kennitala + pay).
+export interface Employee {
+  id: string;
+  name: string;
+  kennitala?: string;
+  monthlySalary: number; // agreed gross monthly salary
+  hourlyRate: number;    // agreed gross hourly rate
+  active: boolean;
   notes?: string;
 }
 
@@ -380,6 +394,7 @@ export interface AppData {
   recurringTransactions: RecurringTransaction[];
   budgetLines: BudgetLine[];
   payrollEntries: PayrollEntry[];
+  employees: Employee[];
   categoryRules: CategoryRule[];
   tasks: Task[];
   stockItems: StockItem[];
