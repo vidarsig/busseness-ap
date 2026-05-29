@@ -99,15 +99,18 @@ jobs:
             cp public/icon-192.png android/app/src/main/res/mipmap-$d/ic_launcher_round.png
           done
 
-      # ── Unique version code ───────────────────────────────────────
+      # ── Unique version code + name ────────────────────────────────
       # Play Console rejects any bundle whose versionCode was already used.
-      # Derive it from the run number so every build is unique and increasing.
-      - name: Set unique versionCode
+      # Derive both from the run number so every build is unique and
+      # increasing (versionCode for Play, versionName for users to see).
+      - name: Set unique versionCode and versionName
         working-directory: android
         run: |
           VC=$(( ${{ github.run_number }} + 100 ))
+          VN="1.2.${{ github.run_number }}"
           sed -i "s/versionCode .*/versionCode ${VC}/" app/build.gradle
-          echo "versionCode set to ${VC}"
+          sed -i "s/versionName .*/versionName \"${VN}\"/" app/build.gradle
+          echo "versionCode set to ${VC}, versionName set to ${VN}"
           grep -n "versionCode\|versionName" app/build.gradle
 
       # ── Build ─────────────────────────────────────────────────────
