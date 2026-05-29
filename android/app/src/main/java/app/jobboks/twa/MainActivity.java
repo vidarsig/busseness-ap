@@ -1,23 +1,37 @@
 package app.jobboks.twa;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import androidx.core.content.FileProvider;
+
+import java.io.File;
+import java.io.IOException;
+
 public class MainActivity extends Activity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 100;
+    private static final int FILECHOOSER_CAMERA_PERMISSION_REQUEST = 101;
+    private static final int FILE_CHOOSER_REQUEST = 200;
+
     private PermissionRequest pendingPermissionRequest;
+    private ValueCallback<Uri[]> filePathCallback;
+    private Uri cameraImageUri;
     private WebView webView;
 
     @Override
@@ -51,22 +65,42 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
-        // Handle camera permission requests from the web page
         webView.setWebChromeClient(new WebChromeClient() {
+            // Live camera stream requests (getUserMedia)
             @Override
             public void onPermissionRequest(PermissionRequest request) {
-                // Check if Android has granted camera permission
                 if (checkSelfPermission(android.Manifest.permission.CAMERA)
                         == PackageManager.PERMISSION_GRANTED) {
                     request.grant(request.getResources());
                 } else {
-                    // Store request and ask Android for permission
                     pendingPermissionRequest = request;
                     requestPermissions(
                         new String[]{android.Manifest.permission.CAMERA},
                         CAMERA_PERMISSION_REQUEST
                     );
                 }
+            }
+
+            // HTML <input type="file"> — open camera + gallery picker
+            @Override
+            public boolean onShowFileChooser(WebView view,
+                                             ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) {
+                    filePathCallback.onReceiveValue(null);
+                }
+                filePathCallback = callback;
+
+                if (checkSelfPermission(android.Manifest.permission.CAMERA)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    launchChooser(true);
+                } else {
+                    requestPermissions(
+                        new String[]{android.Manifest.permission.CAMERA},
+                        FILECHOOSER_CAMERA_PERMISSION_REQUEST
+                    );
+                }
+                return true;
             }
         });
 
@@ -89,6 +123,71 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void launchChooser(boolean withCamera) {
+        Intent contentIntent = new Intent(Intent.ACTION_GET_CONTENT);
+        contentIntent.addCategory(Intent.CATEGORY_OPENABLE);
+        contentIntent.setType("image/*");
+
+        Intent chooser = new Intent(Intent.ACTION_CHOOSER);
+        chooser.putExtra(Intent.EXTRA_INTENT, contentIntent);
+        chooser.putExtra(Intent.EXTRA_TITLE, "Select receipt");
+
+        cameraImageUri = null;
+        if (withCamera) {
+            Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            if (cameraIntent.resolveActivity(getPackageManager()) != null) {
+                File photoFile = createImageFile();
+                if (photoFile != null) {
+                    cameraImageUri = FileProvider.getUriForFile(
+                        this, getPackageName() + ".fileprovider", photoFile);
+                    cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
+                    cameraIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{cameraIntent});
+                }
+            }
+        }
+
+        try {
+            startActivityForResult(chooser, FILE_CHOOSER_REQUEST);
+        } catch (Exception e) {
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(null);
+                filePathCallback = null;
+            }
+        }
+    }
+
+    private File createImageFile() {
+        try {
+            File dir = new File(getCacheDir(), "receipts");
+            if (!dir.exists()) dir.mkdirs();
+            return File.createTempFile("receipt_", ".jpg", dir);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            if (filePathCallback == null) return;
+            Uri[] results = null;
+            if (resultCode == Activity.RESULT_OK) {
+                if (data != null && data.getData() != null) {
+                    results = new Uri[]{ data.getData() };          // gallery / file pick
+                } else if (cameraImageUri != null) {
+                    results = new Uri[]{ cameraImageUri };           // camera capture
+                }
+            }
+            filePathCallback.onReceiveValue(results);
+            filePathCallback = null;
+            cameraImageUri = null;
+        } else {
+            super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == CAMERA_PERMISSION_REQUEST && pendingPermissionRequest != null) {
@@ -98,6 +197,13 @@ public class MainActivity extends Activity {
                 pendingPermissionRequest.deny();
             }
             pendingPermissionRequest = null;
+        } else if (requestCode == FILECHOOSER_CAMERA_PERMISSION_REQUEST) {
+            boolean granted = grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            // Launch with camera if granted, gallery-only otherwise
+            launchChooser(granted);
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
