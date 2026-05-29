@@ -415,10 +415,39 @@ export default function Invoices() {
   const [modal, setModal] = useState<{ open: boolean; inv?: Invoice; defaultType?: 'invoice' | 'quote'; autoCamera?: boolean }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [printInv, setPrintInv] = useState<Invoice | null>(null);
+  const [photoPicker, setPhotoPicker] = useState(false);
+  const [photoInvId, setPhotoInvId] = useState('');
+  const invCameraRef = useRef<HTMLInputElement>(null);
 
   function openAddModal(defaultType: 'invoice' | 'quote', autoCamera = false) {
     if (isInvoiceLimitReached(data)) { setLimitModal(true); return; }
     setModal({ open: true, defaultType, autoCamera });
+  }
+
+  // Pick an existing invoice from the picker, then launch the camera. The photo
+  // attaches to that invoice WITHOUT unlocking any financial fields — even on
+  // issued/locked invoices, since a photo is a non-financial attachment.
+  function pickInvoiceForPhoto(invId: string) {
+    setPhotoPicker(false);
+    setPhotoInvId(invId);
+    setTimeout(() => invCameraRef.current?.click(), 150);
+  }
+
+  function attachPhotoToInvoice(files: FileList | null) {
+    if (!files || !photoInvId) return;
+    const target = data.invoices.find(i => i.id === photoInvId);
+    if (!target) return;
+    Promise.all(Array.from(files).map(file => new Promise<InvoicePhoto>(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({
+        id: `iphoto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        dataUrl: String(reader.result), createdAt: new Date().toISOString(),
+      });
+      reader.readAsDataURL(file);
+    }))).then(newPhotos => {
+      // Photo-only update — financial fields untouched, so locks are preserved.
+      dispatch({ type: 'UPDATE_INVOICE', payload: { ...target, photos: [...(target.photos ?? []), ...newPhotos] } });
+    });
   }
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [docType, setDocType] = useState<'all' | 'invoice' | 'quote'>('all');
@@ -628,7 +657,7 @@ export default function Invoices() {
           )}
         </div>
         <div className="flex gap-2">
-          <button onClick={() => openAddModal('invoice', true)} title={lang === 'is' ? 'Nýr reikningur með mynd' : 'New invoice with photo'}
+          <button onClick={() => setPhotoPicker(true)} title={lang === 'is' ? 'Taka mynd fyrir reikning' : 'Take photo for an invoice'}
             className="flex items-center gap-1.5 bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-orange-600">
             <Camera className="w-4 h-4" /> <span className="hidden sm:inline">{lang === 'is' ? 'Taka mynd' : 'Take photo'}</span>
           </button>
@@ -857,6 +886,55 @@ export default function Invoices() {
           onClose={() => setModal({ open: false })}
         />
       )}
+
+      {/* Photo: pick which invoice (new, or any existing — even locked) */}
+      {photoPicker && (
+        <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50" onClick={() => setPhotoPicker(false)}>
+          <div className="bg-white w-full md:max-w-md md:rounded-2xl rounded-t-2xl shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Camera className="w-5 h-5 text-orange-500" />
+                {lang === 'is' ? 'Velja reikning fyrir mynd' : 'Choose an invoice for the photo'}
+              </h2>
+              <button onClick={() => setPhotoPicker(false)} className="p-1 rounded hover:bg-gray-100 text-gray-500">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-2">
+              <button onClick={() => { setPhotoPicker(false); openAddModal('invoice', true); }}
+                className="w-full flex items-center gap-2 px-3 py-3 mb-1 rounded-lg bg-blue-50 text-blue-700 font-medium text-sm hover:bg-blue-100 transition">
+                <Plus className="w-4 h-4 flex-shrink-0" />
+                {lang === 'is' ? 'Nýr reikningur' : 'New invoice'}
+              </button>
+              {data.invoices.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">{lang === 'is' ? 'Engir reikningar ennþá' : 'No invoices yet'}</p>
+              ) : (
+                [...data.invoices].sort((a, b) => b.date.localeCompare(a.date)).map(inv => {
+                  const isLocked = inv.type === 'invoice' && inv.status !== 'draft';
+                  return (
+                    <button key={inv.id} onClick={() => pickInvoiceForPhoto(inv.id)}
+                      className="w-full flex items-center gap-3 px-3 py-3 rounded-lg hover:bg-gray-50 text-left transition">
+                      <Camera className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-gray-800 truncate flex items-center gap-1.5">
+                          {inv.number}{inv.customer.name ? ` · ${inv.customer.name}` : ''}
+                          {isLocked && <Lock className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                        </div>
+                        <div className="text-xs text-gray-400 truncate">
+                          {inv.date} · {(inv.photos ?? []).length} {lang === 'is' ? 'myndir' : 'photos'}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <input ref={invCameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
+        onChange={e => { attachPhotoToInvoice(e.target.files); e.target.value = ''; }} />
       {printInv && <PrintableInvoice inv={printInv} />}
       <PlanLimitModal
         open={limitModal} onClose={() => setLimitModal(false)}
