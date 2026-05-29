@@ -137,6 +137,7 @@ export interface Invoice {
   status: 'draft' | 'sent' | 'paid' | 'overdue';
   currency: Currency;
   eurToIskRate: number;
+  creditNoteOf?: string;  // invoice number this credit note corrects
 }
 
 export interface RecurringTransaction {

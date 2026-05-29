@@ -41,6 +41,11 @@ and what happened.
 - [ ] Mark as sent / paid / overdue status transitions.
 - [ ] **Customer statement:** pick a customer → statement shows all their invoices; Invoiced / Paid / Outstanding tiles add up correctly; unpaid invoices flagged.
 - [ ] **Statement email** opens mail with invoice list + totals; **Statement PDF** exports correctly; "Back to list" returns to the normal view.
+- [ ] **Issued invoices locked:** a sent/paid invoice shows a lock icon and NO Edit/Delete; only drafts and quotes can be edited/deleted.
+- [ ] **Credit note:** on an issued invoice, "Credit note" creates a new sequential draft with negated amounts and a "Credit · [original no.]" badge referencing the original.
+- [ ] **Numbering:** invoice number field in the editor is read-only (auto-assigned); no manual edits possible.
+- [ ] **Mixed-VAT invoice:** an invoice with both 24% and 11% lines, when marked paid, books separate income transactions per rate; VAT return allocates each rate correctly.
+- [ ] **Tax labels:** VAT term, ID label and VAT-number label on invoices/PDF reflect Settings/country config (e.g. VSK in IS), not hardcoded.
 
 ## 4. Payroll, VAT, Annual accounts
 

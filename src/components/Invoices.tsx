@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, RotateCcw, Lock } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
@@ -26,7 +26,7 @@ const statusColor: Record<Invoice['status'], string> = {
 function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
   initial?: Invoice; defaultType?: 'invoice' | 'quote'; onSave: (inv: Invoice) => void; onClose: () => void;
 }) {
-  const { data, t, cc } = useApp();
+  const { data, t, cc, lang } = useApp();
   const nextInvNum = `${data.settings.invoicePrefix}${String(data.settings.invoiceLastNumber + 1).padStart(4, '0')}`;
   const nextQuoteNum = `T${String(data.settings.quoteLastNumber + 1).padStart(4, '0')}`;
 
@@ -101,7 +101,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
               <label className="block text-xs font-medium text-gray-600 mb-1">
                 {isQuote ? t('quoteNumber') : t('invoiceNumber')}
               </label>
-              <input className={`${inp} w-full`} value={form.number} onChange={e => setForm(f => ({ ...f, number: e.target.value }))} />
+              <input className={`${inp} w-full bg-gray-100 text-gray-500 cursor-not-allowed`} value={form.number} readOnly title={lang === 'is' ? 'Númer er sjálfvirkt (stilltu í Stillingum)' : 'Number is assigned automatically (set in Settings)'} />
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">{t('invoiceDate')}</label>
@@ -132,7 +132,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('customerKennitala')}</label>
-                <input className={`${inp} w-full`} value={form.customer.kennitala ?? ''} onChange={e => setCust('kennitala', e.target.value)} placeholder="000000-0000" />
+                <input className={`${inp} w-full`} value={form.customer.kennitala ?? ''} onChange={e => setCust('kennitala', e.target.value)} placeholder={cc.companyIdLabel} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('customerEmail')}</label>
@@ -167,7 +167,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
                     <th className="px-3 py-2 text-xs text-gray-500 text-left">{t('description')}</th>
                     <th className="px-2 py-2 text-xs text-gray-500 text-right w-16">{t('quantity')}</th>
                     <th className="px-2 py-2 text-xs text-gray-500 text-right w-24">{t('unitPrice')}</th>
-                    <th className="px-2 py-2 text-xs text-gray-500 text-right w-16">VSK%</th>
+                    <th className="px-2 py-2 text-xs text-gray-500 text-right w-16">{cc.vatTerm}%</th>
                     <th className="px-2 py-2 text-xs text-gray-500 text-right w-24">{t('lineTotal')}</th>
                     <th className="w-8"></th>
                   </tr>
@@ -221,7 +221,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
                 <span className="font-mono">{formatCurrency(totals.subtotal, form.currency)}</span>
               </div>
               <div className="flex justify-between text-gray-600">
-                <span>VSK</span>
+                <span>{cc.vatTerm}</span>
                 <span className="font-mono">{formatCurrency(totals.vatTotal, form.currency)}</span>
               </div>
               <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5">
@@ -254,7 +254,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', onSave, onClose }: {
 }
 
 function PrintableInvoice({ inv }: { inv: Invoice }) {
-  const { data, t, lang } = useApp();
+  const { data, t, lang, cc } = useApp();
   const co = data.settings.company;
   const isQuote = inv.type === 'quote';
   const totals = inv.lines.reduce((acc, l) => {
@@ -268,9 +268,9 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
       <div className="flex justify-between items-start mb-8">
         <div>
           <h1 className="text-2xl font-bold">{co.name || t('appName')}</h1>
-          {co.kennitala && <p className="text-sm text-gray-600">kt. {co.kennitala}</p>}
+          {co.kennitala && <p className="text-sm text-gray-600">{cc.companyIdLabel}: {co.kennitala}</p>}
           {co.address && <p className="text-sm text-gray-600">{co.address}, {co.postalCode} {co.city}</p>}
-          {co.vskNumber && <p className="text-sm text-gray-600">VSK: {co.vskNumber}</p>}
+          {co.vskNumber && <p className="text-sm text-gray-600">{cc.vatNumberLabel}: {co.vskNumber}</p>}
         </div>
         <div className="text-right">
           <h2 className="text-xl font-bold text-blue-900">{isQuote ? t('quote') : t('invoice')}</h2>
@@ -282,7 +282,7 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
       <div className="border border-gray-200 rounded p-4 mb-6">
         <p className="text-xs font-bold uppercase text-gray-500 mb-1">{t('customer')}</p>
         <p className="font-semibold">{inv.customer.name}</p>
-        {inv.customer.kennitala && <p className="text-sm">kt. {inv.customer.kennitala}</p>}
+        {inv.customer.kennitala && <p className="text-sm">{cc.companyIdLabel}: {inv.customer.kennitala}</p>}
         {inv.customer.address && <p className="text-sm">{inv.customer.address}{inv.customer.postalCode ? `, ${inv.customer.postalCode}` : ''} {inv.customer.city}</p>}
         {inv.customer.email && <p className="text-sm">{inv.customer.email}</p>}
       </div>
@@ -291,7 +291,7 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
           <th className="text-left py-2">{t('description')}</th>
           <th className="text-right py-2 w-16">{t('quantity')}</th>
           <th className="text-right py-2 w-24">{t('unitPrice')}</th>
-          <th className="text-right py-2 w-16">VSK%</th>
+          <th className="text-right py-2 w-16">{cc.vatTerm}%</th>
           <th className="text-right py-2 w-28">{t('lineTotal')}</th>
         </tr></thead>
         <tbody>
@@ -307,7 +307,7 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
         </tbody>
         <tfoot>
           <tr><td colSpan={4} className="text-right py-2 font-semibold">{t('subtotal')}</td><td className="text-right py-2 font-mono">{formatCurrency(totals.subtotal, inv.currency)}</td></tr>
-          <tr><td colSpan={4} className="text-right py-2">VSK</td><td className="text-right py-2 font-mono">{formatCurrency(totals.vat, inv.currency)}</td></tr>
+          <tr><td colSpan={4} className="text-right py-2">{cc.vatTerm}</td><td className="text-right py-2 font-mono">{formatCurrency(totals.vat, inv.currency)}</td></tr>
           <tr className="border-t-2 border-gray-800"><td colSpan={4} className="text-right py-2 font-bold text-lg">{t('invoiceTotal')}</td><td className="text-right py-2 font-bold font-mono text-lg">{formatCurrency(totals.subtotal + totals.vat, inv.currency)}</td></tr>
         </tfoot>
       </table>
@@ -473,16 +473,48 @@ export default function Invoices() {
     dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: data.settings.invoiceLastNumber + 1 } });
   }
 
+  // Issued invoices are locked. A correction is made via a credit note
+  // (kreditreikningur): a new sequential document with negated amounts
+  // referencing the original — the original is never edited or deleted.
+  function createCreditNote(inv: Invoice) {
+    const newNum = `${data.settings.invoicePrefix}${String(data.settings.invoiceLastNumber + 1).padStart(4, '0')}`;
+    const credit: Invoice = {
+      ...inv,
+      id: newId(),
+      type: 'invoice',
+      number: newNum,
+      creditNoteOf: inv.number,
+      date: todayISO(),
+      dueDate: todayISO(),
+      status: 'draft',
+      lines: inv.lines.map(l => ({ ...l, id: lineId(), unitPrice: -Math.abs(l.unitPrice) })),
+      notes: `${lang === 'is' ? 'Kreditreikningur vegna reiknings' : 'Credit note for invoice'} ${inv.number}`,
+    };
+    dispatch({ type: 'ADD_INVOICE', payload: credit });
+    dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: data.settings.invoiceLastNumber + 1 } });
+  }
+
   function markPaid(inv: Invoice) {
     dispatch({ type: 'UPDATE_INVOICE', payload: { ...inv, status: 'paid' } });
-    const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-    const tx = {
-      id: `tx_inv_${inv.id}`, date: todayISO(), description: `${t('invoice')} ${inv.number} — ${inv.customer.name}`,
-      category: 'sala_thjonustu', type: 'income' as const,
-      amount: total, currency: inv.currency, eurToIskRate: inv.eurToIskRate,
-      vatRate: inv.lines[0]?.vatRate ?? cc.standardRate, reference: inv.number,
-    };
-    if (!data.transactions.find(tx2 => tx2.id === tx.id)) dispatch({ type: 'ADD_TRANSACTION', payload: tx });
+    // Book income net of VAT, split per VAT rate so mixed-rate invoices
+    // allocate correctly on the VAT return (one transaction per rate).
+    const netByRate: Record<number, number> = {};
+    inv.lines.forEach(l => {
+      const rate = l.vatRate;
+      netByRate[rate] = (netByRate[rate] ?? 0) + l.quantity * l.unitPrice;
+    });
+    Object.entries(netByRate).forEach(([rateStr, net]) => {
+      const rate = Number(rateStr);
+      const id = `tx_inv_${inv.id}_${rateStr}`;
+      if (data.transactions.find(tx2 => tx2.id === id)) return;
+      dispatch({ type: 'ADD_TRANSACTION', payload: {
+        id, date: todayISO(),
+        description: `${t('invoice')} ${inv.number} — ${inv.customer.name}`,
+        category: 'sala_thjonustu', type: 'income' as const,
+        amount: net, currency: inv.currency, eurToIskRate: inv.eurToIskRate,
+        vatRate: rate, reference: inv.number,
+      }});
+    });
   }
 
   function exportInvoicePDF(inv: Invoice) {
@@ -491,7 +523,7 @@ export default function Invoices() {
       { header: t('description'), key: 'description', width: 50 },
       { header: t('quantity'), key: 'quantity', width: 14 },
       { header: t('unitPrice'), key: 'unitPrice', width: 22 },
-      { header: 'VSK%', key: 'vatRate', width: 14 },
+      { header: `${cc.vatTerm}%`, key: 'vatRate', width: 14 },
       { header: t('lineTotal'), key: 'lineTotal', width: 22 },
     ];
     const rows = inv.lines.map(l => ({
@@ -650,6 +682,8 @@ export default function Invoices() {
           {filtered.map(inv => {
             const isQuote = inv.type === 'quote';
             const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate/100), 0);
+            // Issued invoices (anything past draft) are locked from edit/delete.
+            const locked = !isQuote && inv.status !== 'draft';
             return (
               <div key={inv.id} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -660,6 +694,16 @@ export default function Invoices() {
                       </span>
                       <span className="font-mono font-semibold text-gray-800">{inv.number}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor[inv.status]}`}>{t(inv.status)}</span>
+                      {inv.creditNoteOf && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-rose-100 text-rose-700">
+                          {lang === 'is' ? `Kredit · ${inv.creditNoteOf}` : `Credit · ${inv.creditNoteOf}`}
+                        </span>
+                      )}
+                      {locked && (
+                        <span className="flex items-center gap-1 text-[10px] text-gray-400" title={lang === 'is' ? 'Útgefinn reikningur — læstur' : 'Issued invoice — locked'}>
+                          <Lock className="w-3 h-3" />
+                        </span>
+                      )}
                     </div>
                     <p className="font-medium text-gray-700 mt-0.5">{inv.customer.name}</p>
                     <p className="text-xs text-gray-400">
@@ -711,14 +755,26 @@ export default function Invoices() {
                     className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
                     <Printer className="w-3.5 h-3.5" /> {t('printInvoice')}
                   </button>
-                  <button onClick={() => setModal({ open: true, inv })}
-                    className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
-                    <Pencil className="w-3.5 h-3.5" /> {t('edit')}
-                  </button>
-                  <button onClick={() => setDeleteId(inv.id)}
-                    className="flex items-center gap-1 text-xs text-red-500 border border-red-100 bg-red-50 px-2.5 py-1.5 rounded-lg hover:bg-red-100">
-                    <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
-                  </button>
+                  {/* Edit / delete only before an invoice is issued (drafts + quotes) */}
+                  {!locked && (
+                    <button onClick={() => setModal({ open: true, inv })}
+                      className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
+                      <Pencil className="w-3.5 h-3.5" /> {t('edit')}
+                    </button>
+                  )}
+                  {!locked && (
+                    <button onClick={() => setDeleteId(inv.id)}
+                      className="flex items-center gap-1 text-xs text-red-500 border border-red-100 bg-red-50 px-2.5 py-1.5 rounded-lg hover:bg-red-100">
+                      <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
+                    </button>
+                  )}
+                  {/* Issued invoice: correct via credit note (not a credit note itself) */}
+                  {locked && !inv.creditNoteOf && (
+                    <button onClick={() => createCreditNote(inv)}
+                      className="flex items-center gap-1 text-xs text-rose-600 border border-rose-200 bg-rose-50 px-2.5 py-1.5 rounded-lg hover:bg-rose-100">
+                      <RotateCcw className="w-3.5 h-3.5" /> {lang === 'is' ? 'Kreditreikningur' : 'Credit note'}
+                    </button>
+                  )}
                 </div>
               </div>
             );
