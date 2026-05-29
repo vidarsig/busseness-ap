@@ -361,11 +361,89 @@ export default function Invoices() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [docType, setDocType] = useState<'all' | 'invoice' | 'quote'>('all');
   const [filterStatus, setFilterStatus] = useState<Invoice['status'] | 'all'>('all');
+  const [statementCustomer, setStatementCustomer] = useState<string>('');
 
   const filtered = data.invoices
     .filter(i => docType === 'all' || i.type === docType)
     .filter(i => filterStatus === 'all' || i.status === filterStatus)
     .sort((a, b) => b.date.localeCompare(a.date));
+
+  // ── Customer statement ──
+  const invTotal = (inv: Invoice) => inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
+  const toISK = (amt: number, cur: Currency) => amt * ((data.settings.exchangeRates[cur as 'EUR'] ?? 1));
+  const customerNames = Array.from(
+    new Set(data.invoices.filter(i => i.type === 'invoice' && i.customer.name).map(i => i.customer.name))
+  ).sort((a, b) => a.localeCompare(b));
+  const statementInvoices = statementCustomer
+    ? data.invoices
+        .filter(i => i.type === 'invoice' && i.customer.name === statementCustomer)
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : [];
+  const stTotals = statementInvoices.reduce((acc, inv) => {
+    const tISK = toISK(invTotal(inv), inv.currency);
+    acc.invoiced += tISK;
+    if (inv.status === 'paid') acc.paid += tISK;
+    else acc.outstanding += tISK;
+    return acc;
+  }, { invoiced: 0, paid: 0, outstanding: 0 });
+
+  function exportStatementPDF() {
+    if (!statementCustomer) return;
+    const cols = [
+      { header: t('invoiceNumber'), key: 'number', width: 22 },
+      { header: t('invoiceDate'), key: 'date', width: 24 },
+      { header: t('dueDate'), key: 'dueDate', width: 24 },
+      { header: t('status'), key: 'status', width: 20 },
+      { header: t('invoiceTotal'), key: 'total', width: 26 },
+      { header: lang === 'is' ? 'Ógreitt' : 'Outstanding', key: 'outstanding', width: 26 },
+    ];
+    const rows: Record<string, string | number>[] = statementInvoices.map(inv => {
+      const tot = invTotal(inv);
+      return {
+        number: inv.number,
+        date: formatDate(inv.date, lang),
+        dueDate: formatDate(inv.dueDate, lang),
+        status: t(inv.status),
+        total: formatCurrency(tot, inv.currency),
+        outstanding: inv.status === 'paid' ? '—' : formatCurrency(tot, inv.currency),
+      };
+    });
+    rows.push({
+      number: '', date: '', dueDate: '',
+      status: lang === 'is' ? 'Staða (ISK)' : 'Balance (ISK)',
+      total: formatISK(stTotals.invoiced, lang),
+      outstanding: formatISK(stTotals.outstanding, lang),
+    });
+    const title = lang === 'is' ? 'Viðskiptamannayfirlit' : 'Customer statement';
+    exportPDF(title, statementCustomer, cols, rows, `statement_${statementCustomer.replace(/\s+/g, '_')}.pdf`);
+  }
+
+  function emailStatement() {
+    if (!statementCustomer) return;
+    const cust = statementInvoices[0]?.customer;
+    const to = cust?.email ?? '';
+    const company = data.settings.company.name || '';
+    const subject = `${lang === 'is' ? 'Viðskiptamannayfirlit' : 'Customer statement'} — ${company}`;
+    const body = [
+      `${lang === 'is' ? 'Kæri' : 'Dear'} ${statementCustomer},`,
+      '',
+      lang === 'is' ? 'Yfirlit yfir reikninga:' : 'Statement of your invoices:',
+      '',
+      ...statementInvoices.map(inv => {
+        const tot = formatCurrency(invTotal(inv), inv.currency);
+        const paid = inv.status === 'paid' ? (lang === 'is' ? 'greitt' : 'paid') : (lang === 'is' ? 'ógreitt' : 'outstanding');
+        return `  ${inv.number}  ${formatDate(inv.date, lang)}  ${tot}  (${paid})`;
+      }),
+      '',
+      `${lang === 'is' ? 'Heildarupphæð' : 'Total invoiced'}: ${formatISK(stTotals.invoiced, lang)}`,
+      `${lang === 'is' ? 'Greitt' : 'Paid'}: ${formatISK(stTotals.paid, lang)}`,
+      `${lang === 'is' ? 'Ógreidd staða' : 'Outstanding balance'}: ${formatISK(stTotals.outstanding, lang)}`,
+      '',
+      lang === 'is' ? 'Með kveðju,' : 'Kind regards,',
+      company,
+    ].join('\n');
+    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
 
   function handleSave(inv: Invoice) {
     const isNew = !data.invoices.find(i => i.id === inv.id);
@@ -481,9 +559,89 @@ export default function Invoices() {
             {s.label}
           </button>
         ))}
+        <div className="w-px bg-gray-200 mx-1" />
+        <select
+          value={statementCustomer}
+          onChange={e => setStatementCustomer(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 border-0 focus:ring-2 focus:ring-blue-500 max-w-[180px]">
+          <option value="">{lang === 'is' ? 'Viðskiptamannayfirlit…' : 'Customer statement…'}</option>
+          {customerNames.map(name => <option key={name} value={name}>{name}</option>)}
+        </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {statementCustomer ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-5">
+          {/* Statement header */}
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">{statementCustomer}</h2>
+              <p className="text-xs text-gray-400">{lang === 'is' ? 'Viðskiptamannayfirlit' : 'Customer statement'}</p>
+            </div>
+            <button onClick={() => setStatementCustomer('')}
+              className="text-xs text-gray-500 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
+              {lang === 'is' ? 'Til baka' : 'Back to list'}
+            </button>
+          </div>
+
+          {/* Totals summary */}
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-gray-400">{lang === 'is' ? 'Reikningsfært' : 'Invoiced'}</p>
+              <p className="font-bold text-gray-800 text-sm mt-0.5">{formatISK(stTotals.invoiced, lang)}</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-green-600">{lang === 'is' ? 'Greitt' : 'Paid'}</p>
+              <p className="font-bold text-green-700 text-sm mt-0.5">{formatISK(stTotals.paid, lang)}</p>
+            </div>
+            <div className="bg-orange-50 rounded-xl p-3 text-center">
+              <p className="text-[10px] uppercase tracking-wide text-orange-600">{lang === 'is' ? 'Ógreitt' : 'Outstanding'}</p>
+              <p className="font-bold text-orange-700 text-sm mt-0.5">{formatISK(stTotals.outstanding, lang)}</p>
+            </div>
+          </div>
+
+          {/* Invoice rows */}
+          {statementInvoices.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">{t('noInvoices')}</p>
+          ) : (
+            <div className="divide-y divide-gray-100 border-y border-gray-100">
+              {statementInvoices.map(inv => {
+                const tot = invTotal(inv);
+                return (
+                  <div key={inv.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-semibold text-gray-800 text-sm">{inv.number}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColor[inv.status]}`}>{t(inv.status)}</span>
+                      </div>
+                      <p className="text-xs text-gray-400">{formatDate(inv.date, lang)} · {t('dueDate')}: {formatDate(inv.dueDate, lang)}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-semibold text-gray-900 text-sm">{formatCurrency(tot, inv.currency, lang)}</div>
+                      {inv.status !== 'paid' && (
+                        <div className="text-[11px] text-orange-600">{lang === 'is' ? 'ógreitt' : 'outstanding'}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Statement actions */}
+          {statementInvoices.length > 0 && (
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <button onClick={emailStatement}
+                className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
+                <Mail className="w-3.5 h-3.5" /> {lang === 'is' ? 'Senda í tölvupósti' : 'Email statement'}
+              </button>
+              <button onClick={exportStatementPDF}
+                className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
+                <FileText className="w-3.5 h-3.5" /> PDF
+              </button>
+            </div>
+          )}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 py-12 text-center text-gray-400 text-sm">
           {docType === 'quote' ? t('noQuotes') : t('noInvoices')}
         </div>
