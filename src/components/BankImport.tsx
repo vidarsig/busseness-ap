@@ -129,6 +129,7 @@ export default function BankImport() {
   const [error, setError] = useState('');
   const [learnPattern, setLearnPattern] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   function applyRulesToRows(parsed: ReturnType<typeof parseBank>): ImportRow[] {
     const rules = data.categoryRules;
@@ -174,9 +175,7 @@ export default function BankImport() {
     setDone(0);
   }
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function processFile(file: File) {
     setError('');
     const isExcel = /\.(xlsx|xls)$/i.test(file.name);
     const reader = new FileReader();
@@ -196,6 +195,18 @@ export default function BankImport() {
     };
     if (isExcel) reader.readAsArrayBuffer(file);
     else reader.readAsText(file, 'UTF-8');
+  }
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
   }
 
   function saveRule(row: ImportRow, pattern: string) {
@@ -275,9 +286,19 @@ export default function BankImport() {
           ))}
         </div>
 
-        <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
-          <Upload className="w-8 h-8 text-gray-400 mb-2" />
-          <span className="text-sm font-medium text-gray-600">{lang === 'is' ? 'Smelltu til að velja Excel- eða CSV-skrá' : 'Click to select Excel or CSV file'}</span>
+        <label
+          onDragOver={e => { e.preventDefault(); setDragging(true); }}
+          onDragLeave={e => { e.preventDefault(); setDragging(false); }}
+          onDrop={handleDrop}
+          className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-8 cursor-pointer transition-colors ${
+            dragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/30'
+          }`}>
+          <Upload className={`w-8 h-8 mb-2 ${dragging ? 'text-blue-500' : 'text-gray-400'}`} />
+          <span className="text-sm font-medium text-gray-600">
+            {dragging
+              ? (lang === 'is' ? 'Slepptu skránni hér' : 'Drop the file here')
+              : (lang === 'is' ? 'Dragðu skrá hingað eða smelltu til að velja' : 'Drag a file here or click to select')}
+          </span>
           <span className="text-xs text-gray-400 mt-1">.xlsx · .xls · .csv · .txt</span>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
         </label>
