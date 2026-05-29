@@ -13,7 +13,17 @@ interface Props { setView: (v: View) => void; }
 export default function Dashboard({ setView }: Props) {
   const { data, t, lang, fmtISK } = useApp();
   const [backedUp, setBackedUp] = useState(false);
+  const [lastBackup, setLastBackup] = useState<string | null>(
+    () => localStorage.getItem('jobboks_last_backup'),
+  );
   const year = data.settings.fiscalYear;
+
+  // Gentle reminder: how many days since the last backup (null = never).
+  const daysSinceBackup = lastBackup
+    ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000)
+    : null;
+  const hasData = data.transactions.length > 0 || data.invoices.length > 0;
+  const showBackupReminder = hasData && (daysSinceBackup === null || daysSinceBackup >= 7);
 
   function backupNow() {
     const json = JSON.stringify(data, null, 2);
@@ -24,6 +34,9 @@ export default function Dashboard({ setView }: Props) {
     a.download = `jobboks_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    const now = new Date().toISOString();
+    localStorage.setItem('jobboks_last_backup', now);
+    setLastBackup(now);
     setBackedUp(true);
     setTimeout(() => setBackedUp(false), 3000);
   }
@@ -108,6 +121,27 @@ export default function Dashboard({ setView }: Props) {
           </span>
         </button>
       </div>
+
+      {/* Gentle backup reminder */}
+      {showBackupReminder && (
+        <button
+          onClick={backupNow}
+          className="w-full flex items-center gap-3 mb-6 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-left hover:bg-amber-100 transition-colors"
+        >
+          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-amber-900">
+              {daysSinceBackup === null
+                ? (lang === 'is' ? 'Þú hefur ekki tekið öryggisafrit ennþá' : "You haven't backed up your data yet")
+                : (lang === 'is' ? `Síðasta afrit fyrir ${daysSinceBackup} dögum` : `Last backup was ${daysSinceBackup} days ago`)}
+            </div>
+            <div className="text-xs text-amber-700">
+              {lang === 'is' ? 'Ýttu hér til að taka öryggisafrit núna' : 'Tap here to back up your data now'}
+            </div>
+          </div>
+          <Download className="w-5 h-5 text-amber-600 flex-shrink-0" />
+        </button>
+      )}
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
