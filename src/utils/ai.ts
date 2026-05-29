@@ -154,12 +154,23 @@ export async function categorizeBatch(
   rows: Array<{ description: string; amount: number; detectedType: string }>,
   categories: string[],
   vatRates: number[],
-): Promise<Array<{ type: 'income' | 'expense'; category: string; vatRate: number }>> {
+): Promise<Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number }>> {
   const system = `You are a bookkeeping categorization engine. Analyze bank transaction descriptions and categorize them.
-Available categories: ${categories.join(', ')}
+Available income/expense categories: ${categories.join(', ')}
 Available VAT rates: ${vatRates.join(', ')}%
+
+IMPORTANT — not every inflow is income, and not every outflow is an expense.
+If a transaction is NOT real business income or expense, set "type":"transfer" and "category":"ekki_rekstur". Examples of transfers (NOT income/expense):
+- Transfers between the company's own accounts (e.g. "Millifærsla", to/from a savings or foreign-currency account)
+- Loans received or loan repayments
+- The owner putting money in or taking money out (owner's draw/capital)
+- Buying or selling a fixed asset (vehicle, equipment)
+- VAT/tax settlements with the authority, and refunds/reversals
+For a "transfer" set vatRate to 0.
+Only use "income" for genuine revenue and "expense" for genuine running costs.
+
 Respond with ONLY a valid JSON array, one object per transaction (same order as input):
-[{"type":"income"|"expense","category":"category_key","vatRate":number}]
+[{"type":"income"|"expense"|"transfer","category":"category_key","vatRate":number}]
 No explanation, just the JSON array.`;
 
   const userMsg = rows.map((r, i) =>
@@ -169,7 +180,7 @@ No explanation, just the JSON array.`;
   const text = await callClaude(system, [{ role: 'user', content: userMsg }], 'claude-haiku-4-5-20251001', 2048);
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) throw new Error('AI returned unexpected format');
-  return JSON.parse(match[0]) as Array<{ type: 'income' | 'expense'; category: string; vatRate: number }>;
+  return JSON.parse(match[0]) as Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number }>;
 }
 
 export interface ScannedReceipt {

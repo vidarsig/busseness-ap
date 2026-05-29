@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Transaction, EXPENSE_CATEGORIES, INCOME_CATEGORIES, CategoryRule } from '../types';
+import { Transaction, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
 import { categorizeBatch } from '../utils/ai';
 import { matchRule } from './AutoRules';
 import { todayISO } from '../utils/formatters';
@@ -14,7 +14,7 @@ interface ParsedRow {
   date: string;
   description: string;
   amount: number;
-  type: 'income' | 'expense';
+  type: TransactionType;
   reference?: string;
 }
 
@@ -196,13 +196,18 @@ export default function BankImport() {
               const s = results[k];
               if (!s) return;
               const base = next[i];
-              next[i] = {
-                ...base,
-                type: s.type === 'income' || s.type === 'expense' ? s.type : base.type,
-                category: allCategories.includes(s.category) ? s.category : base.category,
-                vatRate: validVats.includes(s.vatRate) ? s.vatRate : base.vatRate,
-                matchedRule: undefined,
-              };
+              if (s.type === 'transfer') {
+                // Not real income/expense — exclude from profit & VAT.
+                next[i] = { ...base, type: 'transfer', category: 'ekki_rekstur', vatRate: 0, matchedRule: undefined };
+              } else {
+                next[i] = {
+                  ...base,
+                  type: s.type === 'income' || s.type === 'expense' ? s.type : base.type,
+                  category: allCategories.includes(s.category) ? s.category : base.category,
+                  vatRate: validVats.includes(s.vatRate) ? s.vatRate : base.vatRate,
+                  matchedRule: undefined,
+                };
+              }
             });
             return next;
           });
@@ -443,20 +448,22 @@ export default function BankImport() {
                           </div>
                         )}
                       </td>
-                      <td className={`px-2 py-2 text-right font-mono font-semibold ${row.type === 'income' ? 'text-green-700' : 'text-red-700'}`}>
-                        {row.type === 'income' ? '+' : '-'}{Math.round(row.amount).toLocaleString()}
+                      <td className={`px-2 py-2 text-right font-mono font-semibold ${row.type === 'transfer' ? 'text-gray-500' : row.type === 'income' ? 'text-green-700' : 'text-red-700'}`}>
+                        {row.type === 'transfer' ? '±' : row.type === 'income' ? '+' : '-'}{Math.round(row.amount).toLocaleString()}
                       </td>
                       <td className="px-2 py-2">
                         <select value={row.type} className={inp}
                           onChange={e => {
-                            const type = e.target.value as 'income' | 'expense';
+                            const type = e.target.value as TransactionType;
+                            const defaultCat = type === 'income' ? 'sala_thjonustu' : type === 'expense' ? 'adrir_rekstrargjold' : 'ekki_rekstur';
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, type, category: type === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold', matchedRule: undefined, learnOpen: true }
+                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, learnOpen: true }
                               : { ...r, learnOpen: false }));
                           }}>
                           <option value="income">{t('income')}</option>
                           <option value="expense">{t('expense')}</option>
+                          <option value="transfer">{t('transfer')}</option>
                         </select>
                       </td>
                       <td className="px-2 py-2">
@@ -470,6 +477,8 @@ export default function BankImport() {
                           }}>
                           {(row.type === 'income'
                             ? ['sala_vara','sala_thjonustu','fjarmagns_tekjur','adrar_tekjur']
+                            : row.type === 'transfer'
+                            ? TRANSFER_CATEGORIES
                             : EXPENSE_CATEGORIES
                           ).map(c => <option key={c} value={c}>{t(c as never)}</option>)}
                         </select>

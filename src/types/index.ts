@@ -1,5 +1,9 @@
 export type Currency = 'ISK' | 'EUR' | 'USD' | 'GBP' | 'DKK' | 'NOK' | 'SEK' | 'AUD' | 'CAD' | 'NZD';
-export type TransactionType = 'income' | 'expense';
+// 'transfer' = money in/out that is NOT business income or expense:
+// transfers between own accounts, loans, owner's own money, asset purchases,
+// refunds. These are deliberately EXCLUDED from profit/loss and VAT — the
+// calculation engine only ever sums 'income' and 'expense'.
+export type TransactionType = 'income' | 'expense' | 'transfer';
 export type VATRate = number;
 export type Language = 'is' | 'en' | 'de' | 'fr' | 'nl' | 'no' | 'da' | 'sv';
 export type View =
@@ -426,6 +430,13 @@ export const EXPENSE_CATEGORIES = [
   'laun', 'launatengd_gjold', 'husaleiga', 'rafmagn_hiti',
   'simagjold', 'skrifstofugjold', 'samgongur', 'markadsmal',
   'fagthjonusta', 'vorur', 'afskriftir', 'fjarmagnsgjold', 'adrir_rekstrargjold',
+] as const;
+
+// Categories for 'transfer' transactions — things that are NOT profit/loss.
+// Kept deliberately small for now; finer sub-types (loan / owner / asset) are
+// a later stage.
+export const TRANSFER_CATEGORIES = [
+  'ekki_rekstur',
 ] as const;
 
 export type IncomeCategory = typeof INCOME_CATEGORIES[number];

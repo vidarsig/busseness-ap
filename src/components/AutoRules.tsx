@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, Zap, TrendingUp } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { CategoryRule, EXPENSE_CATEGORIES } from '../types';
+import { CategoryRule, TransactionType, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../types';
 import { formatDate } from '../utils/formatters';
 
 function newId() { return `rule_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -18,12 +18,14 @@ function RuleModal({ initial, onSave, onClose }: {
   const { t, lang, cc, data } = useApp();
   const [pattern, setPattern] = useState(initial?.pattern ?? '');
   const [category, setCategory] = useState(initial?.category ?? 'adrir_rekstrargjold');
-  const [type, setType] = useState<'income' | 'expense'>(initial?.type ?? 'expense');
+  const [type, setType] = useState<TransactionType>(initial?.type ?? 'expense');
   const [vatRate, setVatRate] = useState<number>(initial?.vatRate ?? 0);
   const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const lbl = 'block text-xs font-medium text-gray-600 mb-1';
   const cats = type === 'income'
     ? ['sala_vara', 'sala_thjonustu', 'fjarmagns_tekjur', 'adrar_tekjur']
+    : type === 'transfer'
+    ? TRANSFER_CATEGORIES
     : EXPENSE_CATEGORIES;
 
   function handleSave() {
@@ -59,9 +61,9 @@ function RuleModal({ initial, onSave, onClose }: {
           <div>
             <label className={lbl}>{t('type')}</label>
             <div className="flex gap-2">
-              {(['income', 'expense'] as const).map(tp => (
-                <button key={tp} type="button" onClick={() => { setType(tp); setCategory(tp === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold'); }}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium border ${type === tp ? tp === 'income' ? 'bg-green-500 text-white border-green-500' : 'bg-red-500 text-white border-red-500' : 'border-gray-300 text-gray-600'}`}>
+              {(['income', 'expense', 'transfer'] as const).map(tp => (
+                <button key={tp} type="button" onClick={() => { setType(tp); setCategory(tp === 'income' ? 'sala_thjonustu' : tp === 'transfer' ? 'ekki_rekstur' : 'adrir_rekstrargjold'); if (tp === 'transfer') setVatRate(0); }}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium border ${type === tp ? tp === 'income' ? 'bg-green-500 text-white border-green-500' : tp === 'transfer' ? 'bg-gray-500 text-white border-gray-500' : 'bg-red-500 text-white border-red-500' : 'border-gray-300 text-gray-600'}`}>
                   {t(tp)}
                 </button>
               ))}
@@ -216,7 +218,7 @@ export default function AutoRules() {
                     )}
                   </td>
                   <td className="px-3 py-3 hidden sm:table-cell">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${r.type === 'income' ? 'bg-green-100 text-green-700' : r.type === 'transfer' ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-700'}`}>
                       {t(r.type)}
                     </span>
                   </td>

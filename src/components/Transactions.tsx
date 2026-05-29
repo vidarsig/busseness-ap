@@ -4,7 +4,7 @@ import ReceiptScanner from './ReceiptScanner';
 import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
-  INCOME_CATEGORIES, EXPENSE_CATEGORIES,
+  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../types';
 import { getTransactionISK, getVATAmountISK } from '../utils/calculations';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
@@ -46,11 +46,11 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   const totalWithVat = form.amount + vatAmount;
   const iskTotal = form.currency === 'ISK' ? totalWithVat : totalWithVat * form.eurToIskRate;
 
-  const categories = form.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const categories = form.type === 'income' ? INCOME_CATEGORIES : form.type === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES;
 
   function handleTypeChange(newType: TransactionType) {
-    const defaultCat = newType === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold';
-    setForm(f => ({ ...f, type: newType, category: defaultCat }));
+    const defaultCat = newType === 'income' ? 'sala_thjonustu' : newType === 'transfer' ? 'ekki_rekstur' : 'adrir_rekstrargjold';
+    setForm(f => ({ ...f, type: newType, category: defaultCat, vatRate: newType === 'transfer' ? 0 : f.vatRate }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -82,7 +82,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
           <div>
             <label className={labelCls}>{t('type')}</label>
             <div className="flex gap-2">
-              {(['income', 'expense'] as TransactionType[]).map(tp => (
+              {(['income', 'expense', 'transfer'] as TransactionType[]).map(tp => (
                 <button
                   key={tp}
                   type="button"
@@ -91,6 +91,8 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                     form.type === tp
                       ? tp === 'income'
                         ? 'bg-green-500 text-white border-green-500'
+                        : tp === 'transfer'
+                        ? 'bg-gray-500 text-white border-gray-500'
                         : 'bg-red-500 text-white border-red-500'
                       : 'border-gray-300 text-gray-600 hover:border-gray-400'
                   }`}
@@ -235,7 +237,7 @@ export default function Transactions() {
     setModal({ open: true });
   }
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -391,6 +393,7 @@ export default function Transactions() {
               <option value="all">{t('all')}</option>
               <option value="income">{t('income')}</option>
               <option value="expense">{t('expense')}</option>
+              <option value="transfer">{t('transfer')}</option>
             </select>
             <select
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -426,12 +429,12 @@ export default function Transactions() {
             <div key={tx.id}
               className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3"
             >
-              <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${tx.type === 'income' ? 'bg-green-400' : 'bg-red-400'}`} />
+              <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${tx.type === 'income' ? 'bg-green-400' : tx.type === 'transfer' ? 'bg-gray-300' : 'bg-red-400'}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-2">
                   <p className="font-medium text-gray-800 text-sm truncate">{tx.description}</p>
-                  <span className={`font-semibold text-sm flex-shrink-0 font-mono ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                    {tx.type === 'income' ? '+' : '-'}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
+                  <span className={`font-semibold text-sm flex-shrink-0 font-mono ${tx.type === 'income' ? 'text-green-600' : tx.type === 'transfer' ? 'text-gray-500' : 'text-red-600'}`}>
+                    {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '±' : '-'}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -496,7 +499,7 @@ export default function Transactions() {
                     </td>
                     <td className={tdCls}>
                       <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                        tx.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        tx.type === 'income' ? 'bg-green-100 text-green-700' : tx.type === 'transfer' ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-700'
                       }`}>
                         {t(tx.type)}
                       </span>
@@ -507,8 +510,8 @@ export default function Transactions() {
                     <td className={`${tdCls} text-right`}>
                       <span className={tx.vatRate === 0 ? 'text-gray-400' : ''}>{tx.vatRate}%</span>
                     </td>
-                    <td className={`${tdCls} text-right font-mono font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {tx.type === 'income' ? '+' : '-'}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
+                    <td className={`${tdCls} text-right font-mono font-semibold ${tx.type === 'income' ? 'text-green-600' : tx.type === 'transfer' ? 'text-gray-500' : 'text-red-600'}`}>
+                      {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '±' : '-'}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
                     </td>
                     <td className={tdCls}>
                       <div className="flex gap-1">
