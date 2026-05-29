@@ -84,7 +84,8 @@ export function isInvoiceLimitReached(data: AppData): boolean {
 export function isJobLimitReached(data: AppData): boolean {
   const limits = getPlanLimits(data);
   if (limits.activeJobs === null) return false;
-  const count = (data.jobs ?? []).filter(j => j.status === 'active' || j.status === 'quote').length;
+  // Any job that is not yet closed (complete/cancelled) counts toward the limit.
+  const count = (data.jobs ?? []).filter(j => j.status !== 'complete' && j.status !== 'cancelled').length;
   return count >= limits.activeJobs;
 }
 

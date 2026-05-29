@@ -3,7 +3,7 @@ import {
   Plus, X, Pencil, Trash2, Clock, Package, ChevronDown, ChevronUp,
   HardHat, CheckCircle, PauseCircle, XCircle, FileText, TrendingUp,
   Camera, Image, Receipt, Users, MapPin, Phone,
-  ZoomIn,
+  ZoomIn, Search, Calendar,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency } from '../types';
@@ -20,7 +20,9 @@ function todayISO() { return new Date().toISOString().slice(0,10); }
 const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
 const STATUS_COLORS: Record<JobStatus, string> = {
-  quote:     'bg-purple-100 text-purple-700 border border-purple-200',
+  survey:    'bg-purple-100 text-purple-700 border border-purple-200',
+  waiting:   'bg-yellow-100 text-yellow-700 border border-yellow-200',
+  scheduled: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
   active:    'bg-green-100 text-green-700 border border-green-200',
   paused:    'bg-amber-100 text-amber-700 border border-amber-200',
   complete:  'bg-blue-100 text-blue-700 border border-blue-200',
@@ -28,13 +30,24 @@ const STATUS_COLORS: Record<JobStatus, string> = {
 };
 
 const STATUS_ICONS: Record<JobStatus, React.ElementType> = {
-  quote: FileText, active: HardHat, paused: PauseCircle,
-  complete: CheckCircle, cancelled: XCircle,
+  survey: Search, waiting: Clock, scheduled: Calendar, active: HardHat,
+  paused: PauseCircle, complete: CheckCircle, cancelled: XCircle,
+};
+
+// Plain-language stage names. Survey-first pipeline the foreman actually follows.
+const STATUS_LABELS: Record<JobStatus, { is: string; en: string }> = {
+  survey:    { is: 'Vettvangsskoðun', en: 'Site visit' },
+  waiting:   { is: 'Bíður svars',     en: 'Waiting for customer' },
+  scheduled: { is: 'Tímaskipulag',    en: 'Scheduling' },
+  active:    { is: 'Í vinnslu',       en: 'Active' },
+  paused:    { is: 'Á bið',           en: 'Paused' },
+  complete:  { is: 'Lokið',           en: 'Complete' },
+  cancelled: { is: 'Hætt við',        en: 'Cancelled' },
 };
 
 const emptyJob = (): Partial<Job> => ({
   name:'', clientName:'', clientContact:'', clientEmail:'', clientPhone:'',
-  address:'', status:'active', currency:'ISK', quotedAmount:0,
+  address:'', status:'survey', currency:'ISK', quotedAmount:0,
   description:'', notes:'',
 });
 
@@ -338,7 +351,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
 
   // ── filter ────────────────────────────────────────────────
   const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => j.status === statusFilter);
-  const STATUSES: JobStatus[] = ['quote','active','paused','complete','cancelled'];
+  const STATUSES: JobStatus[] = ['survey','waiting','scheduled','active','paused','complete','cancelled'];
 
   return (
     <div className="space-y-5">
@@ -380,8 +393,8 @@ export default function Jobs({ sessionUser }: JobsProps) {
       {jobs.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
+            { label: t('Bíður svars', 'Waiting'), count: jobs.filter(j=>j.status==='survey'||j.status==='waiting').length, color:'text-yellow-600' },
             { label: t('Virk', 'Active'), count: jobs.filter(j=>j.status==='active').length, color:'text-green-600' },
-            { label: t('Tilboð', 'Quotes'), count: jobs.filter(j=>j.status==='quote').length, color:'text-purple-600' },
             { label: t('Lokið', 'Complete'), count: jobs.filter(j=>j.status==='complete').length, color:'text-blue-600' },
             { label: t('Myndir', 'Photos'), count: photos.length, color:'text-orange-600' },
           ].map(s => (
@@ -400,7 +413,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
               statusFilter === s ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
             }`}>
-            {s === 'all' ? t('Allt', 'All') : s}
+            {s === 'all' ? t('Allt', 'All') : t(STATUS_LABELS[s].is, STATUS_LABELS[s].en)}
           </button>
         ))}
       </div>
@@ -435,7 +448,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
                         <span className="text-xs font-mono text-gray-400">{job.number}</span>
                         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[job.status]}`}>
                           <StatusIcon className="w-3 h-3" />
-                          {job.status}
+                          {t(STATUS_LABELS[job.status].is, STATUS_LABELS[job.status].en)}
                         </span>
                         {jPhotos.length > 0 && (
                           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
@@ -457,7 +470,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
                       <select value={job.status}
                         onChange={e => updateStatus(job, e.target.value as JobStatus)}
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
-                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        {STATUSES.map(s => <option key={s} value={s}>{t(STATUS_LABELS[s].is, STATUS_LABELS[s].en)}</option>)}
                       </select>
                       <button onClick={() => { setPhotoJobId(job.id); cameraRef.current?.click(); }}
                         title={t('Taka mynd', 'Take photo')}

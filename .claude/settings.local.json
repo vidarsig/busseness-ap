@@ -46,7 +46,11 @@
       "mcp__Claude_in_Chrome__select_browser",
       "Bash(git revert *)",
       "PowerShell($env:PATH += \";C:\\\\Program Files\\\\GitHub CLI\"; gh run list --workflow=build-android.yml --limit 8 2>&1 | Select-Object -First 20)",
-      "Bash(xxd extracted/base/manifest/AndroidManifest.xml)"
+      "Bash(xxd extracted/base/manifest/AndroidManifest.xml)",
+      "Bash(python -c \"import openpyxl\")",
+      "Bash(node -e \"try{require\\('xlsx'\\);console.log\\('node xlsx available'\\)}catch\\(e\\){console.log\\('no node xlsx'\\)}\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('deps:', JSON.stringify\\(p.dependencies,null,1\\)\\); console.log\\('xlsx in deps:', !!\\(p.dependencies&&p.dependencies.xlsx\\)\\);\")",
+      "Bash(npx vite *)"
     ]
   }
 }
