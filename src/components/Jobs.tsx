@@ -347,6 +347,62 @@ export default function Jobs({ sessionUser }: JobsProps) {
     setTimeout(() => setInvoiceSuccess(null), 4000);
   }
 
+  // ── make an offer (quote) straight from the job ───────────
+  // After a site visit the foreman can create an offer in one tap. The quote
+  // itself lives in Invoices (type:'quote'); we just prefill the customer and,
+  // if a price was noted, a single line — then they finish it on the Invoices
+  // screen and send it. We tag the quote's notes with the job number so the
+  // button knows an offer already exists and won't make duplicates.
+  function offerForJob(job: Job): Invoice | undefined {
+    return (data.invoices ?? []).find(
+      inv => inv.type === 'quote' && (inv.notes ?? '').includes(`#${job.number}`)
+    );
+  }
+
+  function makeOffer(job: Job) {
+    const existing = offerForJob(job);
+    if (existing) { setInvoiceSuccess(existing.number); setTimeout(() => setInvoiceSuccess(null), 4000); return; }
+
+    const customer: InvoiceCustomer = {
+      name: job.clientName,
+      email: job.clientEmail,
+      phone: job.clientPhone,
+      address: job.address,
+    };
+
+    const lines: InvoiceLine[] = [{
+      id: newId('il'),
+      description: job.name || t('Tilboð', 'Offer'),
+      quantity: 1,
+      unitPrice: job.quotedAmount || 0,
+      vatRate: cc.standardRate,
+    }];
+
+    const today = todayISO();
+    const due = new Date(Date.now() + 14*24*60*60*1000).toISOString().slice(0,10);
+    const nextNum = data.settings.quoteLastNumber + 1;
+
+    const quote: Invoice = {
+      id: newId('inv'),
+      number: `T${String(nextNum).padStart(4,'0')}`,
+      type: 'quote',
+      date: today,
+      dueDate: due,
+      customer,
+      lines,
+      notes: `${t('Verk', 'Job')} #${job.number} — ${job.name}`,
+      status: 'draft',
+      currency: job.currency,
+      eurToIskRate: data.settings.exchangeRates?.EUR ?? 150,
+    };
+
+    dispatch({ type:'ADD_INVOICE', payload: quote });
+    dispatch({ type:'UPDATE_SETTINGS', payload:{ quoteLastNumber: nextNum } });
+
+    setInvoiceSuccess(quote.number);
+    setTimeout(() => setInvoiceSuccess(null), 5000);
+  }
+
   // ── filter ────────────────────────────────────────────────
   const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => j.status === statusFilter);
   const STATUSES: JobStatus[] = ['survey','scheduled','active','paused','complete','cancelled'];
@@ -358,7 +414,9 @@ export default function Jobs({ sessionUser }: JobsProps) {
       {invoiceSuccess && (
         <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm font-medium">
           <CheckCircle className="w-4 h-4" />
-          {t(`Reikningur ${invoiceSuccess} búinn til!`, `Invoice ${invoiceSuccess} created!`)}
+          {invoiceSuccess.startsWith('T')
+            ? t(`Tilboð ${invoiceSuccess} búið til — kláraðu það í Reikningum.`, `Offer ${invoiceSuccess} created — finish it in Invoices.`)
+            : t(`Reikningur ${invoiceSuccess} búinn til!`, `Invoice ${invoiceSuccess} created!`)}
         </div>
       )}
 
@@ -501,6 +559,24 @@ export default function Jobs({ sessionUser }: JobsProps) {
                       </span>
                     ) : null}
                   </div>
+
+                  {/* Make offer — one tap after a site visit. Quote lands in Invoices. */}
+                  {(job.status === 'survey' || job.status === 'scheduled') && (() => {
+                    const existingOffer = offerForJob(job);
+                    return (
+                      <button onClick={() => makeOffer(job)}
+                        className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm transition shadow-sm ${
+                          existingOffer
+                            ? 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+                            : 'bg-purple-600 hover:bg-purple-700 text-white'
+                        }`}>
+                        <FileText className="w-4 h-4" />
+                        {existingOffer
+                          ? t(`Tilboð ${existingOffer.number} til — opna í Reikningum`, `Offer ${existingOffer.number} made — open in Invoices`)
+                          : t('Gera tilboð', 'Make offer')}
+                      </button>
+                    );
+                  })()}
                 </div>
 
                 {/* Expanded panel */}
