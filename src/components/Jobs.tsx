@@ -122,6 +122,8 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const [lightbox, setLightbox]         = useState<JobPhoto | null>(null);
   const [invoiceSuccess, setInvoiceSuccess] = useState<string | null>(null);
   const [photoPicker, setPhotoPicker]   = useState(false);
+  // Inline offer editor — edit a quote's lines without leaving the Work Book.
+  const [offerEdit, setOfferEdit]       = useState<Invoice | null>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -361,7 +363,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
 
   function makeOffer(job: Job) {
     const existing = offerForJob(job);
-    if (existing) { setInvoiceSuccess(existing.number); setTimeout(() => setInvoiceSuccess(null), 4000); return; }
+    if (existing) { setOfferEdit({ ...existing, lines: existing.lines.map(l => ({ ...l })) }); return; }
 
     const customer: InvoiceCustomer = {
       name: job.clientName,
@@ -399,8 +401,35 @@ export default function Jobs({ sessionUser }: JobsProps) {
     dispatch({ type:'ADD_INVOICE', payload: quote });
     dispatch({ type:'UPDATE_SETTINGS', payload:{ quoteLastNumber: nextNum } });
 
-    setInvoiceSuccess(quote.number);
+    // Open the inline editor right away so they can fill in the offer here.
+    setOfferEdit(quote);
+  }
+
+  // ── inline offer (quote) line editing ─────────────────────
+  function offerLineChange(idx: number, field: 'description' | 'quantity' | 'unitPrice', value: string) {
+    setOfferEdit(o => {
+      if (!o) return o;
+      const lines = o.lines.map((l, i) => {
+        if (i !== idx) return l;
+        if (field === 'description') return { ...l, description: value };
+        const num = parseFloat(value.replace(',', '.')) || 0;
+        return { ...l, [field]: num };
+      });
+      return { ...o, lines };
+    });
+  }
+  function offerAddLine() {
+    setOfferEdit(o => o ? { ...o, lines: [...o.lines, { id: newId('il'), description: '', quantity: 1, unitPrice: 0, vatRate: cc.standardRate }] } : o);
+  }
+  function offerRemoveLine(idx: number) {
+    setOfferEdit(o => o ? { ...o, lines: o.lines.filter((_, i) => i !== idx) } : o);
+  }
+  function saveOffer() {
+    if (!offerEdit) return;
+    dispatch({ type:'UPDATE_INVOICE', payload: offerEdit });
+    setInvoiceSuccess(offerEdit.number);
     setTimeout(() => setInvoiceSuccess(null), 5000);
+    setOfferEdit(null);
   }
 
   // ── filter ────────────────────────────────────────────────
@@ -1160,6 +1189,85 @@ export default function Jobs({ sessionUser }: JobsProps) {
           </div>
         </div>
       )}
+      {/* Inline offer editor */}
+      {offerEdit && (() => {
+        const sub = offerEdit.lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+        const vat = offerEdit.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (l.vatRate / 100), 0);
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[92vh] flex flex-col">
+              <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-purple-600" />
+                    {t('Tilboð', 'Offer')} {offerEdit.number}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">{offerEdit.customer.name}</p>
+                </div>
+                <button onClick={() => setOfferEdit(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 overflow-y-auto space-y-3">
+                {offerEdit.lines.map((l, idx) => (
+                  <div key={l.id} className="border border-gray-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input value={l.description}
+                        onChange={e => offerLineChange(idx, 'description', e.target.value)}
+                        placeholder={t('Lýsing', 'Description')}
+                        className={`${inp} flex-1`} />
+                      {offerEdit.lines.length > 1 && (
+                        <button onClick={() => offerRemoveLine(idx)} title={t('Eyða línu','Remove line')}
+                          className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <label className="flex-1">
+                        <span className="text-xs text-gray-500">{t('Fjöldi', 'Qty')}</span>
+                        <input type="number" inputMode="decimal" value={l.quantity}
+                          onChange={e => offerLineChange(idx, 'quantity', e.target.value)} className={inp} />
+                      </label>
+                      <label className="flex-1">
+                        <span className="text-xs text-gray-500">{t('Verð á einingu', 'Unit price')}</span>
+                        <input type="number" inputMode="decimal" value={l.unitPrice}
+                          onChange={e => offerLineChange(idx, 'unitPrice', e.target.value)} className={inp} />
+                      </label>
+                      <div className="flex-1">
+                        <span className="text-xs text-gray-500">{t('Samtals', 'Line total')}</span>
+                        <div className="px-3 py-2 text-sm font-medium text-gray-700">{fmt(l.quantity * l.unitPrice)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button onClick={offerAddLine}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-purple-400 hover:text-purple-600 transition">
+                  <Plus className="w-4 h-4" />
+                  {t('Bæta við línu', 'Add line')}
+                </button>
+
+                <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
+                  <div className="flex justify-between text-gray-500"><span>{t('Án vsk.', 'Subtotal')}</span><span>{fmt(sub)}</span></div>
+                  <div className="flex justify-between text-gray-500"><span>{cc.vatTerm}</span><span>{fmt(vat)}</span></div>
+                  <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t border-gray-200"><span>{t('Samtals', 'Total')}</span><span>{fmt(sub + vat)}</span></div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-200 flex justify-between items-center gap-2">
+                <p className="text-xs text-gray-400">{t('Sendu tilboðið í Reikningum.', 'Send the offer from Invoices.')}</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setOfferEdit(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{t('Hætta við','Cancel')}</button>
+                  <button onClick={saveOffer} className="px-5 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition">{t('Vista tilboð','Save offer')}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <PlanLimitModal
         open={limitModal} onClose={() => setLimitModal(false)}
         limitText="You've reached 2 active jobs on the Free plan."
