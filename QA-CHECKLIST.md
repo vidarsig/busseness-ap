@@ -39,6 +39,8 @@ and what happened.
 - [ ] **Email invoice** opens mail app with correct customer, number, total, due date.
 - [ ] PDF export and Print produce a correct-looking document (bank account + kennitala show).
 - [ ] Mark as sent / paid / overdue status transitions.
+- [ ] **Customer statement:** pick a customer → statement shows all their invoices; Invoiced / Paid / Outstanding tiles add up correctly; unpaid invoices flagged.
+- [ ] **Statement email** opens mail with invoice list + totals; **Statement PDF** exports correctly; "Back to list" returns to the normal view.
 
 ## 4. Payroll, VAT, Annual accounts
 
