@@ -6,9 +6,12 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Job, JobStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency } from '../types';
+import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency, UserRole } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
+import type { SessionUser } from '../App';
+
+interface JobsProps { sessionUser?: SessionUser | null; }
 
 function newId(prefix: string) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function nowISO() { return new Date().toISOString(); }
@@ -40,10 +43,24 @@ interface JobFormState { open: boolean; job?: Partial<Job>; }
 interface TimeFormState { open: boolean; jobId: string; entry?: Partial<TimeEntry>; }
 interface MatFormState  { open: boolean; jobId: string; mat?: Partial<JobMaterial>; }
 
-export default function Jobs() {
+export default function Jobs({ sessionUser }: JobsProps) {
   const { data, dispatch, lang, fmt, cc } = useApp();
   const isIS = lang === 'is';
   const t = (is: string, en: string) => isIS ? is : en;
+
+  // ── Current user role (for report approval gate) ──
+  // In single-user / local mode (no matching appUser) default to 'owner'
+  // so the solo tradesperson is never locked out of their own jobs.
+  const appUsers = data.appUsers ?? [];
+  const currentRole: UserRole = (() => {
+    if (sessionUser?.email) {
+      const u = appUsers.find(au => au.email.toLowerCase() === sessionUser.email.toLowerCase());
+      if (u) return u.role;
+    }
+    return appUsers.length === 0 ? 'owner' : 'staff';
+  })();
+  const canApprove = currentRole === 'owner' || currentRole === 'manager';
+  const currentUserName = sessionUser?.name || sessionUser?.email || t('Starfsmaður','Worker');
 
   const jobs      = data.jobs ?? [];
   const times     = data.timeEntries ?? [];
@@ -163,8 +180,61 @@ export default function Jobs() {
     dispatch({ type:'DELETE_JOB_PHOTO', payload:id });
   }
 
+  // ── report approval workflow ──────────────────────────────
+  function reportStatusOf(job: Job): JobReportStatus {
+    return job.reportStatus ?? 'draft';
+  }
+
+  function submitReport(job: Job) {
+    dispatch({ type:'UPDATE_JOB', payload:{
+      ...job,
+      reportStatus: 'submitted',
+      submittedBy: currentUserName,
+      submittedAt: nowISO(),
+      returnNote: undefined,
+      updatedAt: nowISO(),
+    }});
+  }
+
+  function approveReport(job: Job) {
+    dispatch({ type:'UPDATE_JOB', payload:{
+      ...job,
+      reportStatus: 'approved',
+      approvedBy: currentUserName,
+      approvedAt: nowISO(),
+      updatedAt: nowISO(),
+    }});
+  }
+
+  function sendBackReport(job: Job) {
+    const note = window.prompt(
+      t('Athugasemd til starfsmanns (valfrjálst):', 'Note to worker (optional):'),
+      ''
+    );
+    if (note === null) return; // cancelled
+    dispatch({ type:'UPDATE_JOB', payload:{
+      ...job,
+      reportStatus: 'draft',
+      returnNote: note || undefined,
+      submittedBy: undefined,
+      submittedAt: undefined,
+      approvedBy: undefined,
+      approvedAt: undefined,
+      updatedAt: nowISO(),
+    }});
+  }
+
   // ── convert to invoice ────────────────────────────────────
   function convertToInvoice(job: Job) {
+    // HARD GATE: a job can NEVER become an invoice without an approved report.
+    if (reportStatusOf(job) !== 'approved') {
+      alert(t(
+        'Ekki er hægt að reikningsfæra verkið fyrr en verkskýrslan hefur verið samþykkt af stjórnanda.',
+        'This job cannot be invoiced until the job report has been approved by a manager.'
+      ));
+      return;
+    }
+
     const timeItems = jobTimes(job.id);
     const matItems  = jobMats(job.id);
 
@@ -461,12 +531,102 @@ export default function Jobs() {
                             </div>
                           )}
 
-                          {/* Convert to Invoice button */}
-                          <button onClick={() => convertToInvoice(job)}
-                            className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
-                            <Receipt className="w-4 h-4" />
-                            {t('Breyta í reikning', 'Convert to Invoice')}
-                          </button>
+                          {/* ── Report approval workflow ── */}
+                          {(() => {
+                            const rs = reportStatusOf(job);
+                            return (
+                              <div className="space-y-3">
+                                {/* Status badge */}
+                                <div className="flex items-center justify-between">
+                                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    {t('Verkskýrsla','Job report')}
+                                  </h4>
+                                  {rs === 'draft' && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                                      {t('Drög','Draft')}
+                                    </span>
+                                  )}
+                                  {rs === 'submitted' && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                                      {t('Bíður samþykkis','Awaiting approval')}
+                                    </span>
+                                  )}
+                                  {rs === 'approved' && (
+                                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                                      {t('Samþykkt','Approved')}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Returned note (manager sent it back) */}
+                                {rs === 'draft' && job.returnNote && (
+                                  <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+                                    ↩︎ {t('Sent til baka','Sent back')}: {job.returnNote}
+                                  </p>
+                                )}
+
+                                {/* Submitted / approved meta */}
+                                {rs === 'submitted' && job.submittedBy && (
+                                  <p className="text-xs text-gray-500">
+                                    {t('Sent af','Submitted by')} {job.submittedBy}
+                                    {job.submittedAt ? ` — ${job.submittedAt.slice(0,10)}` : ''}
+                                  </p>
+                                )}
+                                {rs === 'approved' && job.approvedBy && (
+                                  <p className="text-xs text-gray-500">
+                                    {t('Samþykkt af','Approved by')} {job.approvedBy}
+                                    {job.approvedAt ? ` — ${job.approvedAt.slice(0,10)}` : ''}
+                                  </p>
+                                )}
+
+                                {/* Worker action: submit for approval */}
+                                {rs === 'draft' && (
+                                  <button onClick={() => submitReport(job)}
+                                    className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
+                                    <FileText className="w-4 h-4" />
+                                    {t('Senda skýrslu til samþykkis', 'Submit report for approval')}
+                                  </button>
+                                )}
+
+                                {/* Manager actions: approve / send back */}
+                                {rs === 'submitted' && (
+                                  canApprove ? (
+                                    <div className="flex gap-2">
+                                      <button onClick={() => approveReport(job)}
+                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
+                                        <CheckCircle className="w-4 h-4" />
+                                        {t('Samþykkja','Approve')}
+                                      </button>
+                                      <button onClick={() => sendBackReport(job)}
+                                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm transition">
+                                        <XCircle className="w-4 h-4" />
+                                        {t('Senda til baka','Send back')}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg p-3 text-center">
+                                      {t('Bíður samþykkis stjórnanda.','Waiting for a manager to approve.')}
+                                    </p>
+                                  )
+                                )}
+
+                                {/* Convert to Invoice — only after approval */}
+                                {rs === 'approved' ? (
+                                  <button onClick={() => convertToInvoice(job)}
+                                    className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
+                                    <Receipt className="w-4 h-4" />
+                                    {t('Breyta í reikning', 'Convert to Invoice')}
+                                  </button>
+                                ) : (
+                                  <button disabled
+                                    className="w-full flex items-center justify-center gap-2 py-3 bg-gray-100 text-gray-400 rounded-xl font-semibold text-sm cursor-not-allowed">
+                                    <Receipt className="w-4 h-4" />
+                                    {t('Breyta í reikning', 'Convert to Invoice')}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {job.notes && (
                             <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg p-3">

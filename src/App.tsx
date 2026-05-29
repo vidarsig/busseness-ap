@@ -111,7 +111,7 @@ function AppInner() {
       {view === 'settings'     && <Settings />}
       {view === 'ai'           && <AIAssistant />}
       {view === 'stock'        && <Stock />}
-      {view === 'jobs'         && <Jobs />}
+      {view === 'jobs'         && <Jobs sessionUser={sessionUser} />}
       {view === 'users'        && <Users sessionUser={sessionUser} />}
       {view === 'upgrade'      && <Upgrade />}
       {view === 'reviews'      && <ReviewManager />}

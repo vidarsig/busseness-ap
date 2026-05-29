@@ -255,6 +255,10 @@ export interface AppSettings {
 // ── Jobs / Work Accounting ───────────────────────────────────
 export type JobStatus = 'quote' | 'active' | 'paused' | 'complete' | 'cancelled';
 
+// Report approval workflow: a worker submits the job report (time + photos),
+// a manager/owner approves it, and ONLY then can the job become an invoice.
+export type JobReportStatus = 'draft' | 'submitted' | 'approved';
+
 export interface Job {
   id: string;
   number: string;         // e.g. JOB-2026-001
@@ -271,6 +275,13 @@ export interface Job {
   currency: Currency;
   description?: string;
   notes?: string;
+  // ── Report approval workflow ──
+  reportStatus?: JobReportStatus;   // undefined = 'draft'
+  submittedBy?: string;
+  submittedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  returnNote?: string;
   createdAt: string;
   updatedAt: string;
 }
