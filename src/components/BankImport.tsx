@@ -143,6 +143,8 @@ export default function BankImport() {
   const [error, setError] = useState('');
   const [learnPattern, setLearnPattern] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiProgress, setAiProgress] = useState(0);
+  const [aiTotal, setAiTotal] = useState(0);
   const [dragging, setDragging] = useState(false);
 
   function applyRulesToRows(parsed: ReturnType<typeof parseBank>): ImportRow[] {
@@ -162,23 +164,55 @@ export default function BankImport() {
 
   async function aiCategorizeAll() {
     if (aiLoading) return;
+    const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES] as string[];
+    const validVats = cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates;
+    // Only ask the AI about rows your own rules didn't already match — saves
+    // calls and keeps your rules authoritative.
+    const todo = rows.map((r, i) => ({ r, i })).filter(({ r }) => !r.matchedRule);
+    if (todo.length === 0) return;
+
     setAiLoading(true);
+    setError('');
+    setAiProgress(0);
+    setAiTotal(todo.length);
+
+    // The AI sees ~40 transactions per request. Big historical imports (6000+
+    // rows) are processed in sequential batches with a live progress counter,
+    // so one slow/failed batch never sinks the whole run.
+    const BATCH = 40;
+    let processed = 0;
     try {
-      const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES] as string[];
-      const results = await categorizeBatch(
-        rows.map(r => ({ description: r.description, amount: r.amount, detectedType: r.type })),
-        allCategories,
-        cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates,
-      );
-      setRows(prev => prev.map((r, i) => {
-        const suggestion = results[i];
-        if (!suggestion) return r;
-        const validCat = allCategories.includes(suggestion.category) ? suggestion.category : r.category;
-        const validVat = (cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates).includes(suggestion.vatRate) ? suggestion.vatRate : r.vatRate;
-        return { ...r, type: suggestion.type, category: validCat, vatRate: validVat, matchedRule: undefined };
-      }));
-    } catch { /* ignore errors, leave rows as-is */ }
-    setAiLoading(false);
+      for (let start = 0; start < todo.length; start += BATCH) {
+        const slice = todo.slice(start, start + BATCH);
+        try {
+          const results = await categorizeBatch(
+            slice.map(({ r }) => ({ description: r.description, amount: r.amount, detectedType: r.type })),
+            allCategories,
+            validVats,
+          );
+          setRows(prev => {
+            const next = [...prev];
+            slice.forEach(({ i }, k) => {
+              const s = results[k];
+              if (!s) return;
+              const base = next[i];
+              next[i] = {
+                ...base,
+                type: s.type === 'income' || s.type === 'expense' ? s.type : base.type,
+                category: allCategories.includes(s.category) ? s.category : base.category,
+                vatRate: validVats.includes(s.vatRate) ? s.vatRate : base.vatRate,
+                matchedRule: undefined,
+              };
+            });
+            return next;
+          });
+        } catch { /* skip this batch, keep going */ }
+        processed += slice.length;
+        setAiProgress(processed);
+      }
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   function handleParsedGrid(raw: string[][]) {
@@ -346,13 +380,13 @@ export default function BankImport() {
               <p className="text-xs text-gray-500">{selectedCount}/{rows.length} {lang === 'is' ? 'valdar' : 'selected'}</p>
             </div>
             <div className="flex gap-2 items-center">
-              {data.settings.anthropicKey && (
-                <button onClick={aiCategorizeAll} disabled={aiLoading}
-                  className="flex items-center gap-1.5 text-xs border border-purple-300 bg-purple-50 text-purple-700 px-2.5 py-1.5 rounded-lg hover:bg-purple-100 disabled:opacity-50 font-medium">
-                  {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
-                  {aiLoading ? (lang === 'is' ? 'AI flokkar...' : 'AI categorizing...') : (lang === 'is' ? 'AI Flokkun' : 'AI Categorize')}
-                </button>
-              )}
+              <button onClick={aiCategorizeAll} disabled={aiLoading}
+                className="flex items-center gap-1.5 text-xs border border-purple-300 bg-purple-50 text-purple-700 px-2.5 py-1.5 rounded-lg hover:bg-purple-100 disabled:opacity-50 font-medium">
+                {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+                {aiLoading
+                  ? (lang === 'is' ? `AI flokkar… ${aiProgress}/${aiTotal}` : `AI sorting… ${aiProgress}/${aiTotal}`)
+                  : (lang === 'is' ? 'Láta AI flokka' : 'Let AI sort these')}
+              </button>
               <button onClick={() => setRows(r => r.map(row => ({ ...row, selected: true })))}
                 className="text-xs text-blue-600 hover:underline">{lang === 'is' ? 'Velja allt' : 'Select all'}</button>
               <span className="text-gray-300">|</span>
