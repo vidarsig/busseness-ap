@@ -45,6 +45,7 @@ const defaultData: AppData = {
 
 type Action =
   | { type: 'ADD_TRANSACTION'; payload: Transaction }
+  | { type: 'ADD_TRANSACTIONS'; payload: Transaction[] }
   | { type: 'UPDATE_TRANSACTION'; payload: Transaction }
   | { type: 'DELETE_TRANSACTION'; payload: string }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<AppSettings> }
@@ -103,6 +104,7 @@ function reducer(state: AppData, action: Action): AppData {
   switch (action.type) {
     case 'LOAD': return action.payload;
     case 'ADD_TRANSACTION': return { ...state, transactions: [...state.transactions, action.payload] };
+    case 'ADD_TRANSACTIONS': return { ...state, transactions: [...state.transactions, ...action.payload] };
     case 'UPDATE_TRANSACTION': return { ...state, transactions: state.transactions.map(t => t.id === action.payload.id ? action.payload : t) };
     case 'DELETE_TRANSACTION': return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
     case 'UPDATE_SETTINGS': return { ...state, settings: { ...state.settings, ...action.payload } };

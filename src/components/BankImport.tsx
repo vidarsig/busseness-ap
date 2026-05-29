@@ -47,19 +47,48 @@ function parseDate(raw: string): string {
   return todayISO();
 }
 
+// Robust amount parser: handles "-1,100.00" (US) and "1.100,00" (EU) and plain
+// numbers. The rightmost of '.' / ',' is treated as the decimal separator.
 function parseAmount(raw: string): number {
-  if (!raw) return 0;
-  const cleaned = raw.replace(/[^\d,.\-]/g, '').replace(',', '.');
-  return parseFloat(cleaned) || 0;
+  if (raw == null) return 0;
+  let s = String(raw).trim();
+  if (!s) return 0;
+  const neg = /-/.test(s) || /\(/.test(s);          // minus or accounting parens
+  s = s.replace(/[^0-9.,]/g, '');
+  if (!s) return 0;
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  const decSep = lastDot > lastComma ? '.' : (lastComma > -1 ? ',' : '');
+  if (decSep) {
+    const thouSep = decSep === '.' ? ',' : '.';
+    s = s.split(thouSep).join('');                   // strip thousands separators
+    if (decSep === ',') s = s.replace(',', '.');
+  }
+  const n = parseFloat(s) || 0;
+  return neg ? -Math.abs(n) : n;
+}
+
+// Find the header row (the one starting with the date column) and return the
+// data rows after it. Arion exports have a few metadata rows on top.
+function dataAfterHeader(rows: string[][]): string[][] {
+  const h = rows.findIndex(r => {
+    const c = String(r[0] ?? '').toLowerCase().trim();
+    return c === 'dagsetning' || c === 'date';
+  });
+  const start = h >= 0 ? h + 1 : 1;                  // fall back to skipping one header row
+  return rows.slice(start).filter(r => r.length >= 2 && String(r[0] ?? '').trim());
 }
 
 function parseBank(rows: string[][], format: BankFormat): ParsedRow[] {
-  const dataRows = rows.slice(1).filter(r => r.length >= 2);
+  const dataRows = dataAfterHeader(rows);
   switch (format) {
     case 'arion':
+      // Real Arion export columns:
+      // 0 Dagsetning | 1 Upphæð | 2 Mynt | 3 Skýring | 4 Seðilnúmer | 5 Tilvísun | 6 Texti | … | 13 Nafn
       return dataRows.map(r => {
-        const amt = parseAmount(r[3] ?? '');
-        return { date: parseDate(r[0] ?? ''), description: r[1] ?? '', reference: r[2] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
+        const amt = parseAmount(r[1] ?? '');
+        const desc = (r[3] || r[13] || r[6] || '').toString().trim();
+        return { date: parseDate(r[0] ?? ''), description: desc, reference: (r[5] || r[4] || '').toString().trim(), amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
       }).filter(r => r.amount > 0);
     case 'islandsbanki':
       return dataRows.map(r => {
@@ -137,23 +166,36 @@ export default function BankImport() {
     setAiLoading(false);
   }
 
+  function handleParsedGrid(raw: string[][]) {
+    if (raw.length < 2) { setError(lang === 'is' ? 'Skráin lítur út fyrir að vera tóm' : 'File appears to be empty'); return; }
+    const parsed = parseBank(raw, format);
+    if (parsed.length === 0) { setError(lang === 'is' ? 'Engar færslur fundust — prófaðu annað snið' : 'No rows parsed — try a different format'); return; }
+    setRows(applyRulesToRows(parsed));
+    setDone(0);
+  }
+
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError('');
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
-        const text = ev.target?.result as string;
-        const raw = parseCsv(text);
-        if (raw.length < 2) { setError(lang === 'is' ? 'Skráin lítur út fyrir að vera tóm' : 'File appears to be empty'); return; }
-        const parsed = parseBank(raw, format);
-        if (parsed.length === 0) { setError(lang === 'is' ? 'Engar færslur fundust — prófaðu annað snið' : 'No rows parsed — try a different format'); return; }
-        setRows(applyRulesToRows(parsed));
-        setDone(0);
+        if (isExcel) {
+          const XLSX = await import('xlsx'); // lazy-loaded: keeps app startup small
+          const wb = XLSX.read(ev.target?.result, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: '' });
+          handleParsedGrid(raw as string[][]);
+        } else {
+          const raw = parseCsv(ev.target?.result as string);
+          handleParsedGrid(raw);
+        }
       } catch { setError(lang === 'is' ? 'Villa við lestur skrárinnar' : 'Error reading file'); }
     };
-    reader.readAsText(file, 'UTF-8');
+    if (isExcel) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file, 'UTF-8');
   }
 
   function saveRule(row: ImportRow, pattern: string) {
@@ -178,24 +220,31 @@ export default function BankImport() {
     const selected = rows.filter(r => r.selected);
     const rate = data.settings.exchangeRates.EUR;
     const ruleHits: Record<string, number> = {};
+
+    // De-duplicate against existing transactions (and within this batch) using a
+    // date|amount|description key, so re-importing an overlapping file is safe.
+    const seen = new Set(data.transactions.map(tx => `${tx.date}|${Math.round(tx.amount)}|${tx.description}`));
+    const newTxs: Transaction[] = [];
     selected.forEach(r => {
-      const existing = data.transactions.find(tx => tx.date === r.date && Math.round(tx.amount) === Math.round(r.amount) && tx.description === r.description);
-      if (existing) return;
-      const tx: Transaction = {
+      const key = `${r.date}|${Math.round(r.amount)}|${r.description}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      newTxs.push({
         id: newId(), date: r.date, description: r.description,
         category: r.category, type: r.type, amount: r.amount,
         currency: 'ISK', eurToIskRate: rate, vatRate: r.vatRate,
         reference: r.reference,
-      };
-      dispatch({ type: 'ADD_TRANSACTION', payload: tx });
+      });
       if (r.matchedRule) ruleHits[r.matchedRule] = (ruleHits[r.matchedRule] ?? 0) + 1;
     });
+
+    if (newTxs.length > 0) dispatch({ type: 'ADD_TRANSACTIONS', payload: newTxs });
     // bump use counts for matched rules
     Object.entries(ruleHits).forEach(([ruleId, count]) => {
       const rule = data.categoryRules.find(r => r.id === ruleId);
       if (rule) dispatch({ type: 'UPDATE_RULE', payload: { ...rule, useCount: rule.useCount + count, lastUsed: new Date().toISOString().split('T')[0] } });
     });
-    setDone(selected.length);
+    setDone(newTxs.length);
     setRows([]);
     setImporting(false);
     if (fileRef.current) fileRef.current.value = '';
@@ -203,13 +252,15 @@ export default function BankImport() {
 
   const inp = 'border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500';
   const selectedCount = rows.filter(r => r.selected).length;
+  const RENDER_LIMIT = 300; // avoid freezing the page on huge historical imports
+  const visibleRows = rows.slice(0, RENDER_LIMIT);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('bankimport')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Flytja inn CSV frá íslensku bönkum' : 'Import CSV from Icelandic banks'}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Flytja inn Excel eða CSV frá íslensku bönkum' : 'Import Excel or CSV from Icelandic banks'}</p>
         </div>
       </div>
 
@@ -226,9 +277,9 @@ export default function BankImport() {
 
         <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
           <Upload className="w-8 h-8 text-gray-400 mb-2" />
-          <span className="text-sm font-medium text-gray-600">{lang === 'is' ? 'Smelltu til að velja CSV-skrá' : 'Click to select CSV file'}</span>
-          <span className="text-xs text-gray-400 mt-1">.csv</span>
-          <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={handleFile} />
+          <span className="text-sm font-medium text-gray-600">{lang === 'is' ? 'Smelltu til að velja Excel- eða CSV-skrá' : 'Click to select Excel or CSV file'}</span>
+          <span className="text-xs text-gray-400 mt-1">.xlsx · .xls · .csv · .txt</span>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
         </label>
 
         {error && (
@@ -243,11 +294,12 @@ export default function BankImport() {
         )}
 
         <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
-          <p className="font-semibold">{lang === 'is' ? 'Dálkareglur:' : 'Column rules:'}</p>
-          <p>Arion: Dagsetning, Lýsing, Tilvísun, Upphæð</p>
+          <p className="font-semibold">{lang === 'is' ? 'Dálkareglur (Excel eða CSV):' : 'Column rules (Excel or CSV):'}</p>
+          <p>Arion: Dagsetning, Upphæð, Mynt, Skýring … (Excel-útflutningur úr netbanka)</p>
           <p>Íslandsbanki: Dagsetning, Lýsing, Tilvísun, Innborgun, Útborgun</p>
           <p>Landsbankinn: Dagsetning, Lýsing, Upphæð</p>
           <p>{lang === 'is' ? 'Almennt' : 'Generic'}: Dagsetning, Lýsing, Upphæð</p>
+          <p className="text-gray-400 pt-1">{lang === 'is' ? 'Fyrirsagnarlínur efst eru hunsaðar sjálfkrafa.' : 'Header/metadata rows at the top are skipped automatically.'}</p>
         </div>
       </div>
 
@@ -280,6 +332,15 @@ export default function BankImport() {
               {rows.filter(r => r.matchedRule).length} {lang === 'is' ? 'færslur flokkaðar sjálfvirkt með reglum' : 'transactions auto-categorized by rules'}
             </div>
           )}
+          {/* Large-import notice: only the first rows are shown, but all are imported */}
+          {rows.length > RENDER_LIMIT && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-xs text-amber-800">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              {lang === 'is'
+                ? `Sýni fyrstu ${RENDER_LIMIT} af ${rows.length} færslum — allar valdar færslur verða fluttar inn.`
+                : `Showing the first ${RENDER_LIMIT} of ${rows.length} rows — all selected rows will still be imported.`}
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 border-b border-gray-100">
@@ -295,7 +356,7 @@ export default function BankImport() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {rows.map((row, i) => (
+                {visibleRows.map((row, i) => (
                   <>
                     <tr key={i} className={`${!row.selected ? 'opacity-40' : ''} hover:bg-gray-50/50`}>
                       <td className="px-3 py-2">
