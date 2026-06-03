@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
+import MicButton from './MicButton';
 import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
@@ -36,7 +37,7 @@ interface ModalProps {
 }
 
 function TransactionModal({ initial, onSave, onClose }: ModalProps) {
-  const { t, data, cc } = useApp();
+  const { t, data, cc, lang } = useApp();
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
 
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
@@ -122,9 +123,12 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 
           <div>
             <label className={labelCls}>{t('description')}</label>
-            <input type="text" className={inputCls} value={form.description}
-              onChange={e => set('description', e.target.value)} required
-              placeholder={t('description')} />
+            <div className="flex gap-2 items-center">
+              <input type="text" className={inputCls} value={form.description}
+                onChange={e => set('description', e.target.value)} required
+                placeholder={t('description')} />
+              <MicButton value={form.description} onChange={v => set('description', v)} lang={lang} />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

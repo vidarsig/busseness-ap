@@ -131,6 +131,7 @@ interface ImportRow extends ParsedRow {
   vatRate: number;
   matchedRule?: string; // rule id that matched
   learnOpen?: boolean;  // show inline learn panel
+  needsReview?: boolean; // AI was unsure — human should check before importing
 }
 
 export default function BankImport() {
@@ -196,9 +197,14 @@ export default function BankImport() {
               const s = results[k];
               if (!s) return;
               const base = next[i];
+              const unsure = s.confidence === 'low';
               if (s.type === 'transfer') {
                 // Not real income/expense — exclude from profit & VAT.
-                next[i] = { ...base, type: 'transfer', category: 'ekki_rekstur', vatRate: 0, matchedRule: undefined };
+                // Honor the AI's transfer sub-key (loan payment vs other), but
+                // only if it's a real transfer category; otherwise fall back.
+                const cat = (TRANSFER_CATEGORIES as readonly string[]).includes(s.category)
+                  ? s.category : 'ekki_rekstur';
+                next[i] = { ...base, type: 'transfer', category: cat, vatRate: 0, matchedRule: undefined, needsReview: unsure };
               } else {
                 next[i] = {
                   ...base,
@@ -206,6 +212,7 @@ export default function BankImport() {
                   category: allCategories.includes(s.category) ? s.category : base.category,
                   vatRate: validVats.includes(s.vatRate) ? s.vatRate : base.vatRate,
                   matchedRule: undefined,
+                  needsReview: unsure,
                 };
               }
             });
@@ -406,6 +413,15 @@ export default function BankImport() {
               {rows.filter(r => r.matchedRule).length} {lang === 'is' ? 'færslur flokkaðar sjálfvirkt með reglum' : 'transactions auto-categorized by rules'}
             </div>
           )}
+          {/* Needs-review summary: AI was unsure on these — owner should glance over them */}
+          {rows.filter(r => r.needsReview).length > 0 && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-xs text-amber-800">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              {rows.filter(r => r.needsReview).length} {lang === 'is'
+                ? 'færslur sem AI var ekki viss um — kíktu á þær áður en þú flytur inn.'
+                : 'rows the AI was unsure about — please check them before importing.'}
+            </div>
+          )}
           {/* Large-import notice: only the first rows are shown, but all are imported */}
           {rows.length > RENDER_LIMIT && (
             <div className="px-4 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2 text-xs text-amber-800">
@@ -432,7 +448,7 @@ export default function BankImport() {
               <tbody className="divide-y divide-gray-50">
                 {visibleRows.map((row, i) => (
                   <>
-                    <tr key={i} className={`${!row.selected ? 'opacity-40' : ''} hover:bg-gray-50/50`}>
+                    <tr key={i} className={`${!row.selected ? 'opacity-40' : ''} ${row.needsReview ? 'bg-amber-50/60' : ''} hover:bg-gray-50/50`}>
                       <td className="px-3 py-2">
                         <input type="checkbox" checked={row.selected}
                           onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, selected: e.target.checked } : r))}
@@ -447,6 +463,12 @@ export default function BankImport() {
                             <span className="text-blue-500 font-medium">{lang === 'is' ? 'Sjálfvirkt' : 'Auto'}</span>
                           </div>
                         )}
+                        {row.needsReview && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
+                            <span className="text-amber-600 font-medium">{lang === 'is' ? 'Skoða' : 'Check this'}</span>
+                          </div>
+                        )}
                       </td>
                       <td className={`px-2 py-2 text-right font-mono font-semibold ${row.type === 'transfer' ? 'text-gray-500' : row.type === 'income' ? 'text-green-700' : 'text-red-700'}`}>
                         {row.type === 'transfer' ? '±' : row.type === 'income' ? '+' : '-'}{Math.round(row.amount).toLocaleString()}
@@ -458,7 +480,7 @@ export default function BankImport() {
                             const defaultCat = type === 'income' ? 'sala_thjonustu' : type === 'expense' ? 'adrir_rekstrargjold' : 'ekki_rekstur';
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, learnOpen: true }
+                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, needsReview: false, learnOpen: true }
                               : { ...r, learnOpen: false }));
                           }}>
                           <option value="income">{t('income')}</option>
@@ -472,7 +494,7 @@ export default function BankImport() {
                             const category = e.target.value;
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, category, matchedRule: undefined, learnOpen: true }
+                              ? { ...r, category, matchedRule: undefined, needsReview: false, learnOpen: true }
                               : { ...r, learnOpen: false }));
                           }}>
                           {(row.type === 'income'

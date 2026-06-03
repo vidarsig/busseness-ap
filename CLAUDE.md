@@ -37,6 +37,23 @@ clear PWA cache with Ctrl+Shift+R (2-3x) or force-close/reopen the Android app.
   No giant sits in that gap for small contractors. Don't try to out-QuickBooks
   QuickBooks; stay in the wedge, nail payments next, let AI learn per-user.
 
+## Launch video (in progress — pick up next session)
+- Story-driven explainer following "Mike", a contractor, through one day.
+  Scripts saved to the owner's Downloads:
+  `Jobboks_Story_Script_US.txt` (full storyboard) and
+  `Jobboks_Canva_PasteReady_Story_US.txt` (narration to paste into Canva).
+- Building it in **Canva** video editor. Owner does the sign-up/trial + download
+  themselves (safety: no accounts/payment by Claude).
+- **THEME the owner wants (remember this!): rustic vibe — pickup trucks, worn
+  hand tools, wood textures, golden morning light, work boots/denim. Honest,
+  down-to-earth. Brand blue+purple only on the app/text overlays.**
+- Canva Elements search terms: "rustic contractor pickup truck", "worn work
+  tools wood table", "tradesman truck tailgate tools", "carpenter hands tools
+  sunset". Videos: "contractor working slow motion", "pickup truck driving rural".
+- Idea to maybe build later: VOICE-to-estimate on the site visit (talk to AI:
+  "23 Oak Street, roof, 90 sq m, 3 days" → estimate writes itself). Marked
+  [NEXT] in the story script; not built yet.
+
 ## Job pipeline (site-visit-first)
 JobStatus = survey (Vettvangsskoðun / Site visit) → scheduled (Tímaskipulag) →
 active (Í vinnslu; logs hours/materials/photos) → complete (Lokið → invoice).

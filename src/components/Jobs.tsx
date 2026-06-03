@@ -9,6 +9,7 @@ import { useApp } from '../contexts/AppContext';
 import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
+import MicButton from './MicButton';
 import type { SessionUser } from '../App';
 
 interface JobsProps { sessionUser?: SessionUser | null; }
@@ -1073,11 +1074,17 @@ export default function Jobs({ sessionUser }: JobsProps) {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 mb-1">{t('Lýsing','Description')}</label>
-                  <textarea rows={2} className={inp} value={jobForm.job?.description ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, description:e.target.value } }))} />
+                  <div className="flex gap-2 items-start">
+                    <textarea rows={2} className={inp} value={jobForm.job?.description ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, description:e.target.value } }))} />
+                    <MicButton value={jobForm.job?.description ?? ''} onChange={v => setJobForm(f => ({ ...f, job:{ ...f.job, description:v } }))} lang={lang} />
+                  </div>
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 mb-1">{t('Athugasemdir','Notes')}</label>
-                  <textarea rows={2} className={inp} value={jobForm.job?.notes ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, notes:e.target.value } }))} />
+                  <div className="flex gap-2 items-start">
+                    <textarea rows={2} className={inp} value={jobForm.job?.notes ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, notes:e.target.value } }))} />
+                    <MicButton value={jobForm.job?.notes ?? ''} onChange={v => setJobForm(f => ({ ...f, job:{ ...f.job, notes:v } }))} lang={lang} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1126,7 +1133,10 @@ export default function Jobs({ sessionUser }: JobsProps) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{t('Lýsing','Description')}</label>
-                <input className={inp} value={timeForm.entry?.description ?? ''} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, description:e.target.value } }))} placeholder={t('Hvað var gert?','What was done?')} />
+                <div className="flex gap-2 items-center">
+                  <input className={inp} value={timeForm.entry?.description ?? ''} onChange={e => setTimeForm(v => ({ ...v, entry:{ ...v.entry, description:e.target.value } }))} placeholder={t('Hvað var gert?','What was done?')} />
+                  <MicButton value={timeForm.entry?.description ?? ''} onChange={val => setTimeForm(v => ({ ...v, entry:{ ...v.entry, description:val } }))} lang={lang} />
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
@@ -1151,7 +1161,10 @@ export default function Jobs({ sessionUser }: JobsProps) {
             <div className="px-6 py-4 space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{t('Efni / Lýsing *','Material / Description *')}</label>
-                <input className={inp} value={matForm.mat?.description ?? ''} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, description:e.target.value } }))} placeholder={t('t.d. Viðarleggur 2x4','e.g. Timber 2x4')} />
+                <div className="flex gap-2 items-center">
+                  <input className={inp} value={matForm.mat?.description ?? ''} onChange={e => setMatForm(v => ({ ...v, mat:{ ...v.mat, description:e.target.value } }))} placeholder={t('t.d. Viðarleggur 2x4','e.g. Timber 2x4')} />
+                  <MicButton value={matForm.mat?.description ?? ''} onChange={val => setMatForm(v => ({ ...v, mat:{ ...v.mat, description:val } }))} lang={lang} />
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>

@@ -440,9 +440,11 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 // Categories for 'transfer' transactions — things that are NOT profit/loss.
-// Kept deliberately small for now; finer sub-types (loan / owner / asset) are
-// a later stage.
+// 'lan_afborgun' = loan / debt repayments (principal + interest paid out to a
+// lender). Kept here, not under expenses, so paying down a loan never reduces
+// profit. Finer sub-types (owner draw / asset) are a later stage.
 export const TRANSFER_CATEGORIES = [
+  'lan_afborgun',
   'ekki_rekstur',
 ] as const;
 

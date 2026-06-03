@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { ChatMessage, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
+import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 
 function renderMarkdown(text: string): string {
   return text
@@ -25,12 +26,34 @@ export default function AIAssistant() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Voice input: tap mic, talk, words stream into the box.
+  const { listening, supported: micSupported, error: micError, start: startMic, stop: stopMic } = useSpeechRecognition(lang);
+  const voiceBaseRef = useRef('');
+  const voiceFinalRef = useRef('');
+
+  function toggleMic() {
+    if (loading) return;
+    if (listening) { stopMic(); return; }
+    voiceBaseRef.current = input ? input.trimEnd() + ' ' : '';
+    voiceFinalRef.current = '';
+    startMic((text, isFinal) => {
+      if (isFinal) {
+        voiceFinalRef.current += text;
+        setInput(voiceBaseRef.current + voiceFinalRef.current);
+      } else {
+        setInput(voiceBaseRef.current + voiceFinalRef.current + text);
+      }
+      inputRef.current?.focus();
+    });
+  }
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   async function sendMessage() {
     if (!input.trim() || loading) return;
+    if (listening) stopMic();
     const userMsg: ChatMessage = { role: 'user', content: input.trim() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -189,11 +212,24 @@ export default function AIAssistant() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={t('aiPlaceholder')}
+                placeholder={listening ? (lang === 'is' ? 'Ég er að hlusta…' : 'Listening…') : t('aiPlaceholder')}
                 rows={1}
                 className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 style={{ minHeight: '48px', maxHeight: '120px' }}
               />
+              {micSupported && (
+                <button
+                  onClick={toggleMic}
+                  disabled={loading}
+                  aria-label={listening ? (lang === 'is' ? 'Stöðva upptöku' : 'Stop recording') : (lang === 'is' ? 'Tala' : 'Speak')}
+                  className={`flex-shrink-0 p-3 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    listening
+                      ? 'bg-red-500 text-white animate-pulse hover:bg-red-600'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>
+                  <Mic className="w-5 h-5" />
+                </button>
+              )}
               <button
                 onClick={sendMessage}
                 disabled={!input.trim() || loading}
@@ -201,8 +237,15 @@ export default function AIAssistant() {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </button>
             </div>
+            {micError && (
+              <p className="text-[11px] text-red-500 mt-1.5 text-center">{micError}</p>
+            )}
             <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-              {lang === 'is' ? 'Enter til að senda · Shift+Enter fyrir nýja línu' : 'Enter to send · Shift+Enter for new line'}
+              {listening
+                ? (lang === 'is' ? '🎤 Talaðu núna · ýttu aftur á hljóðnemann til að stöðva' : '🎤 Speak now · tap the mic again to stop')
+                : micSupported
+                  ? (lang === 'is' ? 'Ýttu á hljóðnemann til að tala · Enter til að senda' : 'Tap the mic to talk · Enter to send')
+                  : (lang === 'is' ? 'Enter til að senda · Shift+Enter fyrir nýja línu' : 'Enter to send · Shift+Enter for new line')}
             </p>
           </div>
         </div>

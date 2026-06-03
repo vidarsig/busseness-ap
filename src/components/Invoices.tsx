@@ -6,6 +6,7 @@ import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/format
 import { exportPDF } from '../utils/exports';
 import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
+import MicButton from './MicButton';
 
 function newId() { return `inv_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function lineId() { return `ln_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -238,8 +239,11 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
                   {form.lines.map(line => (
                     <tr key={line.id}>
                       <td className="px-2 py-1.5">
-                        <input className="w-full border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          value={line.description} onChange={e => setLine(line.id, 'description', e.target.value)} placeholder={t('description')} />
+                        <div className="flex gap-1 items-center">
+                          <input className="w-full border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            value={line.description} onChange={e => setLine(line.id, 'description', e.target.value)} placeholder={t('description')} />
+                          <MicButton value={line.description} onChange={v => setLine(line.id, 'description', v)} lang={lang} className="!p-1.5" />
+                        </div>
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="number" className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -302,7 +306,10 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
           {/* Notes */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">{t('invoiceNotes')}</label>
-            <textarea className={`${inp} w-full`} rows={2} value={form.notes ?? ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+            <div className="flex gap-2 items-start">
+              <textarea className={`${inp} w-full`} rows={2} value={form.notes ?? ''} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+              <MicButton value={form.notes ?? ''} onChange={v => setForm(f => ({ ...f, notes: v }))} lang={lang} />
+            </div>
           </div>
 
           <div className="flex gap-3 pt-2">
