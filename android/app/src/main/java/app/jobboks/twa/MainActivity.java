@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
 
     private static final int CAMERA_PERMISSION_REQUEST = 100;
     private static final int FILECHOOSER_CAMERA_PERMISSION_REQUEST = 101;
+    private static final int WEB_PERMISSION_REQUEST = 102;
     private static final int FILE_CHOOSER_REQUEST = 200;
 
     private PermissionRequest pendingPermissionRequest;
@@ -67,18 +68,29 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
         webView.setWebChromeClient(new WebChromeClient() {
-            // Live camera stream requests (getUserMedia)
+            // Live media stream requests from the page (getUserMedia):
+            // camera (video) and/or microphone (audio, used by voice dictation).
             @Override
             public void onPermissionRequest(PermissionRequest request) {
-                if (checkSelfPermission(android.Manifest.permission.CAMERA)
-                        == PackageManager.PERMISSION_GRANTED) {
+                pendingPermissionRequest = request;
+                java.util.List<String> needed = new java.util.ArrayList<>();
+                for (String res : request.getResources()) {
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(res)
+                            && checkSelfPermission(android.Manifest.permission.CAMERA)
+                                != PackageManager.PERMISSION_GRANTED) {
+                        needed.add(android.Manifest.permission.CAMERA);
+                    } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res)
+                            && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                                != PackageManager.PERMISSION_GRANTED) {
+                        needed.add(android.Manifest.permission.RECORD_AUDIO);
+                    }
+                }
+                if (needed.isEmpty()) {
+                    // Everything already granted at the OS level.
+                    pendingPermissionRequest = null;
                     request.grant(request.getResources());
                 } else {
-                    pendingPermissionRequest = request;
-                    requestPermissions(
-                        new String[]{android.Manifest.permission.CAMERA},
-                        CAMERA_PERMISSION_REQUEST
-                    );
+                    requestPermissions(needed.toArray(new String[0]), WEB_PERMISSION_REQUEST);
                 }
             }
 
@@ -207,8 +219,13 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == CAMERA_PERMISSION_REQUEST && pendingPermissionRequest != null) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if ((requestCode == CAMERA_PERMISSION_REQUEST || requestCode == WEB_PERMISSION_REQUEST)
+                && pendingPermissionRequest != null) {
+            boolean allGranted = grantResults.length > 0;
+            for (int r : grantResults) {
+                if (r != PackageManager.PERMISSION_GRANTED) { allGranted = false; break; }
+            }
+            if (allGranted) {
                 pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
             } else {
                 pendingPermissionRequest.deny();
