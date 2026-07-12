@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
@@ -264,6 +264,14 @@ export default function Transactions() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [data.transactions, filterType, filterYear, search]);
 
+  // Render only a page at a time — a full history can be thousands of rows, and
+  // drawing them all at once freezes the screen (especially right after a big
+  // bank import). Reset back to the first page whenever the filters change.
+  const PAGE = 150;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, search]);
+  const paged = filtered.slice(0, visibleCount);
+
   function handleSave(tx: Transaction) {
     const existing = data.transactions.find(e => e.id === tx.id);
     dispatch(existing
@@ -430,7 +438,7 @@ export default function Transactions() {
               className="mt-3 text-blue-600 text-sm font-medium">{t('addFirst')}</button>
           </div>
         ) : (
-          filtered.map(tx => (
+          paged.map(tx => (
             <div key={tx.id}
               className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3"
             >
@@ -470,6 +478,12 @@ export default function Transactions() {
             </div>
           ))
         )}
+        {filtered.length > visibleCount && (
+          <button onClick={() => setVisibleCount(c => c + 300)}
+            className="w-full py-3 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors">
+            {lang === 'is' ? `Sýna fleiri (${filtered.length - visibleCount} eftir)` : `Show more (${filtered.length - visibleCount} left)`}
+          </button>
+        )}
       </div>
 
       {/* ── DESKTOP table ────────────────────────────────── */}
@@ -496,7 +510,7 @@ export default function Transactions() {
                   </td>
                 </tr>
               ) : (
-                filtered.map(tx => (
+                paged.map(tx => (
                   <tr key={tx.id} className="hover:bg-gray-50/50">
                     <td className={tdCls}>{formatDate(tx.date, lang)}</td>
                     <td className={tdCls}>
@@ -547,6 +561,12 @@ export default function Transactions() {
               )}
             </tbody>
           </table>
+          {filtered.length > visibleCount && (
+            <button onClick={() => setVisibleCount(c => c + 300)}
+              className="w-full py-3 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border-t border-gray-100 transition-colors">
+              {lang === 'is' ? `Sýna fleiri (${filtered.length - visibleCount} eftir)` : `Show more (${filtered.length - visibleCount} left)`}
+            </button>
+          )}
         </div>
         {filtered.length > 0 && (
           <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between text-xs text-gray-500">

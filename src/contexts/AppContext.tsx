@@ -252,18 +252,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const skipNextPush = useRef(false);
   const idbReady = useRef(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout>>();
+  const persistTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Persist locally to IndexedDB (big storage, ~GBs) on every change.
+  // Persist locally to IndexedDB (big storage, ~GBs). Debounced so a burst of
+  // changes (e.g. importing thousands of bank rows, or attaching many receipts)
+  // serializes once things settle instead of re-writing the whole blob on every
+  // single change — that repeated serialization is what froze the screen.
   // We don't write until the initial IndexedDB hydration has run, so we never
   // clobber the stored copy with the localStorage-seeded starting state.
   useEffect(() => {
     if (!idbReady.current) return;
-    idbSet(STORAGE_KEY, data).catch(() => { /* ignore transient write errors */ });
-    // Best-effort mirror to localStorage for a fast cold-start paint. This may
-    // exceed the 5 MB cap once there's lots of data/photos — that's fine, the
-    // full copy lives in IndexedDB either way.
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-    catch { /* over the localStorage cap — IndexedDB holds the complete data */ }
+    clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      idbSet(STORAGE_KEY, data).catch(() => { /* ignore transient write errors */ });
+      // Best-effort mirror to localStorage for a fast cold-start paint. This may
+      // exceed the 5 MB cap once there's lots of data/photos — that's fine, the
+      // full copy lives in IndexedDB either way.
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+      catch { /* over the localStorage cap — IndexedDB holds the complete data */ }
+    }, 500);
+    return () => clearTimeout(persistTimer.current);
   }, [data]);
 
   // On mount: (1) hydrate from IndexedDB (migrating from localStorage on first
