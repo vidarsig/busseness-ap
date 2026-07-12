@@ -49,22 +49,25 @@ export default function AIAssistant() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // A file the user attached to their next message (e.g. a loan greiðslutafla).
-  const [attachment, setAttachment] = useState<ParsedFile | null>(null);
+  // Files attached to the next message (e.g. the greiðslutöflur for the loans).
+  // Multiple so all loans can be sent together and compared in one question.
+  const [attachments, setAttachments] = useState<ParsedFile[]>([]);
   const [attaching, setAttaching] = useState(false);
 
-  async function pickFile(file: File | undefined) {
-    if (!file) return;
+  async function pickFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
     setError('');
     setAttaching(true);
-    try {
-      const parsed = await fileToText(file);
-      setAttachment(parsed);
-    } catch {
-      setError(lang === 'is'
-        ? 'Get ekki lesið þessa skrá. Prófaðu Excel (.xlsx), CSV eða texta.'
-        : 'Could not read this file. Try Excel (.xlsx), CSV or text.');
+    const parsed: ParsedFile[] = [];
+    let failed = 0;
+    for (const file of Array.from(files)) {
+      try { parsed.push(await fileToText(file)); }
+      catch { failed++; }
     }
+    if (parsed.length) setAttachments(prev => [...prev, ...parsed]);
+    if (failed) setError(lang === 'is'
+      ? `Gat ekki lesið ${failed} skrá(r). Prófaðu Excel (.xlsx), CSV eða texta.`
+      : `Could not read ${failed} file(s). Try Excel (.xlsx), CSV or text.`);
     setAttaching(false);
     if (fileRef.current) fileRef.current.value = '';
   }
@@ -105,22 +108,26 @@ export default function AIAssistant() {
   }, [messages, loading]);
 
   async function sendMessage() {
-    if ((!input.trim() && !attachment) || loading) return;
+    if ((!input.trim() && attachments.length === 0) || loading) return;
     if (listening) stopMic();
 
-    // What the user sees in the thread: their text plus a small file chip (not
-    // the whole table). What we send the AI: the full parsed file contents so it
-    // can actually read the greiðslutafla / spreadsheet.
-    const shown = (attachment ? `📎 ${attachment.name}\n` : '') + input.trim();
-    const apiContent = (attachment
-      ? `The user attached a file named "${attachment.name}". Its contents (a table, e.g. a loan payment schedule) are below. Use it to answer.\n\n"""\n${attachment.text}\n"""\n\n`
-      : '') + input.trim();
+    // What the user sees in the thread: their text plus a small chip per file
+    // (not the whole table). What we send the AI: the full parsed contents of
+    // every attached file so it can read the greiðslutöflur / spreadsheets.
+    const chips = attachments.map(a => `📎 ${a.name}`).join('\n');
+    const shown = (chips ? chips + '\n' : '') + input.trim();
+    const filesBlock = attachments.length
+      ? attachments
+          .map(a => `Attached file "${a.name}" (a table, e.g. a loan payment schedule):\n"""\n${a.text}\n"""`)
+          .join('\n\n') + '\n\nUse the file(s) above to answer.\n\n'
+      : '';
+    const apiContent = filesBlock + input.trim();
 
     const userMsg: ChatMessage = { role: 'user', content: shown };
     const apiUserMsg: ChatMessage = { role: 'user', content: apiContent };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
-    setAttachment(null);
+    setAttachments([]);
     setError('');
     setLoading(true);
 
@@ -270,27 +277,32 @@ export default function AIAssistant() {
 
           {/* Input */}
           <div className="flex-shrink-0 pt-3 border-t border-gray-100">
-            {/* Attachment chip */}
-            {(attachment || attaching) && (
-              <div className="flex items-center gap-2 mb-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 w-fit max-w-full">
-                {attaching
-                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />{lang === 'is' ? 'Les skrá…' : 'Reading file…'}</>
-                  : <>
-                      <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
-                      <span className="truncate">{attachment!.name}</span>
-                      {attachment!.truncated && <span className="text-blue-400">{lang === 'is' ? '(stytt)' : '(shortened)'}</span>}
-                      <button onClick={() => setAttachment(null)} className="text-blue-400 hover:text-blue-700 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
-                    </>}
+            {/* Attachment chips (one per file — e.g. the greiðslutöflur) */}
+            {(attachments.length > 0 || attaching) && (
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                {attachments.map((a, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 max-w-full">
+                    <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate max-w-[160px]">{a.name}</span>
+                    {a.truncated && <span className="text-blue-400">{lang === 'is' ? '(stytt)' : '(shortened)'}</span>}
+                    <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-700 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ))}
+                {attaching && (
+                  <div className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />{lang === 'is' ? 'Les skrá…' : 'Reading file…'}
+                  </div>
+                )}
               </div>
             )}
             <div className="flex gap-2 items-end">
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,.tsv" className="sr-only"
-                onChange={e => pickFile(e.target.files?.[0])} />
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,.tsv" multiple className="sr-only"
+                onChange={e => pickFiles(e.target.files)} />
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={loading || attaching}
-                title={lang === 'is' ? 'Hlaða upp skrá (t.d. greiðslutöflu)' : 'Upload a file (e.g. a payment table)'}
-                aria-label={lang === 'is' ? 'Hlaða upp skrá' : 'Upload a file'}
+                title={lang === 'is' ? 'Hlaða upp skrám (t.d. greiðslutöflur — má velja margar)' : 'Upload files (e.g. payment tables — you can pick several)'}
+                aria-label={lang === 'is' ? 'Hlaða upp skrám' : 'Upload files'}
                 className="flex-shrink-0 p-3 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 <Paperclip className="w-5 h-5" />
               </button>
@@ -319,7 +331,7 @@ export default function AIAssistant() {
               )}
               <button
                 onClick={sendMessage}
-                disabled={(!input.trim() && !attachment) || loading}
+                disabled={(!input.trim() && attachments.length === 0) || loading}
                 className="flex-shrink-0 bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </button>
