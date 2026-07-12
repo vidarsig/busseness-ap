@@ -104,7 +104,17 @@ export function buildContext(data: AppData, lang: string): string {
     .join('\n\n') || '  No transactions recorded yet.';
 
   const openInvoices = data.invoices.filter(i => i.type === 'invoice' && (i.status === 'sent' || i.status === 'overdue'));
-  const recent = [...data.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 50);
+  // Detailed transaction rows for the chat. The per-year summaries above already
+  // cover every year in aggregate; here we include the individual rows so the AI
+  // can reference specific transactions. Capped so a huge multi-year history
+  // doesn't blow the context window / cost — the chat model (Sonnet) has plenty
+  // of room, but we still keep it bounded and newest-first.
+  const MAX_TX = 2000;
+  const sorted = [...data.transactions].sort((a, b) => b.date.localeCompare(a.date));
+  const recent = sorted.slice(0, MAX_TX);
+  const txLabel = data.transactions.length > MAX_TX
+    ? `TRANSACTIONS (most recent ${MAX_TX} of ${data.transactions.length} — older years are covered by the summaries above)`
+    : `TRANSACTIONS (all ${recent.length})`;
 
   return `COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
@@ -124,7 +134,7 @@ ${openInvoices.map(i => {
     return `  ${i.number} — ${i.customer.name}: ${fmtNum(total)} (${i.status})`;
   }).join('\n') || '  None'}
 
-RECENT TRANSACTIONS (last 50):
+${txLabel}:
 ${recent.map(tx => `  ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description}`).join('\n')}`;
 }
 
