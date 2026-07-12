@@ -110,6 +110,59 @@ Category breakdown:
 ${Object.entries(catBreakdown).map(([c, a]) => `  ${c}: ${fmtNum(a)}`).join('\n')}`;
 }
 
+// Month-by-month totals for every year with data (Jan→Dec), so the AI can look
+// at any single month or spot seasonal patterns — not just whole-year figures.
+function monthlyBreakdown(data: AppData): string {
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const years = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a);
+  const lines: string[] = [];
+  for (const y of years) {
+    const inc = new Array(12).fill(0), exp = new Array(12).fill(0);
+    for (const tx of data.transactions) {
+      const d = new Date(tx.date);
+      if (d.getFullYear() !== y) continue;
+      const m = d.getMonth();
+      if (tx.type === 'income') inc[m] += tx.amount;
+      else if (tx.type === 'expense') exp[m] += tx.amount;
+    }
+    const cells = MONTHS
+      .map((mn, i) => (inc[i] || exp[i]) ? `${mn} +${fmtNum(inc[i])}/-${fmtNum(exp[i])}` : null)
+      .filter(Boolean).join('  ');
+    lines.push(`${y}: ${cells || '(no activity)'}`);
+  }
+  return lines.join('\n') || '  No transactions recorded yet.';
+}
+
+// Index of every counterparty (grouped by description) across ALL years, with
+// per-year in/out totals. This is what lets the AI answer "how much from/to X
+// over time", "find payments to a specific person/supplier", and compare years,
+// without needing every raw row. Bounded to the biggest parties by volume.
+function counterpartyIndex(data: AppData): string {
+  interface Party { inc: number; exp: number; count: number; years: Map<number, { inc: number; exp: number }>; }
+  const map = new Map<string, Party>();
+  for (const tx of data.transactions) {
+    const key = (tx.description || '(no description)').trim() || '(no description)';
+    let e = map.get(key);
+    if (!e) { e = { inc: 0, exp: 0, count: 0, years: new Map() }; map.set(key, e); }
+    const y = new Date(tx.date).getFullYear();
+    let ye = e.years.get(y);
+    if (!ye) { ye = { inc: 0, exp: 0 }; e.years.set(y, ye); }
+    if (tx.type === 'income') { e.inc += tx.amount; ye.inc += tx.amount; }
+    else if (tx.type === 'expense') { e.exp += tx.amount; ye.exp += tx.amount; }
+    e.count++;
+  }
+  const parties = [...map.entries()]
+    .map(([name, e]) => ({ name, e, vol: e.inc + e.exp }))
+    .sort((a, b) => b.vol - a.vol)
+    .slice(0, 150);
+  return parties.map(({ name, e }) => {
+    const yrs = [...e.years.entries()].sort((a, b) => a[0] - b[0])
+      .map(([y, ye]) => `${y}:${ye.inc ? '+' + fmtNum(ye.inc) : ''}${ye.exp ? '-' + fmtNum(ye.exp) : ''}`)
+      .join(' ');
+    return `  ${name} | n=${e.count} | in ${fmtNum(e.inc)} / out ${fmtNum(e.exp)} | ${yrs}`;
+  }).join('\n') || '  (none)';
+}
+
 export function buildContext(data: AppData, lang: string): string {
   // Every year that actually has transactions, newest first — so the AI can
   // analyse and compare any year (e.g. 2024 vs 2025), not just the fiscal year.
@@ -146,6 +199,15 @@ Accounts screens, so they reconcile exactly. Use them when asked about any year.
 FULL-YEAR FINANCIAL SUMMARIES:
 ${perYear}
 
+MONTHLY BREAKDOWN — every year, Jan→Dec (income +, expense -):
+${monthlyBreakdown(data)}
+
+COUNTERPARTY INDEX — every party across ALL years (grouped by description, top by
+volume; n=number of transactions, then total in / out, then per-year in/out). Use
+this to find or total payments to/from any tenant, supplier or person over time,
+and to compare years — it covers every year, not just recent ones:
+${counterpartyIndex(data)}
+
 OPEN INVOICES (${openInvoices.length}):
 ${openInvoices.map(i => {
     const total = i.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
@@ -167,8 +229,15 @@ You have access to their financial data and can help with:
 - Bookkeeping best practices
 - Comparing whole years (e.g. 2024 vs 2025) and preparing year-end financial summaries
 
-You have full-year totals for every year that has data. When the user asks about a
-specific year, use that year's summary. When comparing years, reference both.
+You have full-year totals for every year, a MONTH-BY-MONTH breakdown of every year,
+and a COUNTERPARTY INDEX covering every party across ALL years. So you CAN look at
+any single year Jan→Dec, any month, find or total payments to/from a specific
+person or supplier across all years, compare years, and spot long-term patterns —
+use the monthly breakdown and counterparty index for this, not just the recent
+raw rows. Only the most recent individual rows are listed in full; for older
+specific line items, rely on the monthly and counterparty data (and say so if a
+single old row isn't individually listed).
+When the user asks about a specific year, use that year's summary. When comparing years, reference both.
 
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
