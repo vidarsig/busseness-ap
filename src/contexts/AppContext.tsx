@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useState, useRef } from 'react';
 import { pushData, pullData } from '../utils/supabase';
+import { idbGet, idbSet } from '../utils/idb';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
@@ -249,41 +250,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => localStorage.getItem(SYNC_TS_KEY));
   const skipNextPush = useRef(false);
+  const idbReady = useRef(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Save to localStorage on every change
+  // Persist locally to IndexedDB (big storage, ~GBs) on every change.
+  // We don't write until the initial IndexedDB hydration has run, so we never
+  // clobber the stored copy with the localStorage-seeded starting state.
   useEffect(() => {
+    if (!idbReady.current) return;
+    idbSet(STORAGE_KEY, data).catch(() => { /* ignore transient write errors */ });
+    // Best-effort mirror to localStorage for a fast cold-start paint. This may
+    // exceed the 5 MB cap once there's lots of data/photos — that's fine, the
+    // full copy lives in IndexedDB either way.
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-    catch { /* ignore */ }
+    catch { /* over the localStorage cap — IndexedDB holds the complete data */ }
   }, [data]);
 
-  // On mount: pull from Supabase if configured and remote is newer
+  // On mount: (1) hydrate from IndexedDB (migrating from localStorage on first
+  // run), then (2) sync with Supabase if configured and the cloud copy is newer.
   useEffect(() => {
-    const { supabaseUrl, supabaseKey, supabaseUserKey } = data.settings;
-    if (!supabaseUrl || !supabaseKey || !supabaseUserKey) return;
-    setSyncStatus('syncing');
-    pullData(supabaseUrl, supabaseKey, supabaseUserKey).then(result => {
-      if (result.error === 'no_data') {
-        // Nothing in cloud yet — push local up
-        pushData(supabaseUrl, supabaseKey, supabaseUserKey, data).then(() => {
+    let cancelled = false;
+    (async () => {
+      // ── 1) Local hydration ──────────────────────────────────────────
+      // `data` here is the localStorage-seeded reducer state (see initializer).
+      let local: AppData = data;
+      try {
+        const idbData = await idbGet<Partial<AppData>>(STORAGE_KEY);
+        if (idbData) {
+          local = migrateData(idbData);
+          if (!cancelled) { skipNextPush.current = true; dispatch({ type: 'LOAD', payload: local }); }
+        } else {
+          // First run on IndexedDB — seed the big store from whatever we had
+          // in localStorage so no existing data is lost.
+          await idbSet(STORAGE_KEY, local);
+        }
+      } catch { /* fall back to the localStorage-seeded state */ }
+      idbReady.current = true;
+      if (cancelled) return;
+
+      // ── 2) Supabase sync ────────────────────────────────────────────
+      const { supabaseUrl, supabaseKey, supabaseUserKey } = local.settings;
+      if (!supabaseUrl || !supabaseKey || !supabaseUserKey) return;
+      setSyncStatus('syncing');
+      try {
+        const result = await pullData(supabaseUrl, supabaseKey, supabaseUserKey);
+        if (cancelled) return;
+        if (result.error === 'no_data') {
+          // Nothing in cloud yet — push local up
+          await pushData(supabaseUrl, supabaseKey, supabaseUserKey, local);
           const now = new Date().toISOString();
           localStorage.setItem(SYNC_TS_KEY, now);
           setLastSyncedAt(now);
           setSyncStatus('synced');
-        });
-        return;
-      }
-      if (result.error || !result.data) { setSyncStatus('error'); return; }
-      const localTs = localStorage.getItem(SYNC_TS_KEY) ?? '';
-      const remoteTs = result.updatedAt ?? '';
-      if (remoteTs > localTs) {
-        skipNextPush.current = true;
-        dispatch({ type: 'LOAD', payload: migrateData(result.data) });
-        localStorage.setItem(SYNC_TS_KEY, remoteTs);
-        setLastSyncedAt(remoteTs);
-      }
-      setSyncStatus('synced');
-    }).catch(() => setSyncStatus('error'));
+          return;
+        }
+        if (result.error || !result.data) { setSyncStatus('error'); return; }
+        const localTs = localStorage.getItem(SYNC_TS_KEY) ?? '';
+        const remoteTs = result.updatedAt ?? '';
+        if (remoteTs > localTs) {
+          const remote = migrateData(result.data);
+          skipNextPush.current = true;
+          dispatch({ type: 'LOAD', payload: remote });
+          await idbSet(STORAGE_KEY, remote);   // keep the big store in step with cloud
+          localStorage.setItem(SYNC_TS_KEY, remoteTs);
+          setLastSyncedAt(remoteTs);
+        }
+        setSyncStatus('synced');
+      } catch { setSyncStatus('error'); }
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
