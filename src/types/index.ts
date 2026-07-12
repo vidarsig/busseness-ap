@@ -90,6 +90,7 @@ export interface Transaction {
   reference?: string;
   accountNumber?: string;
   receiptNote?: string;
+  receiptUrl?: string;   // base64 image of the attached receipt/invoice (proof)
 }
 
 export interface BalanceSheetItem {

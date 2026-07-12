@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
 import { useApp } from '../contexts/AppContext';
@@ -235,6 +235,7 @@ export default function Transactions() {
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [receiptView, setReceiptView] = useState<string | null>(null);
 
   function openAddModal() {
     if (isTransactionLimitReached(data)) { setLimitModal(true); return; }
@@ -451,6 +452,12 @@ export default function Transactions() {
                 {tx.reference && <p className="text-xs text-gray-400 mt-0.5">{tx.reference}</p>}
               </div>
               <div className="flex flex-col gap-1 flex-shrink-0">
+                {tx.receiptUrl && (
+                  <button onClick={() => setReceiptView(tx.receiptUrl!)} title={(lang === 'is' ? 'Kvittun' : 'Receipt')}
+                    className="text-green-600 hover:text-green-700 p-1.5 rounded-lg hover:bg-green-50">
+                    <Receipt className="w-4 h-4" />
+                  </button>
+                )}
                 <button onClick={() => setModal({ open: true, tx })}
                   className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50">
                   <Pencil className="w-4 h-4" />
@@ -519,6 +526,12 @@ export default function Transactions() {
                     </td>
                     <td className={tdCls}>
                       <div className="flex gap-1">
+                        {tx.receiptUrl && (
+                          <button onClick={() => setReceiptView(tx.receiptUrl!)} title={(lang === 'is' ? 'Kvittun' : 'Receipt')}
+                            className="text-green-600 hover:text-green-700 p-1 rounded">
+                            <Receipt className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button onClick={() => setModal({ open: true, tx })}
                           className="text-gray-400 hover:text-blue-600 p-1 rounded">
                           <Pencil className="w-3.5 h-3.5" />
@@ -574,6 +587,16 @@ export default function Transactions() {
         />
       )}
       {scannerOpen && <ReceiptScanner onClose={() => setScannerOpen(false)} />}
+
+      {/* Receipt image viewer */}
+      {receiptView && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setReceiptView(null)}>
+          <button onClick={() => setReceiptView(null)} className="absolute top-4 right-4 text-white/80 hover:text-white p-2">
+            <X className="w-6 h-6" />
+          </button>
+          <img src={receiptView} alt={(lang === 'is' ? 'Kvittun' : 'Receipt')} className="max-w-full max-h-[90vh] rounded-lg object-contain shadow-2xl" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
       <PlanLimitModal
         open={limitModal} onClose={() => setLimitModal(false)}
         limitText="You've reached 50 transactions this month on the Free plan."

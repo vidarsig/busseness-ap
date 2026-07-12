@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2 } from 'lucide-react';
+import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt } from 'lucide-react';
+import ReceiptMatcher from './ReceiptMatcher';
 import { useApp } from '../contexts/AppContext';
 import { Transaction, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
 import { categorizeBatch } from '../utils/ai';
@@ -146,6 +147,7 @@ export default function BankImport() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiProgress, setAiProgress] = useState(0);
   const [aiTotal, setAiTotal] = useState(0);
+  const [showReceipts, setShowReceipts] = useState(false);
   const [dragging, setDragging] = useState(false);
 
   function applyRulesToRows(parsed: ReturnType<typeof parseBank>): ImportRow[] {
@@ -333,7 +335,14 @@ export default function BankImport() {
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('bankimport')}</h1>
           <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Flytja inn Excel eða CSV frá íslensku bönkum' : 'Import Excel or CSV from Icelandic banks'}</p>
         </div>
+        <button onClick={() => setShowReceipts(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex-shrink-0">
+          <Receipt className="w-4 h-4" />
+          <span className="hidden sm:inline">{lang === 'is' ? 'Tengja kvittanir' : 'Match receipts'}</span>
+        </button>
       </div>
+
+      {showReceipts && <ReceiptMatcher onClose={() => setShowReceipts(false)} />}
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <h2 className="text-sm font-semibold text-gray-800 mb-3">{lang === 'is' ? '1. Veldu snið og skrá' : '1. Select format and file'}</h2>
