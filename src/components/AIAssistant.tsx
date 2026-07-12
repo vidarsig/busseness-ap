@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { ChatMessage, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
+import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
-import { fileToText, ParsedFile } from '../utils/fileText';
+import { prepareAttachment, Attachment } from '../utils/attachment';
 
 // Chat memory: keep the conversation for a while so leaving the screen or
 // refreshing doesn't wipe it. We forget a conversation after 2 hours of
@@ -51,23 +51,24 @@ export default function AIAssistant() {
 
   // Files attached to the next message (e.g. the greiðslutöflur for the loans).
   // Multiple so all loans can be sent together and compared in one question.
-  const [attachments, setAttachments] = useState<ParsedFile[]>([]);
+  // Handles spreadsheets/CSV/text, photos of documents, and PDFs.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attaching, setAttaching] = useState(false);
 
   async function pickFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     setError('');
     setAttaching(true);
-    const parsed: ParsedFile[] = [];
+    const parsed: Attachment[] = [];
     let failed = 0;
     for (const file of Array.from(files)) {
-      try { parsed.push(await fileToText(file)); }
+      try { parsed.push(await prepareAttachment(file)); }
       catch { failed++; }
     }
     if (parsed.length) setAttachments(prev => [...prev, ...parsed]);
     if (failed) setError(lang === 'is'
-      ? `Gat ekki lesið ${failed} skrá(r). Prófaðu Excel (.xlsx), CSV eða texta.`
-      : `Could not read ${failed} file(s). Try Excel (.xlsx), CSV or text.`);
+      ? `Gat ekki lesið ${failed} skrá(r). Prófaðu Excel, PDF, mynd, CSV eða texta.`
+      : `Could not read ${failed} file(s). Try Excel, PDF, image, CSV or text.`);
     setAttaching(false);
     if (fileRef.current) fileRef.current.value = '';
   }
@@ -112,26 +113,40 @@ export default function AIAssistant() {
     if (listening) stopMic();
 
     // What the user sees in the thread: their text plus a small chip per file
-    // (not the whole table). What we send the AI: the full parsed contents of
-    // every attached file so it can read the greiðslutöflur / spreadsheets.
+    // (not the raw contents). What we send the AI: the actual file data —
+    // spreadsheets/CSV as text, photos as image blocks, PDFs as document blocks.
     const chips = attachments.map(a => `📎 ${a.name}`).join('\n');
     const shown = (chips ? chips + '\n' : '') + input.trim();
-    const filesBlock = attachments.length
-      ? attachments
-          .map(a => `Attached file "${a.name}" (a table, e.g. a loan payment schedule):\n"""\n${a.text}\n"""`)
-          .join('\n\n') + '\n\nUse the file(s) above to answer.\n\n'
-      : '';
-    const apiContent = filesBlock + input.trim();
+
+    const textFiles = attachments.filter((a): a is Extract<Attachment, { kind: 'text' }> => a.kind === 'text');
+    const mediaFiles = attachments.filter(a => a.kind !== 'text');
+    const filesText = textFiles
+      .map(a => `Attached file "${a.name}" (a table, e.g. a loan payment schedule):\n"""\n${a.text}\n"""`)
+      .join('\n\n');
+
+    let apiContent: string | ContentBlock[];
+    if (mediaFiles.length > 0) {
+      const blocks: ContentBlock[] = [];
+      if (filesText) blocks.push({ type: 'text', text: filesText });
+      for (const a of attachments) {
+        if (a.kind === 'image') blocks.push({ type: 'image', source: { type: 'base64', media_type: a.mediaType, data: a.base64 } });
+        else if (a.kind === 'pdf') blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: a.base64 } });
+      }
+      blocks.push({ type: 'text', text: input.trim() || (lang === 'is' ? 'Skoðaðu meðfylgjandi skjöl og hjálpaðu mér.' : 'Please review the attached document(s) and help me.') });
+      apiContent = blocks;
+    } else {
+      apiContent = (filesText ? filesText + '\n\nUse the file(s) above to answer.\n\n' : '') + input.trim();
+    }
 
     const userMsg: ChatMessage = { role: 'user', content: shown };
-    const apiUserMsg: ChatMessage = { role: 'user', content: apiContent };
+    const apiUserMsg: ApiMessage = { role: 'user', content: apiContent };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setAttachments([]);
     setError('');
     setLoading(true);
 
-    const allMessages: ChatMessage[] = [...messages, apiUserMsg];
+    const allMessages: ApiMessage[] = [...messages, apiUserMsg];
     let assistantText = '';
 
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
@@ -284,7 +299,7 @@ export default function AIAssistant() {
                   <div key={idx} className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 max-w-full">
                     <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
                     <span className="truncate max-w-[160px]">{a.name}</span>
-                    {a.truncated && <span className="text-blue-400">{lang === 'is' ? '(stytt)' : '(shortened)'}</span>}
+                    {a.kind === 'text' && a.truncated && <span className="text-blue-400">{lang === 'is' ? '(stytt)' : '(shortened)'}</span>}
                     <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-700 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
                   </div>
                 ))}
@@ -296,12 +311,12 @@ export default function AIAssistant() {
               </div>
             )}
             <div className="flex gap-2 items-end">
-              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,.tsv" multiple className="sr-only"
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.pdf,image/*" multiple className="sr-only"
                 onChange={e => pickFiles(e.target.files)} />
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={loading || attaching}
-                title={lang === 'is' ? 'Hlaða upp skrám (t.d. greiðslutöflur — má velja margar)' : 'Upload files (e.g. payment tables — you can pick several)'}
+                title={lang === 'is' ? 'Hlaða upp skrám — Excel, PDF eða myndir (má velja margar)' : 'Upload files — Excel, PDF or photos (you can pick several)'}
                 aria-label={lang === 'is' ? 'Hlaða upp skrám' : 'Upload files'}
                 className="flex-shrink-0 p-3 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 <Paperclip className="w-5 h-5" />

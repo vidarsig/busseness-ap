@@ -6,6 +6,15 @@ const CLAUDE_STREAM_URL = '/api/claude-stream';
 
 export interface ChatMessage { role: 'user' | 'assistant'; content: string; }
 
+// A single message sent to the model may carry rich content blocks — text plus
+// images (photos of documents) and PDFs — not just a plain string.
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } };
+
+export interface ApiMessage { role: 'user' | 'assistant'; content: string | ContentBlock[]; }
+
 async function apiPost(body: object): Promise<Response> {
   return fetch(CLAUDE_URL, {
     method: 'POST',
@@ -31,7 +40,7 @@ async function callClaude(
 
 export async function streamClaude(
   system: string,
-  messages: ChatMessage[],
+  messages: ApiMessage[],
   onChunk: (text: string) => void,
   model = 'claude-sonnet-4-6',
 ): Promise<void> {
