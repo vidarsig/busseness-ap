@@ -4,6 +4,27 @@ import { useApp } from '../contexts/AppContext';
 import { ChatMessage, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 
+// Chat memory: keep the conversation for a while so leaving the screen or
+// refreshing doesn't wipe it. We forget a conversation after 2 hours of
+// inactivity (kept small — chat is just text, so localStorage is plenty).
+const CHAT_KEY = 'jobboks_ai_chat';
+const CHAT_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function loadChat(): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(CHAT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { savedAt?: string; messages?: ChatMessage[] };
+    if (!parsed.savedAt || Date.now() - new Date(parsed.savedAt).getTime() > CHAT_TTL_MS) {
+      localStorage.removeItem(CHAT_KEY);
+      return [];
+    }
+    return Array.isArray(parsed.messages) ? parsed.messages : [];
+  } catch {
+    return [];
+  }
+}
+
 function renderMarkdown(text: string): string {
   return text
     .replace(/^## (.+)$/gm, '<h3 class="text-base font-bold text-gray-900 mt-4 mb-1">$1</h3>')
@@ -17,7 +38,7 @@ function renderMarkdown(text: string): string {
 export default function AIAssistant() {
   const { data, t, lang } = useApp();
   const [tab, setTab] = useState<'chat' | 'insights'>('chat');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(loadChat);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -49,6 +70,16 @@ export default function AIAssistant() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, loading]);
+
+  // Remember the conversation. Save once a reply finishes streaming (not on
+  // every token), stamped with the time so it can expire after 2 hours.
+  useEffect(() => {
+    if (loading) return;
+    try {
+      if (messages.length === 0) localStorage.removeItem(CHAT_KEY);
+      else localStorage.setItem(CHAT_KEY, JSON.stringify({ savedAt: new Date().toISOString(), messages }));
+    } catch { /* ignore storage errors */ }
   }, [messages, loading]);
 
   async function sendMessage() {
