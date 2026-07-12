@@ -245,6 +245,7 @@ export default function Transactions() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
+  const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -258,19 +259,25 @@ export default function Transactions() {
       .filter(tx => {
         if (filterType !== 'all' && tx.type !== filterType) return false;
         if (filterYear !== 'all' && new Date(tx.date).getFullYear() !== filterYear) return false;
+        if (filterCategory !== 'all' && tx.category !== filterCategory) return false;
         if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
           !tx.reference?.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filterType, filterYear, search]);
+  }, [data.transactions, filterType, filterYear, filterCategory, search]);
+
+  // Keys (categories) actually in use, so the filter only lists real ones.
+  const usedCategories = useMemo(() =>
+    Array.from(new Set(data.transactions.map(tx => tx.category))).sort(),
+    [data.transactions]);
 
   // Render only a page at a time — a full history can be thousands of rows, and
   // drawing them all at once freezes the screen (especially right after a big
   // bank import). Reset back to the first page whenever the filters change.
   const PAGE = 150;
   const [visibleCount, setVisibleCount] = useState(PAGE);
-  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, search]);
+  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, search]);
   const paged = filtered.slice(0, visibleCount);
 
   function handleSave(tx: Transaction) {
@@ -416,6 +423,15 @@ export default function Transactions() {
             >
               <option value="all">{t('all')}</option>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filterCategory}
+              onChange={e => setFilterCategory(e.target.value)}
+              title={lang === 'is' ? 'Lykill / flokkur' : 'Key / category'}
+            >
+              <option value="all">{lang === 'is' ? 'Allir lyklar' : 'All keys'}</option>
+              {usedCategories.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
             </select>
             <button onClick={exportToPDF} className="sm:hidden flex items-center gap-1 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm">
               <FileText className="w-4 h-4" />PDF
@@ -660,9 +676,9 @@ export default function Transactions() {
                 : 'This deletes every transaction currently shown (matching your filter). This cannot be undone.'}
             </p>
             <p className="text-xs text-gray-500 mb-5">
-              {filterYear === 'all' && filterType === 'all' && !search
+              {filterYear === 'all' && filterType === 'all' && filterCategory === 'all' && !search
                 ? (lang === 'is' ? '⚠️ Engin sía valin — ALLAR færslur verða fjarlægðar.' : '⚠️ No filter set — ALL transactions will be removed.')
-                : (lang === 'is' ? 'Ábending: notaðu síuna (ár/tegund/leit) til að eyða aðeins hluta.' : 'Tip: use the filters (year/type/search) to delete only part.')}
+                : (lang === 'is' ? 'Ábending: notaðu síuna (lykill/ár/tegund/leit) til að eyða aðeins hluta.' : 'Tip: use the filters (key/year/type/search) to delete only part.')}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setBulkDeleteOpen(false)}
