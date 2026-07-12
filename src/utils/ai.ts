@@ -38,7 +38,16 @@ export async function streamClaude(
   const res = await fetch(CLAUDE_STREAM_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 2048, stream: true, system, messages }),
+    // Send the system prompt as a cacheable block. It holds the whole financial
+    // context (every year's summary + up to 2000 transactions) and is identical
+    // across turns in a chat, so prompt caching means the model reads it once and
+    // reuses it on every following question — far cheaper and faster than
+    // re-ingesting everything each prompt. Cache lives ~5 min; it re-primes
+    // automatically if the data changes.
+    body: JSON.stringify({
+      model, max_tokens: 2048, stream: true, messages,
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+    }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
