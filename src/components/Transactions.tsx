@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
 import { useApp } from '../contexts/AppContext';
@@ -364,6 +364,41 @@ export default function Transactions({ initialFilter }: { initialFilter?: { cate
     URL.revokeObjectURL(url);
   }
 
+  // Export a counterparty index of the currently-filtered set: one row per party
+  // (grouped by description), with count, total in/out/net, and a column per year.
+  function exportCounterparties() {
+    const yrs = Array.from(new Set(filtered.map(tx => new Date(tx.date).getFullYear()))).sort((a, b) => a - b);
+    const map = new Map<string, { inc: number; exp: number; count: number; perYear: Record<number, number> }>();
+    for (const tx of filtered) {
+      const key = (tx.description || '').trim() || (lang === 'is' ? '(engin lýsing)' : '(no description)');
+      let e = map.get(key);
+      if (!e) { e = { inc: 0, exp: 0, count: 0, perYear: {} }; map.set(key, e); }
+      const y = new Date(tx.date).getFullYear();
+      const v = getTransactionISK(tx) + getVATAmountISK(tx);
+      e.perYear[y] = e.perYear[y] ?? 0;
+      if (tx.type === 'income') { e.inc += v; e.perYear[y] += v; }
+      else if (tx.type === 'expense') { e.exp += v; e.perYear[y] -= v; }
+      e.count++;
+    }
+    const cols = [
+      { header: lang === 'is' ? 'Aðili' : 'Party', key: 'party', width: 38 },
+      { header: lang === 'is' ? 'Fjöldi' : 'Count', key: 'count', width: 8 },
+      { header: lang === 'is' ? 'Inn' : 'In', key: 'inc', width: 14 },
+      { header: lang === 'is' ? 'Út' : 'Out', key: 'exp', width: 14 },
+      { header: lang === 'is' ? 'Nettó' : 'Net', key: 'net', width: 14 },
+      ...yrs.map(y => ({ header: String(y), key: `y${y}`, width: 12 })),
+    ];
+    const rows = [...map.entries()].map(([party, e]) => {
+      const row: Record<string, string | number> = {
+        party, count: e.count, inc: Math.round(e.inc), exp: Math.round(e.exp), net: Math.round(e.inc - e.exp),
+      };
+      yrs.forEach(y => { row[`y${y}`] = Math.round(e.perYear[y] ?? 0); });
+      return row;
+    }).sort((a, b) => Math.abs(b.net as number) - Math.abs(a.net as number));
+    exportExcel([{ name: lang === 'is' ? 'Aðilar' : 'Counterparties', columns: cols, rows }],
+      `adilar_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }
+
   const thCls = 'px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide text-left';
   const tdCls = 'px-3 py-2.5 text-sm text-gray-700';
 
@@ -384,6 +419,10 @@ export default function Transactions({ initialFilter }: { initialFilter?: { cate
           <button onClick={exportCSV}
             className="hidden sm:flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
             <Download className="w-4 h-4" />CSV
+          </button>
+          <button onClick={exportCounterparties} title={lang === 'is' ? 'Flytja út aðilalista (Excel)' : 'Export counterparty list (Excel)'}
+            className="hidden sm:flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
+            <Users className="w-4 h-4" />{lang === 'is' ? 'Aðilar' : 'Parties'}
           </button>
           <button onClick={() => setScannerOpen(true)}
             className="flex items-center gap-2 bg-gray-900 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -463,6 +502,9 @@ export default function Transactions({ initialFilter }: { initialFilter?: { cate
             </button>
             <button onClick={exportCSV} className="sm:hidden flex items-center gap-1 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm">
               <Download className="w-4 h-4" />CSV
+            </button>
+            <button onClick={exportCounterparties} className="sm:hidden flex items-center gap-1 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm">
+              <Users className="w-4 h-4" />{lang === 'is' ? 'Aðilar' : 'Parties'}
             </button>
             {filtered.length > 0 && (
               <button onClick={() => setBulkDeleteOpen(true)}
