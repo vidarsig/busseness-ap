@@ -4,7 +4,7 @@ import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss } from '../utils/calculations';
 import { exportPDF, exportExcel } from '../utils/exports';
 
-export default function Reports() {
+export default function Reports({ drill }: { drill?: (category: string, year: number) => void } = {}) {
   const { data, t, lang, fmtISK } = useApp();
   const currentYear = data.settings.fiscalYear;
   const [year, setYear] = useState(currentYear);
@@ -90,12 +90,18 @@ export default function Reports() {
   const txs = filterByYear(data.transactions, year);
   const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
 
-  const Row = ({ label, amount, bold, indent, isNegative }: {
-    label: string; amount: number; bold?: boolean; indent?: boolean; isNegative?: boolean;
+  const Row = ({ label, amount, bold, indent, isNegative, catKey }: {
+    label: string; amount: number; bold?: boolean; indent?: boolean; isNegative?: boolean; catKey?: string;
   }) => (
     <tr className={bold ? 'border-t-2 border-gray-300 bg-gray-50' : ''}>
       <td className={`px-5 py-2 text-sm ${bold ? 'font-bold text-gray-900' : 'text-gray-700'} ${indent ? 'pl-10' : ''}`}>
-        {label}
+        {catKey && drill
+          ? <button onClick={() => drill(catKey, year)}
+              className="text-blue-600 hover:underline no-print text-left"
+              title={lang === 'is' ? 'Skoða/laga færslur þessa lykils' : 'View/fix this key’s transactions'}>
+              {label}
+            </button>
+          : label}
       </td>
       <td className={`px-5 py-2 text-sm text-right font-mono ${bold ? 'font-bold' : ''} ${
         amount < 0 ? 'text-red-600' : isNegative ? 'text-gray-700' : 'text-gray-700'
@@ -172,30 +178,30 @@ export default function Reports() {
           </thead>
           <tbody className="divide-y divide-gray-50">
             <SectionHeader label={t('revenues')} />
-            <Row label={t('sala_vara')} amount={pl.salaTekjur} indent />
-            <Row label={t('sala_thjonustu')} amount={pl.thjonustutekjur} indent />
-            <Row label={t('adrar_tekjur')} amount={pl.adrarTekjur} indent />
+            <Row label={t('sala_vara')} amount={pl.salaTekjur} indent catKey="sala_vara" />
+            <Row label={t('sala_thjonustu')} amount={pl.thjonustutekjur} indent catKey="sala_thjonustu" />
+            <Row label={t('adrar_tekjur')} amount={pl.adrarTekjur} indent catKey="adrar_tekjur" />
             <Row label={t('revenues')} amount={pl.totalRevenue} bold />
 
             <SectionHeader label={t('operatingExpenses')} />
-            {pl.laun > 0 && <Row label={t('laun')} amount={pl.laun} indent isNegative />}
-            {pl.launatengd > 0 && <Row label={t('launatengd_gjold')} amount={pl.launatengd} indent isNegative />}
-            {pl.husaleiga > 0 && <Row label={t('husaleiga')} amount={pl.husaleiga} indent isNegative />}
-            {pl.simagjold > 0 && <Row label={t('simagjold')} amount={pl.simagjold} indent isNegative />}
-            {pl.skrifstofugjold > 0 && <Row label={t('skrifstofugjold')} amount={pl.skrifstofugjold} indent isNegative />}
-            {pl.samgongur > 0 && <Row label={t('samgongur')} amount={pl.samgongur} indent isNegative />}
-            {pl.markadsmal > 0 && <Row label={t('markadsmal')} amount={pl.markadsmal} indent isNegative />}
-            {pl.fagthjonusta > 0 && <Row label={t('fagthjonusta')} amount={pl.fagthjonusta} indent isNegative />}
-            {pl.vorur > 0 && <Row label={t('vorur')} amount={pl.vorur} indent isNegative />}
-            {pl.afskriftir > 0 && <Row label={t('afskriftir')} amount={pl.afskriftir} indent isNegative />}
-            {pl.adrir > 0 && <Row label={t('adrir_rekstrargjold')} amount={pl.adrir} indent isNegative />}
+            {pl.laun > 0 && <Row label={t('laun')} amount={pl.laun} indent isNegative catKey="laun" />}
+            {pl.launatengd > 0 && <Row label={t('launatengd_gjold')} amount={pl.launatengd} indent isNegative catKey="launatengd_gjold" />}
+            {pl.husaleiga > 0 && <Row label={t('husaleiga')} amount={pl.husaleiga} indent isNegative catKey="husaleiga" />}
+            {pl.simagjold > 0 && <Row label={t('simagjold')} amount={pl.simagjold} indent isNegative catKey="simagjold" />}
+            {pl.skrifstofugjold > 0 && <Row label={t('skrifstofugjold')} amount={pl.skrifstofugjold} indent isNegative catKey="skrifstofugjold" />}
+            {pl.samgongur > 0 && <Row label={t('samgongur')} amount={pl.samgongur} indent isNegative catKey="samgongur" />}
+            {pl.markadsmal > 0 && <Row label={t('markadsmal')} amount={pl.markadsmal} indent isNegative catKey="markadsmal" />}
+            {pl.fagthjonusta > 0 && <Row label={t('fagthjonusta')} amount={pl.fagthjonusta} indent isNegative catKey="fagthjonusta" />}
+            {pl.vorur > 0 && <Row label={t('vorur')} amount={pl.vorur} indent isNegative catKey="vorur" />}
+            {pl.afskriftir > 0 && <Row label={t('afskriftir')} amount={pl.afskriftir} indent isNegative catKey="afskriftir" />}
+            {pl.adrir > 0 && <Row label={t('adrir_rekstrargjold')} amount={pl.adrir} indent isNegative catKey="adrir_rekstrargjold" />}
             <Row label={t('operatingExpenses')} amount={-pl.totalOperatingExpenses} bold />
 
             <Row label={t('operatingProfit')} amount={pl.operatingProfit} bold />
 
             <SectionHeader label={t('financialExpenses')} />
-            {pl.fjarmagntekjur > 0 && <Row label={t('fjarmagns_tekjur')} amount={pl.fjarmagntekjur} indent />}
-            {pl.fjarmagnsgjold > 0 && <Row label={t('fjarmagnsgjold')} amount={-pl.fjarmagnsgjold} indent />}
+            {pl.fjarmagntekjur > 0 && <Row label={t('fjarmagns_tekjur')} amount={pl.fjarmagntekjur} indent catKey="fjarmagns_tekjur" />}
+            {pl.fjarmagnsgjold > 0 && <Row label={t('fjarmagnsgjold')} amount={-pl.fjarmagnsgjold} indent catKey="fjarmagnsgjold" />}
 
             <Row label={t('profitBeforeTax')} amount={pl.profitBeforeTax} bold />
             {pl.incomeTax > 0 && <Row label={t('incomeTax')} amount={-pl.incomeTax} indent />}

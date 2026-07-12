@@ -36,6 +36,9 @@ export interface SessionUser {
 
 function AppInner() {
   const [view, setView] = useState<View>('dashboard');
+  // Drill-down target: set when the user clicks a key in Reports, consumed by
+  // Transactions to pre-filter to that key (and year) so they can fix it.
+  const [txDrill, setTxDrill] = useState<{ category?: string; year?: number } | null>(null);
   const { data } = useApp();
 
   const { supabaseUrl, supabaseKey } = data.settings;
@@ -108,7 +111,7 @@ function AppInner() {
     <Layout view={safeView} setView={setView} sessionUser={sessionUser} perms={perms}
       onSignOut={() => setSessionUser(null)}>
       {safeView === 'dashboard'    && <Dashboard setView={setView} />}
-      {safeView === 'transactions' && <Transactions />}
+      {safeView === 'transactions' && <Transactions initialFilter={txDrill} />}
       {safeView === 'recurring'    && <Recurring />}
       {safeView === 'bankimport'   && <BankImport />}
       {safeView === 'rules'        && <AutoRules />}
@@ -119,7 +122,7 @@ function AppInner() {
       {safeView === 'payroll'      && <Payroll />}
       {safeView === 'vat'          && <VAT />}
       {safeView === 'vatreturn'    && <VATReturn />}
-      {safeView === 'reports'      && <Reports />}
+      {safeView === 'reports'      && <Reports drill={(category, year) => { setTxDrill({ category, year }); setView('transactions'); }} />}
       {safeView === 'annual'       && <AnnualAccounts />}
       {safeView === 'settings'     && <Settings />}
       {safeView === 'ai'           && <AIAssistant />}

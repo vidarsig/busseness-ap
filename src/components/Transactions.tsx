@@ -230,7 +230,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   );
 }
 
-export default function Transactions() {
+export default function Transactions({ initialFilter }: { initialFilter?: { category?: string; year?: number } | null } = {}) {
   const { data, dispatch, t, lang } = useApp();
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
@@ -248,6 +248,15 @@ export default function Transactions() {
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+
+  // When arriving from a drill-down (e.g. clicking a key in Skýrslur), pre-filter
+  // to that key and year and open the filter panel so it's obvious what's shown.
+  useEffect(() => {
+    if (!initialFilter) return;
+    if (initialFilter.category) setFilterCategory(initialFilter.category);
+    if (initialFilter.year) setFilterYear(initialFilter.year);
+    setShowFilters(true);
+  }, [initialFilter]);
 
   const years = useMemo(() => {
     const ys = new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()));
