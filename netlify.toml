@@ -3,6 +3,12 @@
   to = "/.netlify/functions/claude"
   status = 200
 
+# Clean URL for the public info / marketing page
+[[redirects]]
+  from = "/kynning"
+  to = "/kynning.html"
+  status = 200
+
 [[edge_functions]]
   path = "/api/claude-stream"
   function = "claude-stream"

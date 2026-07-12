@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jobbók — Bókhaldið sem gerir sig sjálft</title>
+<meta name="description" content="Skannaðu kvittun og hún bókast sjálf. Bankainnflutningur, AI-flokkun, reikningar, VSK og verk — allt á einum stað, dauðaeinfalt." />
+<meta property="og:title" content="Jobbók — Bókhaldið sem gerir sig sjálft" />
+<meta property="og:description" content="Skannaðu kvittun og hún bókast sjálf. Allt bókhaldið á einum stað." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="/favicon.svg" />
+<style>
+  :root{
+    --blue:#1e3a8a; --blue2:#2563eb; --purple:#7c3aed; --ink:#0f172a;
+    --muted:#64748b; --bg:#f8fafc; --card:#ffffff; --line:#e2e8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  .btn{display:inline-block;background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;font-weight:600;padding:14px 26px;border-radius:12px;transition:transform .15s,box-shadow .15s;box-shadow:0 6px 18px rgba(37,99,235,.25)}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(124,58,237,.35)}
+  .btn.ghost{background:transparent;color:var(--blue);box-shadow:none;border:1.5px solid var(--line)}
+
+  /* Header */
+  header{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{font-weight:800;font-size:22px;background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+  /* Hero */
+  .hero{text-align:center;padding:72px 0 40px}
+  .hero h1{font-size:clamp(32px,6vw,54px);font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .hero h1 .grad{background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero p{font-size:clamp(16px,2.5vw,20px);color:var(--muted);max-width:620px;margin:18px auto 28px}
+  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+  /* Video */
+  .video-sec{padding:24px 0 56px}
+  .video-card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px;box-shadow:0 12px 40px rgba(15,23,42,.06);max-width:820px;margin:0 auto}
+  .video-frame{position:relative;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,#1e293b,#0f172a);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center}
+  .video-frame video{width:100%;height:100%;object-fit:cover;display:block}
+  .placeholder{color:#cbd5e1;text-align:center;padding:20px}
+  .placeholder .play{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+  .caption{text-align:center;color:var(--muted);font-size:14px;margin-top:12px}
+
+  /* Features */
+  .features{padding:56px 0}
+  .features h2{text-align:center;font-size:clamp(26px,4vw,36px);font-weight:800;margin-bottom:8px}
+  .features .sub{text-align:center;color:var(--muted);margin-bottom:36px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;transition:transform .15s,box-shadow .15s}
+  .feat:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(15,23,42,.07)}
+  .feat .ic{font-size:28px;margin-bottom:10px}
+  .feat h3{font-size:17px;margin-bottom:6px}
+  .feat p{color:var(--muted);font-size:14.5px}
+
+  /* Steps */
+  .steps{background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;padding:56px 0;border-radius:0}
+  .steps h2{text-align:center;font-size:clamp(26px,4vw,34px);font-weight:800;margin-bottom:32px}
+  .steprow{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px}
+  .step{text-align:center}
+  .step .num{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-weight:800;margin:0 auto 12px;font-size:18px}
+  .step p{opacity:.92;font-size:15px}
+
+  /* CTA */
+  .final{text-align:center;padding:64px 0}
+  .final h2{font-size:clamp(26px,4vw,36px);font-weight:800;margin-bottom:10px}
+  .final p{color:var(--muted);margin-bottom:24px}
+
+  footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo">Jobbók</div>
+    <a class="btn" href="https://jobboks.app">Opna appið</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>Bókhaldið sem <span class="grad">gerir sig sjálft</span></h1>
+    <p>Skannaðu kvittun — hún bókast sjálfkrafa á réttan stað. Bankafærslur, VSK, reikningar og verk á einum stað. Dauðaeinfalt, gert fyrir iðnaðarmanninn.</p>
+    <div class="cta-row">
+      <a class="btn" href="https://jobboks.app">Byrjaðu núna</a>
+      <a class="btn ghost" href="#hvernig">Sjá hvernig það virkar</a>
+    </div>
+  </div>
+</section>
+
+<section class="video-sec" id="hvernig">
+  <div class="wrap">
+    <div class="video-card">
+      <div class="video-frame">
+        <!-- Þegar myndbandið er tilbúið: settu skrána í public/demo.mp4 og fjarlægðu placeholder-inn hér að neðan. -->
+        <video controls poster="/icon-512.png" preload="none" style="display:none" id="demo">
+          <source src="/demo.mp4" type="video/mp4" />
+        </video>
+        <div class="placeholder" id="ph">
+          <div class="play">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+          <div style="font-weight:600;color:#e2e8f0">Kynningarmyndband kemur hér</div>
+          <div style="font-size:13px;margin-top:4px">Pípari kaupir efni → skannar kvittun → bókast sjálft</div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Frá kvittun í bókhald á sekúndum — engin handavinna.</p>
+  </div>
+</section>
+
+<section class="features">
+  <div class="wrap">
+    <h2>Allt bókhaldið á einum stað</h2>
+    <p class="sub">Engir aukareikningar, engin flækja — bara það sem þú þarft.</p>
+    <div class="grid">
+      <div class="feat"><div class="ic">🧾</div><h3>Skannaðu kvittanir</h3><p>Taktu mynd af kvittun — AI les upphæð, dagsetningu og seljanda og bókar hana rétt.</p></div>
+      <div class="feat"><div class="ic">🏦</div><h3>Bankainnflutningur</h3><p>Flyttu inn færslur beint úr netbankanum. AI flokkar þær sjálfkrafa á rétta lykla.</p></div>
+      <div class="feat"><div class="ic">🤖</div><h3>AI aðstoðarmaður</h3><p>Spyrðu um reksturinn, berðu saman ár, finndu aðila — aðstoðin þekkir bókhaldið þitt.</p></div>
+      <div class="feat"><div class="ic">📊</div><h3>Skýrslur & VSK</h3><p>Rekstrarreikningur, VSK-skýrsla og ársreikningur — tilbúið með einum smelli.</p></div>
+      <div class="feat"><div class="ic">🏗️</div><h3>Verk & reikningar</h3><p>Haltu utan um verk, tíma, efni og myndir — og breyttu í reikning þegar verkinu lýkur.</p></div>
+      <div class="feat"><div class="ic">💾</div><h3>Öruggt & samstillt</h3><p>Gögnin þín geymast örugglega og samstillast milli síma og tölvu.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="steps">
+  <div class="wrap">
+    <h2>Þrjú skref</h2>
+    <div class="steprow">
+      <div class="step"><div class="num">1</div><p>Skannaðu kvittun eða flyttu inn bankafærslur.</p></div>
+      <div class="step"><div class="num">2</div><p>AI flokkar og bókar á rétta lykla — þú staðfestir bara.</p></div>
+      <div class="step"><div class="num">3</div><p>Sjáðu stöðuna, skýrslur og VSK hvenær sem er.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <h2>Tilbúinn að einfalda bókhaldið?</h2>
+    <p>Byrjaðu ókeypis — engin uppsetning, opnast beint í vafranum.</p>
+    <a class="btn" href="https://jobboks.app">Opna Jobbók</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Jobbók — bókhald &amp; verkstjórn fyrir iðnaðarmenn · <a href="https://jobboks.app" style="color:var(--blue)">jobboks.app</a></div>
+</footer>
+
+<script>
+  // Ef demo.mp4 er til staðar, sýndu myndbandið í stað placeholder.
+  (function(){
+    fetch('/demo.mp4',{method:'HEAD'}).then(function(r){
+      if(r.ok){ document.getElementById('demo').style.display='block'; document.getElementById('ph').style.display='none'; }
+    }).catch(function(){});
+  })();
+</script>
+
+</body>
+</html>
