@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic } from 'lucide-react';
+import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { ChatMessage, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
+import { fileToText, ParsedFile } from '../utils/fileText';
 
 // Chat memory: keep the conversation for a while so leaving the screen or
 // refreshing doesn't wipe it. We forget a conversation after 2 hours of
@@ -46,6 +47,27 @@ export default function AIAssistant() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // A file the user attached to their next message (e.g. a loan greiðslutafla).
+  const [attachment, setAttachment] = useState<ParsedFile | null>(null);
+  const [attaching, setAttaching] = useState(false);
+
+  async function pickFile(file: File | undefined) {
+    if (!file) return;
+    setError('');
+    setAttaching(true);
+    try {
+      const parsed = await fileToText(file);
+      setAttachment(parsed);
+    } catch {
+      setError(lang === 'is'
+        ? 'Get ekki lesið þessa skrá. Prófaðu Excel (.xlsx), CSV eða texta.'
+        : 'Could not read this file. Try Excel (.xlsx), CSV or text.');
+    }
+    setAttaching(false);
+    if (fileRef.current) fileRef.current.value = '';
+  }
 
   // Voice input: tap mic, talk, words stream into the box.
   const { listening, supported: micSupported, error: micError, start: startMic, stop: stopMic } = useSpeechRecognition(lang);
@@ -83,15 +105,26 @@ export default function AIAssistant() {
   }, [messages, loading]);
 
   async function sendMessage() {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && !attachment) || loading) return;
     if (listening) stopMic();
-    const userMsg: ChatMessage = { role: 'user', content: input.trim() };
+
+    // What the user sees in the thread: their text plus a small file chip (not
+    // the whole table). What we send the AI: the full parsed file contents so it
+    // can actually read the greiðslutafla / spreadsheet.
+    const shown = (attachment ? `📎 ${attachment.name}\n` : '') + input.trim();
+    const apiContent = (attachment
+      ? `The user attached a file named "${attachment.name}". Its contents (a table, e.g. a loan payment schedule) are below. Use it to answer.\n\n"""\n${attachment.text}\n"""\n\n`
+      : '') + input.trim();
+
+    const userMsg: ChatMessage = { role: 'user', content: shown };
+    const apiUserMsg: ChatMessage = { role: 'user', content: apiContent };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
+    setAttachment(null);
     setError('');
     setLoading(true);
 
-    const allMessages: ChatMessage[] = [...messages, userMsg];
+    const allMessages: ChatMessage[] = [...messages, apiUserMsg];
     let assistantText = '';
 
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
@@ -237,7 +270,30 @@ export default function AIAssistant() {
 
           {/* Input */}
           <div className="flex-shrink-0 pt-3 border-t border-gray-100">
+            {/* Attachment chip */}
+            {(attachment || attaching) && (
+              <div className="flex items-center gap-2 mb-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 w-fit max-w-full">
+                {attaching
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />{lang === 'is' ? 'Les skrá…' : 'Reading file…'}</>
+                  : <>
+                      <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">{attachment!.name}</span>
+                      {attachment!.truncated && <span className="text-blue-400">{lang === 'is' ? '(stytt)' : '(shortened)'}</span>}
+                      <button onClick={() => setAttachment(null)} className="text-blue-400 hover:text-blue-700 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    </>}
+              </div>
+            )}
             <div className="flex gap-2 items-end">
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,.tsv" className="sr-only"
+                onChange={e => pickFile(e.target.files?.[0])} />
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={loading || attaching}
+                title={lang === 'is' ? 'Hlaða upp skrá (t.d. greiðslutöflu)' : 'Upload a file (e.g. a payment table)'}
+                aria-label={lang === 'is' ? 'Hlaða upp skrá' : 'Upload a file'}
+                className="flex-shrink-0 p-3 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                <Paperclip className="w-5 h-5" />
+              </button>
               <textarea
                 ref={inputRef}
                 value={input}
@@ -263,7 +319,7 @@ export default function AIAssistant() {
               )}
               <button
                 onClick={sendMessage}
-                disabled={!input.trim() || loading}
+                disabled={(!input.trim() && !attachment) || loading}
                 className="flex-shrink-0 bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
               </button>
