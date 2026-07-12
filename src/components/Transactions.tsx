@@ -242,6 +242,7 @@ export default function Transactions() {
     setModal({ open: true });
   }
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
   const [search, setSearch] = useState('');
@@ -425,6 +426,13 @@ export default function Transactions() {
             <button onClick={exportCSV} className="sm:hidden flex items-center gap-1 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm">
               <Download className="w-4 h-4" />CSV
             </button>
+            {filtered.length > 0 && (
+              <button onClick={() => setBulkDeleteOpen(true)}
+                className="flex items-center gap-1 border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 rounded-lg text-sm ml-auto">
+                <Trash2 className="w-4 h-4" />
+                {lang === 'is' ? `Eyða völdum (${filtered.length})` : `Delete shown (${filtered.length})`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -634,6 +642,35 @@ export default function Transactions() {
                 className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-xl text-sm hover:bg-gray-50">{t('cancel')}</button>
               <button onClick={() => handleDelete(deleteId)}
                 className="flex-1 bg-red-600 text-white py-3 rounded-xl text-sm hover:bg-red-700">{t('delete')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete confirm (development clean-up) */}
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
+          <div className="bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-6 w-full md:max-w-sm">
+            <h3 className="text-base font-semibold text-gray-900 mb-2">
+              {lang === 'is' ? `Eyða ${filtered.length} færslum?` : `Delete ${filtered.length} transactions?`}
+            </h3>
+            <p className="text-sm text-gray-600 mb-2">
+              {lang === 'is'
+                ? 'Þetta eyðir öllum færslunum sem núna eru sýndar (miðað við síu). Þetta er ekki hægt að afturkalla.'
+                : 'This deletes every transaction currently shown (matching your filter). This cannot be undone.'}
+            </p>
+            <p className="text-xs text-gray-500 mb-5">
+              {filterYear === 'all' && filterType === 'all' && !search
+                ? (lang === 'is' ? '⚠️ Engin sía valin — ALLAR færslur verða fjarlægðar.' : '⚠️ No filter set — ALL transactions will be removed.')
+                : (lang === 'is' ? 'Ábending: notaðu síuna (ár/tegund/leit) til að eyða aðeins hluta.' : 'Tip: use the filters (year/type/search) to delete only part.')}
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setBulkDeleteOpen(false)}
+                className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-xl text-sm hover:bg-gray-50">{t('cancel')}</button>
+              <button onClick={() => { dispatch({ type: 'DELETE_TRANSACTIONS', payload: filtered.map(tx => tx.id) }); setBulkDeleteOpen(false); }}
+                className="flex-1 bg-red-600 text-white py-3 rounded-xl text-sm hover:bg-red-700">
+                {lang === 'is' ? `Eyða ${filtered.length}` : `Delete ${filtered.length}`}
+              </button>
             </div>
           </div>
         </div>

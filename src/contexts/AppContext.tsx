@@ -49,6 +49,7 @@ type Action =
   | { type: 'ADD_TRANSACTIONS'; payload: Transaction[] }
   | { type: 'UPDATE_TRANSACTION'; payload: Transaction }
   | { type: 'DELETE_TRANSACTION'; payload: string }
+  | { type: 'DELETE_TRANSACTIONS'; payload: string[] }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<AppSettings> }
   | { type: 'ADD_BS_ITEM'; payload: BalanceSheetItem }
   | { type: 'UPDATE_BS_ITEM'; payload: BalanceSheetItem }
@@ -108,6 +109,7 @@ function reducer(state: AppData, action: Action): AppData {
     case 'ADD_TRANSACTIONS': return { ...state, transactions: [...state.transactions, ...action.payload] };
     case 'UPDATE_TRANSACTION': return { ...state, transactions: state.transactions.map(t => t.id === action.payload.id ? action.payload : t) };
     case 'DELETE_TRANSACTION': return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
+    case 'DELETE_TRANSACTIONS': { const ids = new Set(action.payload); return { ...state, transactions: state.transactions.filter(t => !ids.has(t.id)) }; }
     case 'UPDATE_SETTINGS': return { ...state, settings: { ...state.settings, ...action.payload } };
     case 'ADD_BS_ITEM': return { ...state, balanceSheetItems: [...state.balanceSheetItems, action.payload] };
     case 'UPDATE_BS_ITEM': return { ...state, balanceSheetItems: state.balanceSheetItems.map(b => b.id === action.payload.id ? action.payload : b) };
