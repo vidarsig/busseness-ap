@@ -281,6 +281,19 @@ export default function Transactions({ initialFilter }: { initialFilter?: { cate
     Array.from(new Set(data.transactions.map(tx => tx.category))).sort(),
     [data.transactions]);
 
+  // Summary of whatever is currently shown (e.g. one key) — count + totals, so
+  // you see the transactions AND the total for each key in one place.
+  const summary = useMemo(() => {
+    let income = 0, expense = 0, transfer = 0;
+    for (const tx of filtered) {
+      const v = getTransactionISK(tx) + getVATAmountISK(tx);
+      if (tx.type === 'income') income += v;
+      else if (tx.type === 'expense') expense += v;
+      else transfer += v;
+    }
+    return { income, expense, transfer, net: income - expense, count: filtered.length };
+  }, [filtered]);
+
   // Render only a page at a time — a full history can be thousands of rows, and
   // drawing them all at once freezes the screen (especially right after a big
   // bank import). Reset back to the first page whenever the filters change.
@@ -461,6 +474,23 @@ export default function Transactions({ initialFilter }: { initialFilter?: { cate
           </div>
         )}
       </div>
+
+      {/* ── Summary of the current selection (per key) ───── */}
+      {filtered.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+          <span className="font-semibold text-gray-800">
+            {filterCategory !== 'all' ? t(filterCategory as never) : (lang === 'is' ? 'Allar færslur' : 'All transactions')}
+          </span>
+          <span className="text-gray-400">·</span>
+          <span className="text-gray-600">{summary.count} {lang === 'is' ? 'færslur' : 'transactions'}</span>
+          {summary.income > 0 && <span className="font-mono text-green-600">+{formatISK(summary.income, lang)}</span>}
+          {summary.expense > 0 && <span className="font-mono text-red-600">-{formatISK(summary.expense, lang)}</span>}
+          {summary.transfer !== 0 && <span className="font-mono text-gray-500">±{formatISK(summary.transfer, lang)}</span>}
+          {summary.income > 0 && summary.expense > 0 && (
+            <span className="ml-auto font-semibold text-gray-800">{lang === 'is' ? 'Nettó' : 'Net'}: {formatISK(summary.net, lang)}</span>
+          )}
+        </div>
+      )}
 
       {/* ── MOBILE card list ─────────────────────────────── */}
       <div className="md:hidden space-y-2">
