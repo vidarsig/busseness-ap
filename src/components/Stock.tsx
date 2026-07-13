@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, Fragment } from 'react';
 import { Plus, Pencil, Trash2, X, Package, AlertTriangle, TrendingDown, TrendingUp, Upload, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { StockItem, StockMovement, Currency } from '../types';
@@ -92,20 +92,35 @@ export default function Stock() {
     setMv(v => ({ ...v, open: false, qty: '', reference: '', note: '' }));
   }
 
-  // ── CSV import from supplier ─────────────────────────────────
-  function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
+  // ── Import from supplier (CSV, Excel .xlsx/.xls, or text) ────────
+  // Reads any of the formats into a rows[][] grid, then maps the columns the
+  // same way regardless of source.
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = evt => {
-      const text = evt.target?.result as string;
-      const lines = text.split('\n').filter(Boolean);
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    try {
+      let rows: string[][] = [];
+      if (/\.(xlsx|xls)$/i.test(file.name)) {
+        const XLSX = await import('xlsx'); // lazy-loaded, like Bank Import
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = (XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false }) as unknown[][])
+          .map(r => r.map(c => (c == null ? '' : String(c))));
+      } else {
+        const text = await file.text();
+        // Accept comma- or semicolon-separated (Icelandic exports often use ;).
+        rows = text.split(/\r?\n/).filter(Boolean).map(line => line.split(/[;,]/));
+      }
+      if (rows.length < 2) {
+        alert(isIS ? 'Skráin lítur út fyrir að vera tóm' : 'File appears to be empty');
+        return;
+      }
+      const headers = rows[0].map(h => h.trim().toLowerCase());
       const now = nowISO();
       let count = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',');
-        const get = (key: string) => cols[headers.indexOf(key)]?.trim() ?? '';
+      for (let i = 1; i < rows.length; i++) {
+        const cols = rows[i];
+        const get = (key: string) => (cols[headers.indexOf(key)] ?? '').toString().trim();
         const name = get('name') || get('description') || get('item');
         if (!name) continue;
         const existing = items.find(it => it.sku === get('sku') || it.sku === get('code'));
@@ -129,9 +144,10 @@ export default function Stock() {
       }
       alert(isIS ? `${count} hlutir fluttir inn` : `${count} items imported`);
       setImportOpen(false);
-      if (fileRef.current) fileRef.current.value = '';
-    };
-    reader.readAsText(file);
+    } catch {
+      alert(isIS ? 'Gat ekki lesið skrána' : 'Could not read the file');
+    }
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   const itemHistory = historyId ? movements.filter(m => m.itemId === historyId).sort((a, b) => b.date.localeCompare(a.date)) : [];
@@ -149,7 +165,7 @@ export default function Stock() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => setImportOpen(true)} className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
-            <Upload className="w-4 h-4" />{isIS ? 'Innflutningur' : 'Import CSV'}
+            <Upload className="w-4 h-4" />{isIS ? 'Innflutningur' : 'Import'}
           </button>
           <button onClick={openAddItem} className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             <Plus className="w-4 h-4" />{isIS ? 'Bæta við hlut' : 'Add item'}
@@ -215,8 +231,8 @@ export default function Stock() {
                 {filtered.map(it => {
                   const isLow = it.qtyOnHand <= it.reorderPoint;
                   return (
-                    <>
-                      <tr key={it.id} className="hover:bg-gray-50">
+                    <Fragment key={it.id}>
+                      <tr className="hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900 flex items-center gap-1.5">
                             {isLow && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />}
@@ -274,7 +290,7 @@ export default function Stock() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -412,14 +428,15 @@ export default function Stock() {
             </div>
             <div className="p-4 space-y-4">
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-700 space-y-1">
-                <p className="font-semibold">{isIS ? 'CSV dálkar (dæmi):' : 'Expected CSV columns (example):'}</p>
+                <p className="font-semibold">{isIS ? 'Dálkar (dæmi) — Excel eða CSV:' : 'Expected columns (example) — Excel or CSV:'}</p>
                 <code className="block font-mono">name, sku, category, unit, price, qty, reorder, supplier, currency, vat</code>
-                <p>{isIS ? 'Ef hlutur er til (sama SKU) uppfærist aðeins verð.' : 'If item already exists (same SKU), only price is updated.'}</p>
+                <p>{isIS ? 'Fyrsta lína = dálkaheiti. Ef hlutur er til (sama SKU) uppfærist aðeins verð.' : 'First row = column headers. If item already exists (same SKU), only price is updated.'}</p>
               </div>
               <label className="flex flex-col items-center justify-center border-2 border-dashed border-blue-300 rounded-xl p-8 cursor-pointer hover:bg-blue-50 transition-colors">
                 <Upload className="w-8 h-8 text-blue-400 mb-2" />
-                <span className="text-sm font-medium text-gray-700">{isIS ? 'Velja CSV skrá' : 'Choose CSV file'}</span>
-                <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={handleCSV} />
+                <span className="text-sm font-medium text-gray-700">{isIS ? 'Velja skrá (Excel eða CSV)' : 'Choose file (Excel or CSV)'}</span>
+                <span className="text-xs text-gray-400 mt-1">.xlsx · .xls · .csv · .txt</span>
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleImport} />
               </label>
               <button onClick={() => setImportOpen(false)} className="w-full border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm">{isIS ? 'Hætta við' : 'Cancel'}</button>
             </div>
