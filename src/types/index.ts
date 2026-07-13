@@ -10,7 +10,7 @@ export type View =
   | 'dashboard' | 'transactions' | 'recurring' | 'bankimport' | 'rules'
   | 'invoices' | 'accounts' | 'budget' | 'payroll'
   | 'vat' | 'vatreturn' | 'reports' | 'annual' | 'settings' | 'tasks' | 'ai'
-  | 'stock' | 'suppliers' | 'jobs' | 'users' | 'upgrade' | 'reviews';
+  | 'stock' | 'suppliers' | 'contacts' | 'jobs' | 'users' | 'upgrade' | 'reviews';
 
 // ── User roles ──────────────────────────────────────────────
 export type UserRole = 'owner' | 'manager' | 'accountant' | 'staff' | 'viewer';
@@ -406,6 +406,20 @@ export interface Supplier {
   createdAt: string;
 }
 
+// A saved customer / tenant — reusable across invoices so details aren't retyped.
+export interface Customer {
+  id: string;
+  name: string;
+  kennitala?: string;
+  address?: string;
+  postalCode?: string;
+  city?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface AppData {
   transactions: Transaction[];
   balanceSheetItems: BalanceSheetItem[];
@@ -420,6 +434,7 @@ export interface AppData {
   stockItems: StockItem[];
   stockMovements: StockMovement[];
   suppliers: Supplier[];
+  customers: Customer[];
   jobs: Job[];
   timeEntries: TimeEntry[];
   jobMaterials: JobMaterial[];

@@ -63,6 +63,8 @@ export function canAccessView(view: View, perms: UserPermissions | null): boolea
     case 'stock':
     case 'suppliers':
       return perms.canViewStock;
+    case 'contacts':
+      return perms.canViewInvoices || perms.canViewStock;
     case 'payroll':
       return perms.canViewPayroll;
 

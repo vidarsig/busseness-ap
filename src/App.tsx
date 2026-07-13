@@ -9,6 +9,7 @@ import AutoRules from './components/AutoRules';
 import Tasks from './components/Tasks';
 import Invoices from './components/Invoices';
 import ChartOfAccounts from './components/ChartOfAccounts';
+import Contacts from './components/Contacts';
 import Budget from './components/Budget';
 import Payroll from './components/Payroll';
 import VAT from './components/VAT';
@@ -119,6 +120,7 @@ function AppInner() {
       {safeView === 'tasks'        && <Tasks setView={setView} />}
       {safeView === 'invoices'     && <Invoices />}
       {safeView === 'accounts'     && <ChartOfAccounts />}
+      {safeView === 'contacts'     && <Contacts />}
       {safeView === 'budget'       && <Budget />}
       {safeView === 'payroll'      && <Payroll />}
       {safeView === 'vat'          && <VAT />}

@@ -4,7 +4,7 @@ import { idbGet, idbSet } from '../utils/idb';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
-  StockItem, StockMovement, Supplier, Job, TimeEntry, JobMaterial, JobPhoto, AppUser, Employee,
+  StockItem, StockMovement, Supplier, Customer, Job, TimeEntry, JobMaterial, JobPhoto, AppUser, Employee,
   DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, Language, CountryConfig,
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
@@ -36,6 +36,7 @@ const defaultData: AppData = {
   stockItems: [],
   stockMovements: [],
   suppliers: [],
+  customers: [],
   jobs: [],
   timeEntries: [],
   jobMaterials: [],
@@ -82,8 +83,13 @@ type Action =
   | { type: 'DELETE_STOCK_ITEM'; payload: string }
   | { type: 'ADD_STOCK_MOVEMENT'; payload: StockMovement }
   | { type: 'ADD_SUPPLIER'; payload: Supplier }
+  | { type: 'ADD_SUPPLIERS'; payload: Supplier[] }
   | { type: 'UPDATE_SUPPLIER'; payload: Supplier }
   | { type: 'DELETE_SUPPLIER'; payload: string }
+  | { type: 'ADD_CUSTOMER'; payload: Customer }
+  | { type: 'ADD_CUSTOMERS'; payload: Customer[] }
+  | { type: 'UPDATE_CUSTOMER'; payload: Customer }
+  | { type: 'DELETE_CUSTOMER'; payload: string }
   | { type: 'ADD_JOB'; payload: Job }
   | { type: 'UPDATE_JOB'; payload: Job }
   | { type: 'DELETE_JOB'; payload: string }
@@ -154,8 +160,13 @@ function reducer(state: AppData, action: Action): AppData {
       };
     }
     case 'ADD_SUPPLIER': return { ...state, suppliers: [...(state.suppliers ?? []), action.payload] };
+    case 'ADD_SUPPLIERS': return { ...state, suppliers: [...(state.suppliers ?? []), ...action.payload] };
     case 'UPDATE_SUPPLIER': return { ...state, suppliers: (state.suppliers ?? []).map(s => s.id === action.payload.id ? action.payload : s) };
     case 'DELETE_SUPPLIER': return { ...state, suppliers: (state.suppliers ?? []).filter(s => s.id !== action.payload) };
+    case 'ADD_CUSTOMER': return { ...state, customers: [...(state.customers ?? []), action.payload] };
+    case 'ADD_CUSTOMERS': return { ...state, customers: [...(state.customers ?? []), ...action.payload] };
+    case 'UPDATE_CUSTOMER': return { ...state, customers: (state.customers ?? []).map(c => c.id === action.payload.id ? action.payload : c) };
+    case 'DELETE_CUSTOMER': return { ...state, customers: (state.customers ?? []).filter(c => c.id !== action.payload) };
     case 'ADD_JOB': return { ...state, jobs: [...(state.jobs ?? []), action.payload] };
     case 'UPDATE_JOB': return { ...state, jobs: (state.jobs ?? []).map(j => j.id === action.payload.id ? action.payload : j) };
     case 'DELETE_JOB': return { ...state, jobs: (state.jobs ?? []).filter(j => j.id !== action.payload), timeEntries: (state.timeEntries ?? []).filter(t => t.jobId !== action.payload), jobMaterials: (state.jobMaterials ?? []).filter(m => m.jobId !== action.payload), jobPhotos: (state.jobPhotos ?? []).filter(p => p.jobId !== action.payload) };
@@ -212,6 +223,7 @@ function migrateData(parsed: Partial<AppData>): AppData {
     stockItems: parsed.stockItems ?? [],
     stockMovements: parsed.stockMovements ?? [],
     suppliers: parsed.suppliers ?? [],
+    customers: parsed.customers ?? [],
     jobs: parsed.jobs ?? [],
     timeEntries: parsed.timeEntries ?? [],
     jobMaterials: parsed.jobMaterials ?? [],
