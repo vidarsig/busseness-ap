@@ -316,11 +316,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
 
       // ── 2) Supabase sync ────────────────────────────────────────────
-      const { supabaseUrl, supabaseKey, supabaseUserKey } = local.settings;
+      const { supabaseUrl, supabaseKey } = local.settings;
       if (!supabaseUrl || !supabaseKey) return;
-      // Prefer the login-tied company key; fall back to the legacy manual key
-      // (so existing setups keep working until they're migrated).
-      const syncKey = (await resolveCompanyKey(supabaseUrl, supabaseKey)) || supabaseUserKey;
+      // Sync is strictly tied to a logged-in user's company key. If not
+      // authenticated yet (e.g. the login screen is showing), we skip syncing
+      // entirely — so nothing is pulled/pushed until the user actually logs in.
+      const syncKey = await resolveCompanyKey(supabaseUrl, supabaseKey);
       if (!syncKey || cancelled) return;
       syncKeyRef.current = syncKey;
       setSyncStatus('syncing');
@@ -356,8 +357,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Debounced push to Supabase on data change
   useEffect(() => {
-    const { supabaseUrl, supabaseKey, supabaseUserKey } = data.settings;
-    const syncKey = syncKeyRef.current || supabaseUserKey;
+    const { supabaseUrl, supabaseKey } = data.settings;
+    const syncKey = syncKeyRef.current;
     if (!supabaseUrl || !supabaseKey || !syncKey) return;
     if (skipNextPush.current) { skipNextPush.current = false; return; }
     clearTimeout(pushTimer.current);
@@ -376,8 +377,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [data]);
 
   const syncNow = useCallback(async () => {
-    const { supabaseUrl, supabaseKey, supabaseUserKey } = data.settings;
-    const syncKey = syncKeyRef.current || supabaseUserKey;
+    const { supabaseUrl, supabaseKey } = data.settings;
+    const syncKey = syncKeyRef.current;
     if (!supabaseUrl || !supabaseKey || !syncKey) return;
     setSyncStatus('syncing');
     const result = await pushData(supabaseUrl, supabaseKey, syncKey, data);
