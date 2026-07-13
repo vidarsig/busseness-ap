@@ -20,7 +20,7 @@ const is = {
   stock: 'Birgðir',
   suppliers: 'Birgjar',
   contacts: 'Tengiliðir',
-  jobs: 'Verkefni',
+  jobs: 'Verkbókhald',
   users: 'Notendur',
   upgrade: 'Uppfæra',
 
