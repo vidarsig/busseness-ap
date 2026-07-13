@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useState, useRef } from 'react';
-import { pushData, pullData } from '../utils/supabase';
+import { pushData, pullData, resolveCompanyKey } from '../utils/supabase';
 import { idbGet, idbSet } from '../utils/idb';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
@@ -268,6 +268,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const skipNextPush = useRef(false);
   const idbReady = useRef(false);
   const pushTimer = useRef<ReturnType<typeof setTimeout>>();
+  // The resolved data-partition key: the logged-in user's company key when
+  // authenticated, else the legacy manual key. Set during the mount sync.
+  const syncKeyRef = useRef<string>('');
   const persistTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // Persist locally to IndexedDB (big storage, ~GBs). Debounced so a burst of
@@ -314,14 +317,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // ── 2) Supabase sync ────────────────────────────────────────────
       const { supabaseUrl, supabaseKey, supabaseUserKey } = local.settings;
-      if (!supabaseUrl || !supabaseKey || !supabaseUserKey) return;
+      if (!supabaseUrl || !supabaseKey) return;
+      // Prefer the login-tied company key; fall back to the legacy manual key
+      // (so existing setups keep working until they're migrated).
+      const syncKey = (await resolveCompanyKey(supabaseUrl, supabaseKey)) || supabaseUserKey;
+      if (!syncKey || cancelled) return;
+      syncKeyRef.current = syncKey;
       setSyncStatus('syncing');
       try {
-        const result = await pullData(supabaseUrl, supabaseKey, supabaseUserKey);
+        const result = await pullData(supabaseUrl, supabaseKey, syncKey);
         if (cancelled) return;
         if (result.error === 'no_data') {
           // Nothing in cloud yet — push local up
-          await pushData(supabaseUrl, supabaseKey, supabaseUserKey, local);
+          await pushData(supabaseUrl, supabaseKey, syncKey, local);
           const now = new Date().toISOString();
           localStorage.setItem(SYNC_TS_KEY, now);
           setLastSyncedAt(now);
@@ -349,12 +357,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Debounced push to Supabase on data change
   useEffect(() => {
     const { supabaseUrl, supabaseKey, supabaseUserKey } = data.settings;
-    if (!supabaseUrl || !supabaseKey || !supabaseUserKey) return;
+    const syncKey = syncKeyRef.current || supabaseUserKey;
+    if (!supabaseUrl || !supabaseKey || !syncKey) return;
     if (skipNextPush.current) { skipNextPush.current = false; return; }
     clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(async () => {
       setSyncStatus('syncing');
-      const result = await pushData(supabaseUrl, supabaseKey, supabaseUserKey, data);
+      const result = await pushData(supabaseUrl, supabaseKey, syncKey, data);
       if (result.error) { setSyncStatus('error'); }
       else {
         const now = new Date().toISOString();
@@ -368,9 +377,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const syncNow = useCallback(async () => {
     const { supabaseUrl, supabaseKey, supabaseUserKey } = data.settings;
-    if (!supabaseUrl || !supabaseKey || !supabaseUserKey) return;
+    const syncKey = syncKeyRef.current || supabaseUserKey;
+    if (!supabaseUrl || !supabaseKey || !syncKey) return;
     setSyncStatus('syncing');
-    const result = await pushData(supabaseUrl, supabaseKey, supabaseUserKey, data);
+    const result = await pushData(supabaseUrl, supabaseKey, syncKey, data);
     if (result.error) { setSyncStatus('error'); }
     else {
       const now = new Date().toISOString();

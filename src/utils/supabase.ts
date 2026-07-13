@@ -68,6 +68,26 @@ export async function getCurrentUser(url: string, key: string): Promise<User | n
   return data.user ?? null;
 }
 
+// Multi-user: the data-partition key ("company") for the logged-in user, from
+// the company_members table. New users claim their own company (key = their
+// uid); a migrated owner already has a membership pointing at their real data.
+// Returns null if not logged in or the table isn't set up yet — callers then
+// fall back to the legacy manual key, so nothing breaks pre-migration.
+export async function resolveCompanyKey(url: string, key: string): Promise<string | null> {
+  const sb = getClient(url, key);
+  if (!sb) return null;
+  const { data: userData } = await sb.auth.getUser();
+  const uid = userData.user?.id;
+  if (!uid) return null;
+  const { data: rows, error } = await sb.from('company_members').select('company_key').eq('user_id', uid).limit(1);
+  if (error) return null; // table missing or no access — fall back to legacy key
+  if (rows && rows.length > 0) return rows[0].company_key as string;
+  // No membership yet — claim a fresh company keyed to this user.
+  const { error: insErr } = await sb.from('company_members').insert({ user_id: uid, company_key: uid, role: 'owner' });
+  if (insErr) return null;
+  return uid;
+}
+
 // ── Data sync ────────────────────────────────────────────────
 
 export async function pushData(url: string, key: string, userKey: string, data: AppData): Promise<{ error?: string }> {
