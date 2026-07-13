@@ -230,7 +230,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   );
 }
 
-export default function Transactions({ initialFilter }: { initialFilter?: { category?: string; year?: number } | null } = {}) {
+export default function Transactions({ initialFilter, onFilterConsumed }: { initialFilter?: { category?: string; year?: number } | null; onFilterConsumed?: () => void } = {}) {
   const { data, dispatch, t, lang } = useApp();
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
@@ -256,7 +256,9 @@ export default function Transactions({ initialFilter }: { initialFilter?: { cate
     if (initialFilter.category) setFilterCategory(initialFilter.category);
     if (initialFilter.year) setFilterYear(initialFilter.year);
     setShowFilters(true);
-  }, [initialFilter]);
+    // Clear the drill target so it doesn't force this filter on every later visit.
+    onFilterConsumed?.();
+  }, [initialFilter, onFilterConsumed]);
 
   const years = useMemo(() => {
     const ys = new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()));

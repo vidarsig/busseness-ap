@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AppProvider, useApp } from './contexts/AppContext';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -39,6 +39,7 @@ function AppInner() {
   // Drill-down target: set when the user clicks a key in Reports, consumed by
   // Transactions to pre-filter to that key (and year) so they can fix it.
   const [txDrill, setTxDrill] = useState<{ category?: string; year?: number } | null>(null);
+  const clearTxDrill = useCallback(() => setTxDrill(null), []);
   const { data } = useApp();
 
   const { supabaseUrl, supabaseKey } = data.settings;
@@ -111,7 +112,7 @@ function AppInner() {
     <Layout view={safeView} setView={setView} sessionUser={sessionUser} perms={perms}
       onSignOut={() => setSessionUser(null)}>
       {safeView === 'dashboard'    && <Dashboard setView={setView} />}
-      {safeView === 'transactions' && <Transactions initialFilter={txDrill} />}
+      {safeView === 'transactions' && <Transactions initialFilter={txDrill} onFilterConsumed={clearTxDrill} />}
       {safeView === 'recurring'    && <Recurring />}
       {safeView === 'bankimport'   && <BankImport />}
       {safeView === 'rules'        && <AutoRules />}
