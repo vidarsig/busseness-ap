@@ -38,6 +38,63 @@ async function callClaude(
   return data.content[0].text;
 }
 
+export interface ExtractedProduct {
+  name: string;
+  sku: string;
+  category: string;
+  unit: string;
+  costPrice: number;
+  vatRate: number;
+}
+
+// Read a supplier price list (spreadsheet text, PDF, or photo) and return a
+// clean list of products for stock import. The caller adds the sell price /
+// markup and lets the user review before anything is saved.
+export async function extractPricelist(
+  input: { text?: string; image?: { base64: string; mediaType: string }; pdf?: string },
+  defaultVat: number,
+): Promise<ExtractedProduct[]> {
+  const system = `You extract a supplier PRICE LIST into structured data for a contractor's stock/inventory system.
+Return ONLY a JSON array — one object per product:
+[{"name":string,"sku":string,"category":string,"unit":string,"costPrice":number,"vatRate":number}]
+Rules:
+- name: the product name/description (keep size/spec, e.g. "Timber 45x95 C24").
+- sku: the supplier/product code if the list has one, else "".
+- category: a short group/section name if the list is grouped, else "".
+- unit: the selling unit — e.g. lm, m, m2, pcs, kg, box. If unknown use "pcs".
+- costPrice: the price as a PLAIN number — no currency symbol, no thousands separators (e.g. 1067 not "1.067 kr").
+- vatRate: ${defaultVat} unless the list clearly states a different rate for a line.
+- Read EVERY product row. Do NOT invent products. If a price is unreadable, skip that row.
+No prose, no code fences — just the JSON array.`;
+
+  const blocks: ContentBlock[] = [];
+  if (input.text) blocks.push({ type: 'text', text: 'PRICE LIST (text):\n\n' + input.text });
+  if (input.image) blocks.push({ type: 'image', source: { type: 'base64', media_type: input.image.mediaType, data: input.image.base64 } });
+  if (input.pdf) blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: input.pdf } });
+  blocks.push({ type: 'text', text: 'Extract every product into the JSON array.' });
+
+  const res = await apiPost({ model: 'claude-sonnet-4-6', max_tokens: 8000, system, messages: [{ role: 'user', content: blocks }] });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+    throw new Error(err?.error?.message ?? `API error ${res.status}`);
+  }
+  const data = await res.json() as { content: Array<{ text: string }> };
+  const text = data.content.map(c => c.text).join('');
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error('No product data found');
+  const raw = JSON.parse(match[0]) as Partial<ExtractedProduct>[];
+  return raw
+    .filter(r => r && r.name && typeof r.costPrice === 'number' && r.costPrice > 0)
+    .map(r => ({
+      name: String(r.name).trim(),
+      sku: (r.sku ?? '').toString().trim(),
+      category: (r.category ?? '').toString().trim(),
+      unit: (r.unit ?? 'pcs').toString().trim() || 'pcs',
+      costPrice: Math.round(Number(r.costPrice)),
+      vatRate: typeof r.vatRate === 'number' ? r.vatRate : defaultVat,
+    }));
+}
+
 export async function streamClaude(
   system: string,
   messages: ApiMessage[],

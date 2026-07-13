@@ -79,6 +79,7 @@ type Action =
   | { type: 'UPDATE_TASK'; payload: Task }
   | { type: 'DELETE_TASK'; payload: string }
   | { type: 'ADD_STOCK_ITEM'; payload: StockItem }
+  | { type: 'ADD_STOCK_ITEMS'; payload: StockItem[] }
   | { type: 'UPDATE_STOCK_ITEM'; payload: StockItem }
   | { type: 'DELETE_STOCK_ITEM'; payload: string }
   | { type: 'ADD_STOCK_MOVEMENT'; payload: StockMovement }
@@ -147,6 +148,7 @@ function reducer(state: AppData, action: Action): AppData {
     case 'UPDATE_TASK': return { ...state, tasks: state.tasks.map(t => t.id === action.payload.id ? action.payload : t) };
     case 'DELETE_TASK': return { ...state, tasks: state.tasks.filter(t => t.id !== action.payload) };
     case 'ADD_STOCK_ITEM': return { ...state, stockItems: [...(state.stockItems ?? []), action.payload] };
+    case 'ADD_STOCK_ITEMS': return { ...state, stockItems: [...(state.stockItems ?? []), ...action.payload] };
     case 'UPDATE_STOCK_ITEM': return { ...state, stockItems: (state.stockItems ?? []).map(s => s.id === action.payload.id ? action.payload : s) };
     case 'DELETE_STOCK_ITEM': return { ...state, stockItems: (state.stockItems ?? []).filter(s => s.id !== action.payload), stockMovements: (state.stockMovements ?? []).filter(m => m.itemId !== action.payload) };
     case 'ADD_STOCK_MOVEMENT': {

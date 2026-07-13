@@ -1,8 +1,10 @@
 import { useState, useRef, Fragment } from 'react';
-import { Plus, Pencil, Trash2, X, Package, AlertTriangle, TrendingDown, TrendingUp, Upload, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Package, AlertTriangle, TrendingDown, TrendingUp, Upload, Search, ChevronDown, ChevronUp, Sparkles, Loader2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { StockItem, StockMovement, Currency } from '../types';
 import { isStockLimitReached } from '../utils/planLimits';
+import { extractPricelist, ExtractedProduct } from '../utils/ai';
+import { prepareAttachment } from '../utils/attachment';
 import PlanLimitModal from './PlanLimitModal';
 
 function newId() { return `stk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`; }
@@ -52,6 +54,54 @@ export default function Stock() {
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // AI price-list reader
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiRows, setAiRows] = useState<ExtractedProduct[]>([]);
+  const [aiMarkup, setAiMarkup] = useState(30);
+  const aiFileRef = useRef<HTMLInputElement>(null);
+
+  async function handleAiFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (aiFileRef.current) aiFileRef.current.value = '';
+    if (!file) return;
+    setAiError(''); setAiRows([]); setAiLoading(true);
+    try {
+      const att = await prepareAttachment(file);
+      const defVat = cc.isUSA ? data.settings.salesTaxRate : cc.standardRate;
+      const input = att.kind === 'text' ? { text: att.text }
+        : att.kind === 'image' ? { image: { base64: att.base64, mediaType: att.mediaType } }
+        : { pdf: att.base64 };
+      const rows = await extractPricelist(input, defVat);
+      if (rows.length === 0) setAiError(isIS ? 'Fann engar vörur í skránni' : 'No products found in the file');
+      setAiRows(rows);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : (isIS ? 'Gat ekki lesið verðlistann' : 'Could not read the price list'));
+    }
+    setAiLoading(false);
+  }
+
+  function importAiRows() {
+    const now = nowISO();
+    const existingSku = new Set(items.map(i => i.sku));
+    const toAdd: StockItem[] = [];
+    aiRows.forEach((r, idx) => {
+      if (r.sku && existingSku.has(r.sku)) return; // skip duplicates by SKU
+      toAdd.push({
+        id: newId(), sku: r.sku || `AI-${Date.now()}-${idx}`, name: r.name,
+        description: '', category: r.category || 'Other', unit: r.unit || 'pcs',
+        qtyOnHand: 0, qtyReserved: 0, reorderPoint: 5,
+        costPrice: r.costPrice, sellPrice: Math.round(r.costPrice * (1 + aiMarkup / 100)),
+        currency: cc.currency as Currency, vatRate: r.vatRate,
+        createdAt: now, updatedAt: now,
+      });
+    });
+    if (toAdd.length) dispatch({ type: 'ADD_STOCK_ITEMS', payload: toAdd });
+    alert(isIS ? `${toAdd.length} vörur fluttar inn` : `${toAdd.length} items imported`);
+    setAiOpen(false); setAiRows([]);
+  }
 
   const isIS = lang === 'is';
 
@@ -164,6 +214,10 @@ export default function Stock() {
           <p className="text-sm text-gray-500">{isIS ? 'Hlutir, birgðastaða og birgjaskrá' : 'Items, stock levels and supplier catalogue'}</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => { setAiOpen(true); setAiRows([]); setAiError(''); }}
+            className="flex items-center gap-1.5 border border-purple-300 bg-purple-50 text-purple-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-purple-100">
+            <Sparkles className="w-4 h-4" />{isIS ? 'AI verðlisti' : 'AI price list'}
+          </button>
           <button onClick={() => setImportOpen(true)} className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">
             <Upload className="w-4 h-4" />{isIS ? 'Innflutningur' : 'Import'}
           </button>
@@ -448,6 +502,76 @@ export default function Stock() {
         limitText="You've reached 20 stock items on the Free plan."
         limitTextIs="Þú hefur náð 20 birgðahlutum á Free plani."
       />
+
+      {/* ── AI price-list reader ─────────────────────────────── */}
+      {aiOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-end md:items-center justify-center z-50 p-0 md:p-4">
+          <div className="bg-white w-full md:max-w-2xl md:rounded-2xl rounded-t-2xl shadow-xl max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-600" />{isIS ? 'Lesa verðlista með AI' : 'Read price list with AI'}</h2>
+              <button onClick={() => setAiOpen(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-gray-500">
+                {isIS
+                  ? 'Hladdu upp verðlista (PDF, mynd eða Excel). AI les hann og undirbýr vörurnar — þú yfirferð og staðfestir áður en þær vistast.'
+                  : 'Upload a price list (PDF, photo or Excel). AI reads it and prepares the products — you review and confirm before anything is saved.'}
+              </p>
+
+              {aiRows.length === 0 && (
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-purple-300 bg-purple-50 rounded-xl p-8 cursor-pointer hover:bg-purple-100 transition-colors">
+                  {aiLoading
+                    ? <><Loader2 className="w-8 h-8 text-purple-500 mb-2 animate-spin" /><span className="text-sm font-medium text-purple-700">{isIS ? 'AI les verðlistann…' : 'AI reading the price list…'}</span></>
+                    : <><Sparkles className="w-8 h-8 text-purple-400 mb-2" /><span className="text-sm font-medium text-gray-700">{isIS ? 'Velja verðlista' : 'Choose price list'}</span><span className="text-xs text-gray-400 mt-1">PDF · JPG/PNG · .xlsx · .csv</span></>}
+                  <input ref={aiFileRef} type="file" accept=".pdf,image/*,.xlsx,.xls,.csv,.txt" className="sr-only" disabled={aiLoading} onChange={handleAiFile} />
+                </label>
+              )}
+
+              {aiError && <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600"><AlertTriangle className="w-4 h-4 flex-shrink-0" />{aiError}</div>}
+
+              {aiRows.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-sm font-semibold text-gray-800">{aiRows.length} {isIS ? 'vörur fundust' : 'products found'}</span>
+                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                      {isIS ? 'Álagning' : 'Markup'}
+                      <input type="number" min={0} max={500} value={aiMarkup} onChange={e => setAiMarkup(parseInt(e.target.value) || 0)}
+                        className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-sm" />%
+                    </label>
+                  </div>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0"><tr>
+                        <th className="px-3 py-2 text-left text-gray-500">{isIS ? 'Vara' : 'Product'}</th>
+                        <th className="px-2 py-2 text-left text-gray-500">{isIS ? 'Flokkur' : 'Category'}</th>
+                        <th className="px-2 py-2 text-right text-gray-500">{isIS ? 'Kostn.' : 'Cost'}</th>
+                        <th className="px-2 py-2 text-right text-gray-500">{isIS ? 'Sölu' : 'Sell'}</th>
+                        <th className="px-2 py-2 w-8"></th>
+                      </tr></thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {aiRows.map((r, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-1.5"><div className="font-medium text-gray-800">{r.name}</div><div className="text-gray-400">{r.sku} · {r.unit} · {r.vatRate}%</div></td>
+                            <td className="px-2 py-1.5 text-gray-600">{r.category}</td>
+                            <td className="px-2 py-1.5 text-right font-mono">{Math.round(r.costPrice).toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-right font-mono font-semibold">{Math.round(r.costPrice * (1 + aiMarkup / 100)).toLocaleString()}</td>
+                            <td className="px-2 py-1.5"><button onClick={() => setAiRows(prev => prev.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-500"><X className="w-3.5 h-3.5" /></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">{isIS ? '⚠️ Yfirfarðu verðin á móti verðlistanum — AI getur mislesið. Fjarlægðu rangar línur með ✕.' : '⚠️ Check the prices against the list — AI can misread. Remove wrong rows with ✕.'}</p>
+                  <div className="flex gap-3">
+                    <button onClick={() => { setAiRows([]); setAiError(''); }} className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-xl text-sm">{isIS ? 'Byrja aftur' : 'Start over'}</button>
+                    <button onClick={importAiRows} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700">{isIS ? `Flytja inn ${aiRows.length}` : `Import ${aiRows.length}`}</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
