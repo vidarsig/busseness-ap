@@ -35,13 +35,19 @@ export interface SessionUser {
   email: string;
 }
 
+// Founder account(s) — comped to top-tier automatically. Paying customers never
+// see the upgrade banner (it's Basic-only); this makes sure the owner doesn't
+// either, since in-app payments aren't live yet so there's no way to self-upgrade.
+// Only these exact accounts are affected — real customers still pay for Pro.
+const FOUNDER_EMAILS = ['vidarsig@pm.me'];
+
 function AppInner() {
   const [view, setView] = useState<View>('dashboard');
   // Drill-down target: set when the user clicks a key in Reports, consumed by
   // Transactions to pre-filter to that key (and year) so they can fix it.
   const [txDrill, setTxDrill] = useState<{ category?: string; year?: number } | null>(null);
   const clearTxDrill = useCallback(() => setTxDrill(null), []);
-  const { data } = useApp();
+  const { data, dispatch } = useApp();
 
   const { supabaseUrl, supabaseKey } = data.settings;
   const supabaseConfigured = !!(supabaseUrl && supabaseKey);
@@ -68,6 +74,16 @@ function AppInner() {
       setAuthChecked(true);
     });
   }, [supabaseConfigured, supabaseUrl, supabaseKey]);
+
+  // Founder comp: give the founder account top-tier automatically so the upgrade
+  // banner never shows for them and every feature is unlocked. Idempotent — once
+  // the plan is 'business' this stops firing. No effect on customer accounts.
+  useEffect(() => {
+    const email = sessionUser?.email?.toLowerCase();
+    if (!email || !FOUNDER_EMAILS.includes(email)) return;
+    if (data.settings.plan === 'business') return;
+    dispatch({ type: 'UPDATE_SETTINGS', payload: { plan: 'business' } });
+  }, [sessionUser, data.settings.plan, dispatch]);
 
   // Listen for upgrade navigation from plan-limit modals
   useEffect(() => {
