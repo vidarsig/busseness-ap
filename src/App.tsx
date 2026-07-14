@@ -28,6 +28,7 @@ import Login from './components/Login';
 import { View } from './types';
 import { getSession } from './utils/supabase';
 import { resolvePermissions, canAccessView } from './utils/access';
+import UpdatePrompt from './components/UpdatePrompt';
 
 export interface SessionUser {
   id: string;
@@ -155,5 +156,5 @@ function AppInner() {
 }
 
 export default function App() {
-  return <AppProvider><AppInner /></AppProvider>;
+  return <AppProvider><AppInner /><UpdatePrompt /></AppProvider>;
 }

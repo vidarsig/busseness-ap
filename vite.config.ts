@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Jobboks',
@@ -53,10 +53,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 4 MiB — Excel parser chunk is large
-        // Take control of the page as soon as a new version is downloaded, without
-        // waiting for every tab to close. Ends the "still showing the old version
-        // after refresh" problem — a single reload now loads the newest build.
-        skipWaiting: true,
+        // Prompt pattern: the new service worker WAITS until the user taps
+        // "Uppfæra" in the update banner (UpdatePrompt.tsx), which then skip-waits
+        // and reloads. This makes updates reliable and one-tap instead of the
+        // old auto-update that could leave the app stuck on a stale cached build.
         clientsClaim: true,
         cleanupOutdatedCaches: true,
 
