@@ -84,6 +84,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const photos    = data.jobPhotos ?? [];
 
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'all'>('all');
+  const [jobFilter, setJobFilter] = useState<string>('all'); // a specific job id, or 'all'
   const [expandedId, setExpandedId]     = useState<string | null>(null);
   const [tab, setTab]                   = useState<Record<string, TabType>>({});
   const [jobForm, setJobForm]           = useState<JobFormState>({ open: false });
@@ -493,7 +494,11 @@ export default function Jobs({ sessionUser }: JobsProps) {
   }
 
   // ── filter ────────────────────────────────────────────────
-  const filtered = statusFilter === 'all' ? jobs : jobs.filter(j => j.status === statusFilter);
+  // A picked project (dropdown) wins and shows regardless of its stage; otherwise
+  // fall back to the stage-tab filter.
+  const filtered = jobFilter !== 'all'
+    ? jobs.filter(j => j.id === jobFilter)
+    : (statusFilter === 'all' ? jobs : jobs.filter(j => j.status === statusFilter));
   const STATUSES: JobStatus[] = ['survey','scheduled','active','paused','complete','cancelled'];
 
   return (
@@ -551,12 +556,28 @@ export default function Jobs({ sessionUser }: JobsProps) {
         </div>
       )}
 
-      {/* Filter */}
+      {/* Jump straight to any project, whatever stage it's in */}
+      {jobs.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500 flex-shrink-0">{t('Verkefni', 'Project')}:</span>
+          <select value={jobFilter} onChange={e => setJobFilter(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-xs">
+            <option value="all">{t('Öll verkefni', 'All projects')}</option>
+            {jobs.map(j => (
+              <option key={j.id} value={j.id}>
+                {j.number}{j.name ? ` — ${j.name}` : ''}{j.clientName ? ` (${j.clientName})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Stage filter */}
       <div className="flex gap-2 flex-wrap">
         {(['all', ...STATUSES] as const).map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
+          <button key={s} onClick={() => { setStatusFilter(s); setJobFilter('all'); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-              statusFilter === s ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
+              jobFilter === 'all' && statusFilter === s ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300'
             }`}>
             {s === 'all' ? t('Allt', 'All') : t(STATUS_LABELS[s].is, STATUS_LABELS[s].en)}
           </button>
