@@ -270,6 +270,7 @@ export interface AppSettings {
   salesTaxRate: number;
   corporateTaxRate: number;
   vatRates: number[];
+  aiMaxTransactions?: number; // how many recent transactions the in-app AI reads (default 12,000)
   standardRate: number;
   vatTerm: string;
   taxAuthority: string;

@@ -237,12 +237,26 @@ export function buildContext(data: AppData, lang: string): string {
   // can reference specific transactions. Capped so a huge multi-year history
   // doesn't blow the context window / cost — the chat model (Sonnet) has plenty
   // of room, but we still keep it bounded and newest-first.
-  const MAX_TX = 2000;
+  // Bounded two ways so a huge multi-year history can't overflow the model's
+  // ~200k-token context (which would fail the request): a max row count
+  // (config-driven via settings.aiMaxTransactions, default 12,000 — was 2,000)
+  // AND an approximate character budget. Newest-first, so the most recent rows
+  // always make it in; older ones stay covered by the summaries above.
+  const MAX_TX = data.settings.aiMaxTransactions ?? 12000;
+  const CHAR_BUDGET = 600_000; // ≈180k tokens, safe margin under the 200k window
   const sorted = [...data.transactions].sort((a, b) => b.date.localeCompare(a.date));
-  const recent = sorted.slice(0, MAX_TX);
-  const txLabel = data.transactions.length > MAX_TX
-    ? `TRANSACTIONS (most recent ${MAX_TX} of ${data.transactions.length} — older years are covered by the summaries above)`
-    : `TRANSACTIONS (all ${recent.length})`;
+  const txRows: string[] = [];
+  let txChars = 0;
+  for (const tx of sorted) {
+    if (txRows.length >= MAX_TX) break;
+    const row = `  ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description}`;
+    if (txChars + row.length > CHAR_BUDGET) break;
+    txRows.push(row);
+    txChars += row.length + 1;
+  }
+  const txLabel = data.transactions.length > txRows.length
+    ? `TRANSACTIONS (most recent ${txRows.length} of ${data.transactions.length} — older years are covered by the summaries above)`
+    : `TRANSACTIONS (all ${txRows.length})`;
 
   return `COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
@@ -272,7 +286,7 @@ ${openInvoices.map(i => {
   }).join('\n') || '  None'}
 
 ${txLabel}:
-${recent.map(tx => `  ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description}`).join('\n')}`;
+${txRows.join('\n')}`;
 }
 
 export function buildChatSystem(data: AppData, lang: string): string {
