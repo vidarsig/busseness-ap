@@ -512,7 +512,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
         <div>
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <HardHat className="w-5 h-5 text-blue-600" />
-            {t('Vinnubók', 'Work Book')}
+            {t('Verkbókhald', 'Work Book')}
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {t('Verkefni · Tímar · Efni · Myndir → Reikningur', 'Jobs · Hours · Materials · Photos → Invoice')}
