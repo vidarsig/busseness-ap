@@ -267,6 +267,7 @@ export interface AppSettings {
   socialInsuranceRate: number;
   personalDeductionMonthly: number;
   country: string;
+  usState?: string;        // US state name (drives the base sales-tax rate)
   salesTaxRate: number;
   corporateTaxRate: number;
   vatRates: number[];

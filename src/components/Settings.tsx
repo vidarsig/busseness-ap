@@ -7,6 +7,29 @@ import { COUNTRY_LIST } from '../data/countries';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
+// US states with their base STATE sales-tax rate (%). Picking a state pre-fills
+// the rate as a starting point — local (city/county) rates add on, so the owner
+// can still override. NoMB (0%) states: AK, DE, MT, NH, OR.
+const US_STATES: { name: string; rate: number }[] = [
+  { name: 'Alabama', rate: 4 }, { name: 'Alaska', rate: 0 }, { name: 'Arizona', rate: 5.6 },
+  { name: 'Arkansas', rate: 6.5 }, { name: 'California', rate: 7.25 }, { name: 'Colorado', rate: 2.9 },
+  { name: 'Connecticut', rate: 6.35 }, { name: 'Delaware', rate: 0 }, { name: 'Florida', rate: 6 },
+  { name: 'Georgia', rate: 4 }, { name: 'Hawaii', rate: 4 }, { name: 'Idaho', rate: 6 },
+  { name: 'Illinois', rate: 6.25 }, { name: 'Indiana', rate: 7 }, { name: 'Iowa', rate: 6 },
+  { name: 'Kansas', rate: 6.5 }, { name: 'Kentucky', rate: 6 }, { name: 'Louisiana', rate: 4.45 },
+  { name: 'Maine', rate: 5.5 }, { name: 'Maryland', rate: 6 }, { name: 'Massachusetts', rate: 6.25 },
+  { name: 'Michigan', rate: 6 }, { name: 'Minnesota', rate: 6.875 }, { name: 'Mississippi', rate: 7 },
+  { name: 'Missouri', rate: 4.225 }, { name: 'Montana', rate: 0 }, { name: 'Nebraska', rate: 5.5 },
+  { name: 'Nevada', rate: 6.85 }, { name: 'New Hampshire', rate: 0 }, { name: 'New Jersey', rate: 6.625 },
+  { name: 'New Mexico', rate: 4.875 }, { name: 'New York', rate: 4 }, { name: 'North Carolina', rate: 4.75 },
+  { name: 'North Dakota', rate: 5 }, { name: 'Ohio', rate: 5.75 }, { name: 'Oklahoma', rate: 4.5 },
+  { name: 'Oregon', rate: 0 }, { name: 'Pennsylvania', rate: 6 }, { name: 'Rhode Island', rate: 7 },
+  { name: 'South Carolina', rate: 6 }, { name: 'South Dakota', rate: 4.2 }, { name: 'Tennessee', rate: 7 },
+  { name: 'Texas', rate: 6.25 }, { name: 'Utah', rate: 6.1 }, { name: 'Vermont', rate: 6 },
+  { name: 'Virginia', rate: 5.3 }, { name: 'Washington', rate: 6.5 }, { name: 'West Virginia', rate: 6 },
+  { name: 'Wisconsin', rate: 5 }, { name: 'Wyoming', rate: 4 }, { name: 'District of Columbia', rate: 6 },
+];
+
 function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUserKey, onSave, syncStatus, lastSyncedAt, syncNow, dispatch }: {
   lang: string; url: string; apiKey: string; userKey: string;
   setUrl: (v: string) => void; setApiKey: (v: string) => void; setUserKey: (v: string) => void;
@@ -251,13 +274,28 @@ export default function Settings() {
         </div>
         {/* US sales tax rate */}
         {form.country === 'US' && (
-          <div className="mt-3">
-            <label className={labelCls}>{lang === 'is' ? 'Söluskattshlutfall (%)' : 'Sales tax rate (%)'}</label>
-            <input type="number" className={inputCls} value={form.salesTaxRate}
-              onChange={e => setTop('salesTaxRate', parseFloat(e.target.value) || 0)}
-              min={0} max={30} step="0.01" />
-            <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Stilltu hlutfall ríkis/svæðis þíns' : 'Set your state/local rate'}</p>
-          </div>
+          <>
+            <div className="mt-3">
+              <label className={labelCls}>{lang === 'is' ? 'Ríki (fylki)' : 'State'}</label>
+              <select className={inputCls} value={form.usState ?? ''}
+                onChange={e => {
+                  const st = US_STATES.find(s => s.name === e.target.value);
+                  setTop('usState', e.target.value);
+                  if (st) setTop('salesTaxRate', st.rate);
+                }}>
+                <option value="">{lang === 'is' ? 'Veldu ríki…' : 'Select state…'}</option>
+                {US_STATES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Velur grunn-söluskattshlutfall ríkisins' : 'Sets the state base sales-tax rate'}</p>
+            </div>
+            <div className="mt-3">
+              <label className={labelCls}>{lang === 'is' ? 'Söluskattshlutfall (%)' : 'Sales tax rate (%)'}</label>
+              <input type="number" className={inputCls} value={form.salesTaxRate}
+                onChange={e => setTop('salesTaxRate', parseFloat(e.target.value) || 0)}
+                min={0} max={30} step="0.01" />
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Grunnhlutfall ríkis — bættu við staðbundnu hlutfalli ef á við' : 'State base rate — add your local (city/county) rate if any'}</p>
+            </div>
+          </>
         )}
       </div>
 
