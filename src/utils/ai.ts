@@ -95,6 +95,52 @@ No prose, no code fences — just the JSON array.`;
     }));
 }
 
+export interface ImportColumnMap {
+  headerRows: number;       // leading rows to skip (header/preamble) before data
+  date: number;             // column index of the date
+  description: number;      // column index of the description/text
+  amount: number | null;    // single signed-amount column (null if debit/credit split)
+  debit: number | null;     // money-OUT column (null if single amount)
+  credit: number | null;    // money-IN column (null if single amount)
+  reference: number | null; // reference/number column, if any
+}
+
+// Migration: figure out which columns of an export from ANOTHER bookkeeping
+// program (any language, any layout) hold the date, description and amount, so
+// the rows can be imported as transactions. Column headers can be in Icelandic,
+// English or anything else — the AI reads them. Returns 0-based column indices.
+export async function detectImportColumns(sampleRows: string[][], lang: string): Promise<ImportColumnMap> {
+  const grid = sampleRows.slice(0, 20)
+    .map((r, i) => `row ${i}: ${r.map((c, ci) => `[${ci}]${String(c ?? '').trim()}`).join(' | ')}`)
+    .join('\n');
+  const system = `You map the columns of a transaction export from a bookkeeping/accounting program into a fixed schema so the rows can be imported. The column headers may be in ANY language (Icelandic, English, etc.).
+Return ONLY JSON, no prose, no code fences:
+{"headerRows":number,"date":number,"description":number,"amount":number|null,"debit":number|null,"credit":number|null,"reference":number|null}
+Rules (all column values are 0-based indices into a row):
+- headerRows: how many leading rows are header/title/preamble before the real data starts (usually 1).
+- date: the column with the transaction date.
+- description: the column with the text/description/counterparty. Pick the most descriptive one.
+- If there is ONE signed amount column (positive in / negative out): set "amount" to its index, and debit=null, credit=null.
+- If money-in and money-out are SEPARATE columns: set "credit"=money-in index, "debit"=money-out index, and amount=null.
+- reference: an invoice/voucher/reference number column if present, else null.
+- Never guess a column that isn't there — use null. Base everything on the sample rows.`;
+  const user = `Language hint: ${lang === 'is' ? 'Icelandic' : 'English'}\nSAMPLE ROWS (index-tagged cells):\n${grid}\n\nReturn the JSON mapping.`;
+  const text = await callClaude(system, [{ role: 'user', content: user }], 'claude-sonnet-4-6', 400);
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('Could not read the columns of that file');
+  const m = JSON.parse(match[0]) as Partial<ImportColumnMap>;
+  const num = (v: unknown): number | null => (typeof v === 'number' && v >= 0 ? Math.floor(v) : null);
+  return {
+    headerRows: typeof m.headerRows === 'number' && m.headerRows >= 0 ? Math.floor(m.headerRows) : 1,
+    date: num(m.date) ?? 0,
+    description: num(m.description) ?? 1,
+    amount: num(m.amount),
+    debit: num(m.debit),
+    credit: num(m.credit),
+    reference: num(m.reference),
+  };
+}
+
 export async function streamClaude(
   system: string,
   messages: ApiMessage[],

@@ -3,13 +3,13 @@ import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt } f
 import ReceiptMatcher from './ReceiptMatcher';
 import { useApp } from '../contexts/AppContext';
 import { Transaction, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
-import { categorizeBatch } from '../utils/ai';
+import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/ai';
 import { matchRule } from './AutoRules';
 import { todayISO } from '../utils/formatters';
 
 function newId() { return `tx_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
-type BankFormat = 'arion' | 'islandsbanki' | 'landsbankinn' | 'generic';
+type BankFormat = 'arion' | 'islandsbanki' | 'landsbankinn' | 'generic' | 'auto';
 
 interface ParsedRow {
   date: string;
@@ -126,6 +126,29 @@ function parseBank(rows: string[][], format: BankFormat): ParsedRow[] {
   }
 }
 
+// Migration: parse rows using an AI-detected column map (any program's layout).
+function parseWithMap(rows: string[][], map: ImportColumnMap): ParsedRow[] {
+  const dataRows = rows.slice(map.headerRows).filter(r => r.length && String(r[map.date] ?? '').trim());
+  return dataRows.map(r => {
+    let amt: number;
+    if (map.amount != null) {
+      amt = parseAmount(String(r[map.amount] ?? ''));
+    } else {
+      const credit = map.credit != null ? parseAmount(String(r[map.credit] ?? '')) : 0;
+      const debit = map.debit != null ? parseAmount(String(r[map.debit] ?? '')) : 0;
+      amt = credit !== 0 ? Math.abs(credit) : -Math.abs(debit);
+    }
+    const ref = map.reference != null ? String(r[map.reference] ?? '').trim() : '';
+    return {
+      date: parseDate(String(r[map.date] ?? '')),
+      description: String(r[map.description] ?? '').trim(),
+      reference: ref,
+      amount: Math.abs(amt),
+      type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense',
+    };
+  }).filter(r => r.amount > 0);
+}
+
 interface ImportRow extends ParsedRow {
   selected: boolean;
   category: string;
@@ -229,9 +252,23 @@ export default function BankImport() {
     }
   }
 
-  function handleParsedGrid(raw: string[][]) {
+  async function handleParsedGrid(raw: string[][]) {
     if (raw.length < 2) { setError(lang === 'is' ? 'Skráin lítur út fyrir að vera tóm' : 'File appears to be empty'); return; }
-    const parsed = parseBank(raw, format);
+    let parsed: ParsedRow[];
+    if (format === 'auto') {
+      setAiLoading(true);
+      try {
+        const map = await detectImportColumns(raw, lang);
+        parsed = parseWithMap(raw, map);
+      } catch {
+        setAiLoading(false);
+        setError(lang === 'is' ? 'AI náði ekki að lesa dálkana — prófaðu annað snið eða CSV/Excel útflutning' : "AI couldn't read the columns — try another format or a CSV/Excel export");
+        return;
+      }
+      setAiLoading(false);
+    } else {
+      parsed = parseBank(raw, format);
+    }
     if (parsed.length === 0) { setError(lang === 'is' ? 'Engar færslur fundust — prófaðu annað snið' : 'No rows parsed — try a different format'); return; }
     setRows(applyRulesToRows(parsed));
     setDone(0);
@@ -347,10 +384,10 @@ export default function BankImport() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <h2 className="text-sm font-semibold text-gray-800 mb-3">{lang === 'is' ? '1. Veldu snið og skrá' : '1. Select format and file'}</h2>
         <div className="flex flex-wrap gap-3 mb-4">
-          {(['arion', 'islandsbanki', 'landsbankinn', 'generic'] as BankFormat[]).map(f => (
+          {(['arion', 'islandsbanki', 'landsbankinn', 'generic', 'auto'] as BankFormat[]).map(f => (
             <button key={f} type="button" onClick={() => setFormat(f)}
               className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${format === f ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
-              {f === 'arion' ? 'Arion' : f === 'islandsbanki' ? 'Íslandsbanki' : f === 'landsbankinn' ? 'Landsbankinn' : (lang === 'is' ? 'Almennt' : 'Generic')}
+              {f === 'arion' ? 'Arion' : f === 'islandsbanki' ? 'Íslandsbanki' : f === 'landsbankinn' ? 'Landsbankinn' : f === 'generic' ? (lang === 'is' ? 'Almennt' : 'Generic') : (lang === 'is' ? '✨ Annað kerfi (AI)' : '✨ Other program (AI)')}
             </button>
           ))}
         </div>
