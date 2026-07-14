@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare, AlertTriangle, Circle, Download, Check } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
@@ -16,7 +16,12 @@ export default function Dashboard({ setView }: Props) {
   const [lastBackup, setLastBackup] = useState<string | null>(
     () => localStorage.getItem('jobboks_last_backup'),
   );
-  const year = data.settings.fiscalYear;
+  const [year, setYear] = useState(data.settings.fiscalYear);
+  const availableYears = useMemo(() => {
+    const ys = new Set<number>(data.transactions.map(tx => new Date(tx.date).getFullYear()));
+    ys.add(data.settings.fiscalYear);
+    return Array.from(ys).sort((a, b) => b - a);
+  }, [data.transactions, data.settings.fiscalYear]);
 
   // Gentle reminder: how many days since the last backup (null = never).
   const daysSinceBackup = lastBackup
@@ -100,7 +105,13 @@ export default function Dashboard({ setView }: Props) {
       <div className="flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('dashboard')}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{t('thisYear')}: {year}</p>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-sm text-gray-500">{t('thisYear')}:</span>
+            <select value={year} onChange={e => setYear(parseInt(e.target.value))}
+              className="text-sm font-semibold text-gray-800 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
         </div>
         <button
           onClick={backupNow}
