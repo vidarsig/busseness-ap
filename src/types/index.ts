@@ -144,6 +144,8 @@ export interface Invoice {
   eurToIskRate: number;
   creditNoteOf?: string;  // invoice number this credit note corrects
   photos?: InvoicePhoto[]; // attached photos (proof of work, etc.)
+  discountType?: 'percent' | 'amount'; // whole-invoice discount (optional)
+  discountValue?: number;              // percent (e.g. 10) or a fixed amount in the invoice currency
 }
 
 export interface InvoicePhoto {

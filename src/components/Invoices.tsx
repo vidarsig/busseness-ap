@@ -4,6 +4,7 @@ import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency, InvoicePhoto, StockItem } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import { exportPDF, sharePDF } from '../utils/exports';
+import { invoiceTotals } from '../utils/invoiceMath';
 import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
@@ -99,15 +100,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
     }));
   }
 
-  const totals = useMemo(() => {
-    let subtotal = 0, vatTotal = 0;
-    form.lines.forEach(l => {
-      const base = l.quantity * l.unitPrice;
-      subtotal += base;
-      vatTotal += base * (l.vatRate / 100);
-    });
-    return { subtotal, vatTotal, total: subtotal + vatTotal };
-  }, [form.lines]);
+  const totals = useMemo(() => invoiceTotals(form), [form.lines, form.discountType, form.discountValue]);
 
   const inp = 'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const isQuote = form.type === 'quote';
@@ -292,12 +285,33 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
               </div>
             </div>
 
+            {/* Discount */}
+            <div className="mt-3 max-w-xs ml-auto flex items-center gap-2 justify-end">
+              <span className="text-sm text-gray-600 flex-shrink-0">{lang === 'is' ? 'Afsláttur' : 'Discount'}</span>
+              <input type="number" min={0} step="0.01"
+                value={form.discountValue ?? ''}
+                onChange={e => setForm(f => ({ ...f, discountValue: e.target.value === '' ? undefined : parseFloat(e.target.value) }))}
+                placeholder="0" className={`${inp} w-24 text-right`} />
+              <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm flex-shrink-0">
+                <button type="button" onClick={() => setForm(f => ({ ...f, discountType: 'percent' }))}
+                  className={`px-2.5 py-2 ${(form.discountType ?? 'percent') === 'percent' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>%</button>
+                <button type="button" onClick={() => setForm(f => ({ ...f, discountType: 'amount' }))}
+                  className={`px-2.5 py-2 ${form.discountType === 'amount' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>{form.currency}</button>
+              </div>
+            </div>
+
             {/* Totals */}
             <div className="mt-3 bg-gray-50 rounded-xl p-3 text-sm space-y-1.5 max-w-xs ml-auto">
               <div className="flex justify-between text-gray-600">
                 <span>{t('subtotal')}</span>
                 <span className="font-mono">{formatCurrency(totals.subtotal, form.currency)}</span>
               </div>
+              {totals.discount > 0 && (
+                <div className="flex justify-between text-gray-600">
+                  <span>{lang === 'is' ? 'Afsláttur' : 'Discount'}{(form.discountType ?? 'percent') === 'percent' && form.discountValue ? ` (${form.discountValue}%)` : ''}</span>
+                  <span className="font-mono">−{formatCurrency(totals.discount, form.currency)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-gray-600">
                 <span>{cc.vatTerm}</span>
                 <span className="font-mono">{formatCurrency(totals.vatTotal, form.currency)}</span>
@@ -373,11 +387,7 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
   const { data, t, lang, cc } = useApp();
   const co = data.settings.company;
   const isQuote = inv.type === 'quote';
-  const totals = inv.lines.reduce((acc, l) => {
-    const base = l.quantity * l.unitPrice;
-    const vat = base * (l.vatRate / 100);
-    return { subtotal: acc.subtotal + base, vat: acc.vat + vat };
-  }, { subtotal: 0, vat: 0 });
+  const totals = invoiceTotals(inv);
 
   return (
     <div className="print-only p-8 max-w-2xl mx-auto font-sans">
@@ -423,8 +433,11 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
         </tbody>
         <tfoot>
           <tr><td colSpan={4} className="text-right py-2 font-semibold">{t('subtotal')}</td><td className="text-right py-2 font-mono">{formatCurrency(totals.subtotal, inv.currency)}</td></tr>
-          <tr><td colSpan={4} className="text-right py-2">{cc.vatTerm}</td><td className="text-right py-2 font-mono">{formatCurrency(totals.vat, inv.currency)}</td></tr>
-          <tr className="border-t-2 border-gray-800"><td colSpan={4} className="text-right py-2 font-bold text-lg">{t('invoiceTotal')}</td><td className="text-right py-2 font-bold font-mono text-lg">{formatCurrency(totals.subtotal + totals.vat, inv.currency)}</td></tr>
+          {totals.discount > 0 && (
+            <tr><td colSpan={4} className="text-right py-2">{lang === 'is' ? 'Afsláttur' : 'Discount'}{(inv.discountType ?? 'percent') === 'percent' && inv.discountValue ? ` (${inv.discountValue}%)` : ''}</td><td className="text-right py-2 font-mono">−{formatCurrency(totals.discount, inv.currency)}</td></tr>
+          )}
+          <tr><td colSpan={4} className="text-right py-2">{cc.vatTerm}</td><td className="text-right py-2 font-mono">{formatCurrency(totals.vatTotal, inv.currency)}</td></tr>
+          <tr className="border-t-2 border-gray-800"><td colSpan={4} className="text-right py-2 font-bold text-lg">{t('invoiceTotal')}</td><td className="text-right py-2 font-bold font-mono text-lg">{formatCurrency(totals.total, inv.currency)}</td></tr>
         </tfoot>
       </table>
       {co.bankAccount && !isQuote && <p className="text-sm text-gray-600">{lang==='is'?'Bankareikningur':'Bank account'}: {co.bankAccount}</p>}
@@ -438,7 +451,7 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
 function buildInvoiceEmail(inv: Invoice, companyName: string, lang: string) {
   const isQuote = inv.type === 'quote';
   const to = inv.customer.email ?? '';
-  const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
+  const total = invoiceTotals(inv).total;
   const totalStr = formatCurrency(total, inv.currency);
   const dateLabel = isQuote
     ? (lang === 'is' ? 'Gildir til' : 'Valid until')
@@ -516,7 +529,7 @@ export default function Invoices() {
     .sort((a, b) => b.date.localeCompare(a.date));
 
   // ── Customer statement ──
-  const invTotal = (inv: Invoice) => inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
+  const invTotal = (inv: Invoice) => invoiceTotals(inv).total;
   const toISK = (amt: number, cur: Currency) => amt * ((data.settings.exchangeRates[cur as 'EUR'] ?? 1));
   const customerNames = Array.from(
     new Set(data.invoices.filter(i => i.type === 'invoice' && i.customer.name).map(i => i.customer.name))
@@ -682,7 +695,8 @@ export default function Invoices() {
       vatRate: `${l.vatRate}%`,
       lineTotal: formatCurrency(l.quantity * l.unitPrice * (1 + l.vatRate / 100), inv.currency),
     }));
-    const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
+    const { discount, total } = invoiceTotals(inv);
+    if (discount > 0) rows.push({ description: lang === 'is' ? 'Afsláttur' : 'Discount', quantity: '' as unknown as number, unitPrice: '', vatRate: '', lineTotal: `−${formatCurrency(discount, inv.currency)}` });
     rows.push({ description: t('invoiceTotal'), quantity: '' as unknown as number, unitPrice: '', vatRate: '', lineTotal: formatCurrency(total, inv.currency) });
     const title = `${isQuote ? t('quote') : t('invoice')} ${inv.number}`;
     return { title, subtitle: inv.customer.name, cols, rows, filename: `${inv.number}.pdf` };
@@ -847,7 +861,7 @@ export default function Invoices() {
         <div className="space-y-2">
           {filtered.map(inv => {
             const isQuote = inv.type === 'quote';
-            const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate/100), 0);
+            const total = invoiceTotals(inv).total;
             // Issued invoices (anything past draft) are locked from edit/delete.
             const locked = !isQuote && inv.status !== 'draft';
             return (

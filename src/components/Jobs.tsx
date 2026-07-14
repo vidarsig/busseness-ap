@@ -9,6 +9,7 @@ import { useApp } from '../contexts/AppContext';
 import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency, StockItem } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import { sharePDF } from '../utils/exports';
+import { invoiceTotals } from '../utils/invoiceMath';
 import PhotoViewer from './PhotoViewer';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
@@ -465,9 +466,9 @@ export default function Jobs({ sessionUser }: JobsProps) {
       unitPrice: fmt(l.unitPrice),
       lineTotal: fmt(l.quantity * l.unitPrice),
     }));
-    const sub = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-    const vat = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (l.vatRate / 100), 0);
-    rows.push({ description: t('Samtals með vsk.', 'Total incl. VAT'), quantity: '' as unknown as number, unitPrice: '', lineTotal: fmt(sub + vat) });
+    const { discount, total } = invoiceTotals(inv);
+    if (discount > 0) rows.push({ description: t('Afsláttur', 'Discount'), quantity: '' as unknown as number, unitPrice: '', lineTotal: `−${fmt(discount)}` });
+    rows.push({ description: t('Samtals með vsk.', 'Total incl. VAT'), quantity: '' as unknown as number, unitPrice: '', lineTotal: fmt(total) });
     const company = data.settings.company.name || '';
     const subject = `${t('Tilboð', 'Offer')} ${inv.number} — ${company}`;
     const body = [
@@ -477,7 +478,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       '',
       ...inv.lines.map(l => `  ${l.description}  ×${l.quantity}  ${fmt(l.unitPrice)}`),
       '',
-      `${t('Heildarupphæð', 'Total')}: ${fmt(sub + vat)}`,
+      `${t('Heildarupphæð', 'Total')}: ${fmt(total)}`,
       '',
       t('Með kveðju,', 'Kind regards,'),
       company,
@@ -1259,8 +1260,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       )}
       {/* Inline offer editor */}
       {offerEdit && (() => {
-        const sub = offerEdit.lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
-        const vat = offerEdit.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (l.vatRate / 100), 0);
+        const tot = invoiceTotals(offerEdit);
         return (
           <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
             <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[92vh] flex flex-col">
@@ -1324,10 +1324,27 @@ export default function Jobs({ sessionUser }: JobsProps) {
                   </button>
                 </div>
 
+                {/* Discount */}
+                <div className="flex items-center gap-2 justify-end">
+                  <span className="text-sm text-gray-500">{t('Afsláttur', 'Discount')}</span>
+                  <input type="number" min={0} step="0.01" value={offerEdit.discountValue ?? ''}
+                    onChange={e => setOfferEdit(o => o ? { ...o, discountValue: e.target.value === '' ? undefined : parseFloat(e.target.value) } : o)}
+                    placeholder="0" className={`${inp} w-20 text-right`} />
+                  <div className="flex rounded-lg border border-gray-300 overflow-hidden text-sm flex-shrink-0">
+                    <button type="button" onClick={() => setOfferEdit(o => o ? { ...o, discountType: 'percent' } : o)}
+                      className={`px-2.5 py-2 ${(offerEdit.discountType ?? 'percent') === 'percent' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600'}`}>%</button>
+                    <button type="button" onClick={() => setOfferEdit(o => o ? { ...o, discountType: 'amount' } : o)}
+                      className={`px-2.5 py-2 ${offerEdit.discountType === 'amount' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600'}`}>{offerEdit.currency}</button>
+                  </div>
+                </div>
+
                 <div className="bg-gray-50 rounded-xl p-3 text-sm space-y-1">
-                  <div className="flex justify-between text-gray-500"><span>{t('Án vsk.', 'Subtotal')}</span><span>{fmt(sub)}</span></div>
-                  <div className="flex justify-between text-gray-500"><span>{cc.vatTerm}</span><span>{fmt(vat)}</span></div>
-                  <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t border-gray-200"><span>{t('Samtals', 'Total')}</span><span>{fmt(sub + vat)}</span></div>
+                  <div className="flex justify-between text-gray-500"><span>{t('Án vsk.', 'Subtotal')}</span><span>{fmt(tot.subtotal)}</span></div>
+                  {tot.discount > 0 && (
+                    <div className="flex justify-between text-gray-500"><span>{t('Afsláttur', 'Discount')}{(offerEdit.discountType ?? 'percent') === 'percent' && offerEdit.discountValue ? ` (${offerEdit.discountValue}%)` : ''}</span><span>−{fmt(tot.discount)}</span></div>
+                  )}
+                  <div className="flex justify-between text-gray-500"><span>{cc.vatTerm}</span><span>{fmt(tot.vatTotal)}</span></div>
+                  <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t border-gray-200"><span>{t('Samtals', 'Total')}</span><span>{fmt(tot.total)}</span></div>
                 </div>
               </div>
 
