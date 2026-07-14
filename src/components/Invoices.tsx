@@ -7,6 +7,7 @@ import { exportPDF, sharePDF } from '../utils/exports';
 import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
+import PhotoViewer from './PhotoViewer';
 
 function newId() { return `inv_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function lineId() { return `ln_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -425,6 +426,7 @@ export default function Invoices() {
   const [printInv, setPrintInv] = useState<Invoice | null>(null);
   const [photoPicker, setPhotoPicker] = useState(false);
   const [photoInvId, setPhotoInvId] = useState('');
+  const [photoView, setPhotoView] = useState<InvoicePhoto[] | null>(null);
   const invCameraRef = useRef<HTMLInputElement>(null);
 
   function openAddModal(defaultType: 'invoice' | 'quote', autoCamera = false) {
@@ -871,6 +873,13 @@ export default function Invoices() {
                     className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
                     <Printer className="w-3.5 h-3.5" /> {t('printInvoice')}
                   </button>
+                  {/* Photos — view attached pictures one by one */}
+                  {(inv.photos ?? []).length > 0 && (
+                    <button onClick={() => setPhotoView(inv.photos ?? [])}
+                      className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
+                      <Image className="w-3.5 h-3.5" /> {(inv.photos ?? []).length} {lang === 'is' ? 'myndir' : 'photos'}
+                    </button>
+                  )}
                   {/* Edit / delete only before an invoice is issued (drafts + quotes) */}
                   {!locked && (
                     <button onClick={() => setModal({ open: true, inv })}
@@ -957,6 +966,13 @@ export default function Invoices() {
       <input ref={invCameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
         onChange={e => { attachPhotoToInvoice(e.target.files); e.target.value = ''; }} />
       {printInv && <PrintableInvoice inv={printInv} />}
+      {photoView && (
+        <PhotoViewer
+          photos={photoView.map(p => ({ dataUrl: p.dataUrl, caption: p.caption }))}
+          onClose={() => setPhotoView(null)}
+          altLabel={lang === 'is' ? 'Mynd' : 'Photo'}
+        />
+      )}
       <PlanLimitModal
         open={limitModal} onClose={() => setLimitModal(false)}
         limitText="You've reached 5 invoices this month on the Free plan."

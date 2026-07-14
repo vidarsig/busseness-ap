@@ -9,6 +9,7 @@ import { useApp } from '../contexts/AppContext';
 import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency, StockItem } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import { sharePDF } from '../utils/exports';
+import PhotoViewer from './PhotoViewer';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
 import type { SessionUser } from '../App';
@@ -1050,21 +1051,19 @@ export default function Jobs({ sessionUser }: JobsProps) {
       <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
         onChange={e => { handlePhotoFiles(photoJobId, e.target.files); e.target.value = ''; }} />
 
-      {/* ── Lightbox ── */}
-      {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <img src={lightbox.dataUrl} alt={lightbox.caption || ''} className="w-full rounded-xl shadow-2xl max-h-[80vh] object-contain" />
-            {lightbox.caption && (
-              <p className="text-center text-white/80 mt-3 text-sm">{lightbox.caption}</p>
-            )}
-            <button onClick={() => setLightbox(null)}
-              className="absolute top-3 right-3 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* ── Lightbox: flip through all of this job's photos one by one ── */}
+      {lightbox && (() => {
+        const list = jobPhotos(lightbox.jobId);
+        const start = Math.max(0, list.findIndex(p => p.id === lightbox.id));
+        return (
+          <PhotoViewer
+            photos={list.map(p => ({ dataUrl: p.dataUrl, caption: p.caption }))}
+            startIndex={start}
+            onClose={() => setLightbox(null)}
+            altLabel={t('Mynd', 'Photo')}
+          />
+        );
+      })()}
 
       {/* ── Job form modal ── */}
       {jobForm.open && (

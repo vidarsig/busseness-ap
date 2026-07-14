@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
+import PhotoViewer from './PhotoViewer';
 import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
@@ -717,12 +718,11 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
 
       {/* Receipt image viewer */}
       {receiptView && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setReceiptView(null)}>
-          <button onClick={() => setReceiptView(null)} className="absolute top-4 right-4 text-white/80 hover:text-white p-2">
-            <X className="w-6 h-6" />
-          </button>
-          <img src={receiptView} alt={(lang === 'is' ? 'Kvittun' : 'Receipt')} className="max-w-full max-h-[90vh] rounded-lg object-contain shadow-2xl" onClick={e => e.stopPropagation()} />
-        </div>
+        <PhotoViewer
+          photos={[{ dataUrl: receiptView }]}
+          onClose={() => setReceiptView(null)}
+          altLabel={lang === 'is' ? 'Kvittun' : 'Receipt'}
+        />
       )}
       <PlanLimitModal
         open={limitModal} onClose={() => setLimitModal(false)}
