@@ -29,6 +29,7 @@ import { View } from './types';
 import { getSession } from './utils/supabase';
 import { resolvePermissions, canAccessView } from './utils/access';
 import UpdatePrompt from './components/UpdatePrompt';
+import TestModeBanner from './components/TestModeBanner';
 
 export interface SessionUser {
   id: string;
@@ -156,5 +157,5 @@ function AppInner() {
 }
 
 export default function App() {
-  return <AppProvider><AppInner /><UpdatePrompt /></AppProvider>;
+  return <AppProvider><AppInner /><UpdatePrompt /><TestModeBanner /></AppProvider>;
 }

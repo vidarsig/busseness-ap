@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2 } from 'lucide-react';
+import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2, FlaskConical } from 'lucide-react';
 import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
@@ -164,7 +164,7 @@ function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUs
 }
 
 export default function Settings() {
-  const { data, dispatch, t, lang, cc, syncStatus, lastSyncedAt, syncNow } = useApp();
+  const { data, dispatch, t, lang, cc, syncStatus, lastSyncedAt, syncNow, testMode, enterTestMode } = useApp();
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState<AppSettings>({ ...data.settings });
   const [restoreError, setRestoreError] = useState('');
@@ -494,6 +494,24 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Test mode */}
+          <div className="bg-white rounded-xl border border-amber-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2">
+              <FlaskConical className="w-4 h-4 text-amber-500" />
+              {lang === 'is' ? 'Prufustilling' : 'Test mode'}
+            </h2>
+            <p className="text-xs text-gray-500 mb-3">
+              {lang === 'is'
+                ? 'Prófaðu innflutning og aðra eiginleika án þess að snerta raunveruleg gögn. Ekkert vistast — þegar þú hættir prufu koma raunveruleg gögn óbreytt til baka.'
+                : 'Try imports and other features without touching your real data. Nothing is saved — when you exit, your real data comes back untouched.'}
+            </p>
+            <button onClick={enterTestMode} disabled={testMode}
+              className="flex items-center gap-2 border border-amber-300 text-amber-700 bg-amber-50 px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 disabled:opacity-50">
+              <FlaskConical className="w-4 h-4" />
+              {testMode ? (lang === 'is' ? 'Prufustilling er virk' : 'Test mode is on') : (lang === 'is' ? 'Byrja prufu' : 'Start test mode')}
+            </button>
           </div>
 
           {/* Backup & Restore */}

@@ -204,6 +204,10 @@ interface AppContextValue {
   syncStatus: SyncStatus;
   lastSyncedAt: string | null;
   syncNow: () => Promise<void>;
+  /** Test mode: play with data (imports etc.) without saving locally or to the cloud. */
+  testMode: boolean;
+  enterTestMode: () => void;
+  exitTestMode: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -273,6 +277,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const syncKeyRef = useRef<string>('');
   const persistTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  // ── Test mode ──────────────────────────────────────────────────────────
+  // While on, the app runs on an in-memory copy of the real data: nothing is
+  // persisted to IndexedDB/localStorage and nothing is pushed to Supabase, so
+  // imports/experiments can't touch the real books. Exiting restores the real
+  // data (which was never overwritten). A page reload also drops straight back
+  // to the real data, since test changes are only ever in memory.
+  const [testMode, setTestMode] = useState(false);
+  const testModeRef = useRef(false);           // synchronous gate for the effects
+  const realDataBackup = useRef<AppData | null>(null);
+
+  const enterTestMode = useCallback(() => {
+    realDataBackup.current = data;             // immutable snapshot of the real data
+    testModeRef.current = true;
+    setTestMode(true);
+  }, [data]);
+
+  const exitTestMode = useCallback(() => {
+    const real = realDataBackup.current;
+    realDataBackup.current = null;
+    testModeRef.current = false;
+    setTestMode(false);
+    if (real) { skipNextPush.current = true; dispatch({ type: 'LOAD', payload: real }); }
+  }, []);
+
   // Persist locally to IndexedDB (big storage, ~GBs). Debounced so a burst of
   // changes (e.g. importing thousands of bank rows, or attaching many receipts)
   // serializes once things settle instead of re-writing the whole blob on every
@@ -280,7 +308,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // We don't write until the initial IndexedDB hydration has run, so we never
   // clobber the stored copy with the localStorage-seeded starting state.
   useEffect(() => {
-    if (!idbReady.current) return;
+    if (!idbReady.current || testModeRef.current) return; // test mode never persists
     clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
       idbSet(STORAGE_KEY, data).catch(() => { /* ignore transient write errors */ });
@@ -357,6 +385,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Debounced push to Supabase on data change
   useEffect(() => {
+    if (testModeRef.current) return; // test mode never pushes to the cloud
     const { supabaseUrl, supabaseKey } = data.settings;
     const syncKey = syncKeyRef.current;
     if (!supabaseUrl || !supabaseKey || !syncKey) return;
@@ -377,6 +406,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [data]);
 
   const syncNow = useCallback(async () => {
+    if (testModeRef.current) return; // never push test data, even on a manual sync
     const { supabaseUrl, supabaseKey } = data.settings;
     const syncKey = syncKeyRef.current;
     if (!supabaseUrl || !supabaseKey || !syncKey) return;
@@ -417,7 +447,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [data.settings.defaultCurrency, data.settings.exchangeRates, lang]);
 
   return (
-    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow }}>
+    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow, testMode, enterTestMode, exitTestMode }}>
       {children}
     </AppContext.Provider>
   );
