@@ -3,11 +3,12 @@ import {
   Plus, X, Pencil, Trash2, Clock, Package, ChevronDown, ChevronUp,
   HardHat, CheckCircle, PauseCircle, XCircle, FileText, TrendingUp,
   Camera, Image, Receipt, Users, MapPin, Phone,
-  ZoomIn, Search, Calendar,
+  ZoomIn, Search, Calendar, Mail,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency, StockItem } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
+import { sharePDF } from '../utils/exports';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
 import type { SessionUser } from '../App';
@@ -440,6 +441,50 @@ export default function Jobs({ sessionUser }: JobsProps) {
     if (!offerEdit) return;
     dispatch({ type:'UPDATE_INVOICE', payload: offerEdit });
     setInvoiceSuccess(offerEdit.number);
+    setTimeout(() => setInvoiceSuccess(null), 5000);
+    setOfferEdit(null);
+  }
+
+  // Send the offer to the customer in one tap: saves it, then attaches the PDF
+  // to the phone's share sheet (or downloads + opens the mail app on desktop),
+  // with the message prefilled.
+  function sendOffer() {
+    if (!offerEdit) return;
+    const inv = offerEdit;
+    dispatch({ type:'UPDATE_INVOICE', payload: inv });
+    const cols = [
+      { header: t('Lýsing', 'Description'), key: 'description', width: 60 },
+      { header: t('Magn', 'Qty'), key: 'quantity', width: 16 },
+      { header: t('Verð á einingu', 'Unit price'), key: 'unitPrice', width: 26 },
+      { header: t('Samtals', 'Line total'), key: 'lineTotal', width: 28 },
+    ];
+    const rows = inv.lines.map(l => ({
+      description: l.description,
+      quantity: l.quantity,
+      unitPrice: fmt(l.unitPrice),
+      lineTotal: fmt(l.quantity * l.unitPrice),
+    }));
+    const sub = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+    const vat = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (l.vatRate / 100), 0);
+    rows.push({ description: t('Samtals með vsk.', 'Total incl. VAT'), quantity: '' as unknown as number, unitPrice: '', lineTotal: fmt(sub + vat) });
+    const company = data.settings.company.name || '';
+    const subject = `${t('Tilboð', 'Offer')} ${inv.number} — ${company}`;
+    const body = [
+      `${t('Kæri', 'Dear')} ${inv.customer.name},`,
+      '',
+      t(`Við sendum ykkur tilboð nr. ${inv.number}.`, `Please find attached quote number ${inv.number}.`),
+      '',
+      ...inv.lines.map(l => `  ${l.description}  ×${l.quantity}  ${fmt(l.unitPrice)}`),
+      '',
+      `${t('Heildarupphæð', 'Total')}: ${fmt(sub + vat)}`,
+      '',
+      t('Með kveðju,', 'Kind regards,'),
+      company,
+    ].join('\n');
+    sharePDF(`${t('Tilboð', 'Offer')} ${inv.number}`, inv.customer.name, cols, rows, `${inv.number}.pdf`, {
+      emailTo: inv.customer.email ?? '', subject, body,
+    });
+    setInvoiceSuccess(inv.number);
     setTimeout(() => setInvoiceSuccess(null), 5000);
     setOfferEdit(null);
   }
@@ -1287,12 +1332,12 @@ export default function Jobs({ sessionUser }: JobsProps) {
                 </div>
               </div>
 
-              <div className="px-5 py-4 border-t border-gray-200 flex justify-between items-center gap-2">
-                <p className="text-xs text-gray-400">{t('Sendu tilboðið í Reikningum.', 'Send the offer from Invoices.')}</p>
-                <div className="flex gap-2">
-                  <button onClick={() => setOfferEdit(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{t('Hætta við','Cancel')}</button>
-                  <button onClick={saveOffer} className="px-5 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition">{t('Vista tilboð','Save offer')}</button>
-                </div>
+              <div className="px-5 py-4 border-t border-gray-200 flex flex-wrap justify-end items-center gap-2">
+                <button onClick={() => setOfferEdit(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">{t('Hætta við','Cancel')}</button>
+                <button onClick={saveOffer} className="px-5 py-2 text-sm border border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg font-semibold transition">{t('Vista tilboð','Save offer')}</button>
+                <button onClick={sendOffer} className="flex items-center gap-1.5 px-5 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition">
+                  <Mail className="w-4 h-4" /> {t('Senda tilboð','Send offer')}
+                </button>
               </div>
             </div>
           </div>

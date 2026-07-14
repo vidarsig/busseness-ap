@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusC
 import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency, InvoicePhoto } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
-import { exportPDF } from '../utils/exports';
+import { exportPDF, sharePDF } from '../utils/exports';
 import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
@@ -386,7 +386,9 @@ function PrintableInvoice({ inv }: { inv: Invoice }) {
   );
 }
 
-function emailInvoice(inv: Invoice, companyName: string, lang: string) {
+// The customer email (to / subject / body) for an invoice or quote. Used both
+// for the mailto fallback and as the message text on the native share sheet.
+function buildInvoiceEmail(inv: Invoice, companyName: string, lang: string) {
   const isQuote = inv.type === 'quote';
   const to = inv.customer.email ?? '';
   const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
@@ -413,8 +415,7 @@ function emailInvoice(inv: Invoice, companyName: string, lang: string) {
     companyName,
   ].join('\n');
 
-  const url = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.location.href = url;
+  return { to, subject, body };
 }
 
 export default function Invoices() {
@@ -615,7 +616,9 @@ export default function Invoices() {
     });
   }
 
-  function exportInvoicePDF(inv: Invoice) {
+  // Shared PDF layout for an invoice/quote — used by both the "PDF" download and
+  // the "Send" (share) button so the customer always gets the same document.
+  function invoicePdfData(inv: Invoice) {
     const isQuote = inv.type === 'quote';
     const cols = [
       { header: t('description'), key: 'description', width: 50 },
@@ -634,7 +637,20 @@ export default function Invoices() {
     const total = inv.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
     rows.push({ description: t('invoiceTotal'), quantity: '' as unknown as number, unitPrice: '', vatRate: '', lineTotal: formatCurrency(total, inv.currency) });
     const title = `${isQuote ? t('quote') : t('invoice')} ${inv.number}`;
-    exportPDF(title, inv.customer.name, cols, rows, `${inv.number}.pdf`);
+    return { title, subtitle: inv.customer.name, cols, rows, filename: `${inv.number}.pdf` };
+  }
+
+  function exportInvoicePDF(inv: Invoice) {
+    const d = invoicePdfData(inv);
+    exportPDF(d.title, d.subtitle, d.cols, d.rows, d.filename);
+  }
+
+  // One-tap send to the customer: attaches the PDF to the phone's share sheet
+  // (or downloads it + opens the mail app on desktop) with the message prefilled.
+  function sendInvoice(inv: Invoice) {
+    const d = invoicePdfData(inv);
+    const { to, subject, body } = buildInvoiceEmail(inv, data.settings.company.name || '', lang);
+    sharePDF(d.title, d.subtitle, d.cols, d.rows, d.filename, { emailTo: to, subject, body });
   }
 
   const docTabs: Array<{ v: 'all' | 'invoice' | 'quote'; label: string }> = [
@@ -840,13 +856,11 @@ export default function Invoices() {
                       <Send className="w-3.5 h-3.5" /> {t('markAsSent')}
                     </button>
                   )}
-                  {/* Email */}
-                  {inv.customer.email && (
-                    <button onClick={() => emailInvoice(inv, data.settings.company.name || '', lang)}
-                      className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
-                      <Mail className="w-3.5 h-3.5" /> {isQuote ? t('emailQuote') : t('emailInvoice')}
-                    </button>
-                  )}
+                  {/* Send — attaches the PDF (share sheet on phone, mail app on desktop) */}
+                  <button onClick={() => sendInvoice(inv)}
+                    className="flex items-center gap-1 text-xs text-white bg-blue-600 border border-blue-600 px-2.5 py-1.5 rounded-lg hover:bg-blue-700">
+                    <Mail className="w-3.5 h-3.5" /> {lang === 'is' ? 'Senda' : 'Send'}
+                  </button>
                   {/* PDF */}
                   <button onClick={() => exportInvoicePDF(inv)}
                     className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
