@@ -9,6 +9,12 @@
   to = "/kynning.html"
   status = 200
 
+# Clean URL for the hub page (videos / photos / reviews / ask-AI)
+[[redirects]]
+  from = "/hub"
+  to = "/hub.html"
+  status = 200
+
 [[edge_functions]]
   path = "/api/claude-stream"
   function = "claude-stream"

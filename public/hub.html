@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jobboks — Hub</title>
+<meta name="description" content="Jobboks hub — myndbönd, myndir, umsagnir, og spurðu gervigreindina hvað sem er um appið." />
+<meta property="og:title" content="Jobboks — Hub" />
+<meta property="og:type" content="website" />
+<link rel="icon" href="/favicon.svg" />
+<style>
+  :root{
+    --blue:#1e3a8a; --blue2:#2563eb; --purple:#7c3aed; --ink:#0f172a;
+    --muted:#64748b; --bg:#f8fafc; --card:#ffffff; --line:#e2e8f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;font-weight:600;padding:13px 24px;border-radius:12px;border:none;cursor:pointer;font-size:15px;transition:transform .15s,box-shadow .15s;box-shadow:0 6px 18px rgba(37,99,235,.25)}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(124,58,237,.35)}
+  .btn.ghost{background:#fff;color:var(--blue);box-shadow:none;border:1.5px solid var(--line)}
+  section{padding:52px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:clamp(24px,4vw,34px);font-weight:800;letter-spacing:-.01em;margin-bottom:6px}
+  .sub{color:var(--muted);margin-bottom:28px;max-width:640px}
+  .grad{background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+  header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .logo{font-weight:800;font-size:22px}
+  .navlinks{display:flex;gap:18px;align-items:center;font-size:14px;color:var(--muted)}
+  .navlinks a:hover{color:var(--ink)}
+
+  .hero{text-align:center;padding:64px 0 44px;border-bottom:1px solid var(--line)}
+  .hero h1{font-size:clamp(30px,6vw,50px);font-weight:800;line-height:1.1;letter-spacing:-.02em}
+  .hero p{color:var(--muted);font-size:clamp(16px,2.4vw,19px);max-width:600px;margin:16px auto 26px}
+  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 8px 30px rgba(15,23,42,.05)}
+  .frame{position:relative;aspect-ratio:16/9;background:linear-gradient(135deg,#1e293b,#0f172a);display:flex;align-items:center;justify-content:center}
+  .frame iframe,.frame video{width:100%;height:100%;border:0;display:block;object-fit:cover}
+  .ph{color:#cbd5e1;text-align:center;padding:16px;font-size:14px}
+  .ph .play{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;margin:0 auto 10px;color:#fff;font-size:22px}
+  .cap{padding:12px 14px;font-size:14px;color:var(--muted)}
+
+  .photo{aspect-ratio:4/3;border-radius:14px;background:#eef2f7 center/cover no-repeat;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px}
+
+  .review{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px}
+  .stars{color:#f59e0b;font-size:16px;letter-spacing:2px;margin-bottom:8px}
+  .review p{font-size:15px}
+  .review .who{margin-top:12px;font-size:13px;color:var(--muted);font-weight:600}
+
+  /* AI box */
+  .ai{background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;border-radius:20px;padding:28px}
+  .ai h2{color:#fff}
+  .ai .sub{color:rgba(255,255,255,.85)}
+  .ai-inputrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .ai input{flex:1;min-width:220px;padding:14px 16px;border-radius:12px;border:none;font-size:15px;outline:none}
+  .ai .btn{background:#fff;color:var(--blue)}
+  .ai-answer{margin-top:16px;background:rgba(255,255,255,.12);border-radius:14px;padding:16px 18px;font-size:15px;white-space:pre-wrap;display:none}
+  .ai-answer.show{display:block}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .chip{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 12px;border-radius:20px;font-size:13px;cursor:pointer}
+  .chip:hover{background:rgba(255,255,255,.28)}
+
+  footer{padding:36px 0;text-align:center;color:var(--muted);font-size:13px}
+  .storebadges{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+  .note{font-size:12px;color:#94a3b8;margin-top:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo"><span class="grad">Jobboks</span></div>
+    <nav class="navlinks">
+      <a href="#videos">Myndbönd</a>
+      <a href="#photos">Myndir</a>
+      <a href="#reviews">Umsagnir</a>
+      <a href="#ai">Spyrja AI</a>
+      <a class="btn ghost" href="https://jobboks.app" style="padding:8px 16px">Opna appið</a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap">
+    <h1>Jobboks — <span class="grad">bókhaldið sem gerir sig sjálft</span></h1>
+    <p>Allt á einum stað: myndbönd, myndir, umsagnir viðskiptavina, og gervigreind sem svarar öllu um appið.</p>
+    <div class="cta-row">
+      <!-- ▶ SETTU PLAY STORE HLEKKINN HÉR (replace # with your Play Store URL) -->
+      <a class="btn" href="#" id="playstore">▶ Sækja í Play Store</a>
+      <a class="btn ghost" href="https://jobboks.app">Opna vefútgáfu</a>
+    </div>
+    <div class="note">Ábending: skiptu „#“ út fyrir Play Store slóðina þína í hlekknum hér að ofan.</div>
+  </div>
+</div>
+
+<!-- VIDEOS -->
+<section id="videos">
+  <div class="wrap">
+    <h2>Myndbönd</h2>
+    <p class="sub">Kynningarmyndbönd og leiðbeiningar. Til að bæta við: límdu YouTube-„embed“ slóð í <code>src</code> hér að neðan (t.d. https://www.youtube.com/embed/XXXX).</p>
+    <div class="grid g2">
+      <div class="card">
+        <div class="frame">
+          <!-- SETTU MYNDBAND 1: <iframe src="https://www.youtube.com/embed/XXXX" allowfullscreen></iframe> -->
+          <div class="ph"><div class="play">▶</div>Kynningarmyndband #1<br>(límdu YouTube embed hér)</div>
+        </div>
+        <div class="cap">Aðalkynning — „Mike“ sagan</div>
+      </div>
+      <div class="card">
+        <div class="frame">
+          <div class="ph"><div class="play">▶</div>Myndband #2<br>(límdu YouTube embed hér)</div>
+        </div>
+        <div class="cap">Hvernig á að skanna kvittun</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PHOTOS -->
+<section id="photos">
+  <div class="wrap">
+    <h2>Myndir</h2>
+    <p class="sub">Skjámyndir og myndir af appinu. Til að bæta við: settu myndaslóð í <code>style="background-image:url('...')"</code>, eða settu myndir í <code>/public</code> möppuna.</p>
+    <div class="grid g3">
+      <div class="photo" style="/* background-image:url('/screenshot-1.png') */">Mynd 1</div>
+      <div class="photo">Mynd 2</div>
+      <div class="photo">Mynd 3</div>
+      <div class="photo">Mynd 4</div>
+      <div class="photo">Mynd 5</div>
+      <div class="photo">Mynd 6</div>
+    </div>
+  </div>
+</section>
+
+<!-- REVIEWS -->
+<section id="reviews">
+  <div class="wrap">
+    <h2>Umsagnir viðskiptavina</h2>
+    <p class="sub">Bættu við raunverulegum umsögnum þegar þær koma — afritaðu bara eina „review“ blokk og skiptu út textanum.</p>
+    <div class="grid g3">
+      <div class="review">
+        <div class="stars">★★★★★</div>
+        <p>„Ég skanna kvittunina og hún bókast sjálf. Sparar mér marga tíma á viku.“</p>
+        <div class="who">— (dæmi) Verktaki, Reykjavík</div>
+      </div>
+      <div class="review">
+        <div class="stars">★★★★★</div>
+        <p>„Loksins bókhald sem ég skil. Allt á einum stað — reikningar, verk og VSK.“</p>
+        <div class="who">— (dæmi) Smiður</div>
+      </div>
+      <div class="review">
+        <div class="stars">★★★★★</div>
+        <p>„Flutti öll gögnin úr gamla kerfinu á einum degi. Ótrúlega einfalt.“</p>
+        <div class="who">— (dæmi) Rafvirki</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ASK THE AI -->
+<section id="ai">
+  <div class="wrap">
+    <div class="ai">
+      <h2>Spyrðu gervigreindina um Jobboks</h2>
+      <p class="sub">Spurðu hvað sem er — hvað appið gerir, verð, hvernig það hjálpar þér.</p>
+      <div class="ai-inputrow">
+        <input id="q" type="text" placeholder="Skrifaðu spurningu… t.d. Hvernig virkar bankainnflutningur?" />
+        <button class="btn" id="askBtn" onclick="ask()">Spyrja</button>
+      </div>
+      <div class="chips">
+        <span class="chip" onclick="askThis(this)">Hvað kostar Jobboks?</span>
+        <span class="chip" onclick="askThis(this)">Get ég flutt gögn úr QuickBooks?</span>
+        <span class="chip" onclick="askThis(this)">Hvernig bókast kvittun sjálf?</span>
+      </div>
+      <div class="ai-answer" id="answer"></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="storebadges">
+      <a class="btn ghost" href="#">▶ Play Store</a>
+      <a class="btn ghost" href="https://jobboks.app">🌐 jobboks.app</a>
+      <a class="btn ghost" href="mailto:hello@jobboks.app">✉ hello@jobboks.app</a>
+    </div>
+    <p style="margin-top:14px">© Jobboks — bókhald & verkstjórn fyrir verktaka.</p>
+  </div>
+</footer>
+
+<script>
+const SYSTEM = `You are the friendly assistant on the Jobboks marketing page (jobboks.app). Jobboks is an all-in-one, dead-simple, AI-native bookkeeping AND job-management app for contractors and small trades.
+Key facts:
+- Scan a receipt and it books itself; AI bank-import + auto-categorisation; invoices & quotes (with discounts, stock items, PDF send); VAT / US sales-tax; a Job Book (Verkbókhald) with time, materials, photos → invoice; stock (Birgðir); migration/import from other bookkeeping programs (QuickBooks, Xero, etc.) in any language; works offline as a PWA and on Android (Play Store).
+- Wedge: local + all-in-one (books AND jobs) + dead simple + AI-native. Built for small contractors, not big firms.
+- Pricing: Free to start; Pro ~€9/month; Business tier for teams. 3–5× cheaper than Jobber/Tradify.
+Answer in a warm, plain, SHORT way (2–4 sentences). Match the user's language (Icelandic or English). If you truly don't know, say to email hello@jobboks.app. Never invent features.`;
+
+function askThis(el){ document.getElementById('q').value = el.textContent; ask(); }
+
+async function ask(){
+  const q = document.getElementById('q').value.trim();
+  if(!q) return;
+  const ansEl = document.getElementById('answer');
+  const btn = document.getElementById('askBtn');
+  ansEl.classList.add('show');
+  ansEl.textContent = '…';
+  btn.disabled = true;
+  try{
+    const res = await fetch('/api/claude', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:600,
+        system: SYSTEM,
+        messages:[{ role:'user', content:q }]
+      })
+    });
+    const data = await res.json();
+    ansEl.textContent = (data && data.content && data.content[0] && data.content[0].text)
+      ? data.content[0].text
+      : 'Því miður náðist ekki svar núna — sendu okkur línu á hello@jobboks.app.';
+  }catch(e){
+    ansEl.textContent = 'Villa við tengingu — reyndu aftur eða sendu okkur línu á hello@jobboks.app.';
+  }finally{
+    btn.disabled = false;
+  }
+}
+document.getElementById('q').addEventListener('keydown', e => { if(e.key==='Enter') ask(); });
+</script>
+</body>
+</html>
