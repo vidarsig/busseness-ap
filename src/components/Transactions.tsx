@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
@@ -237,6 +237,27 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [limitModal, setLimitModal] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [receiptView, setReceiptView] = useState<string | null>(null);
+  // Attach a photo to an existing entry: the camera icon on a row without a
+  // receipt targets that entry, then the hidden input opens the camera.
+  const [photoTargetTx, setPhotoTargetTx] = useState<Transaction | null>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+
+  function openPhoto(tx: Transaction) {
+    if (tx.receiptUrl) { setReceiptView(tx.receiptUrl); return; }
+    setPhotoTargetTx(tx);
+    receiptInputRef.current?.click();
+  }
+  function attachReceipt(files: FileList | null) {
+    const file = files?.[0];
+    const tx = photoTargetTx;
+    if (!file || !tx) { setPhotoTargetTx(null); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, receiptUrl: String(reader.result) } });
+      setPhotoTargetTx(null);
+    };
+    reader.readAsDataURL(file);
+  }
 
   function openAddModal() {
     if (isTransactionLimitReached(data)) { setLimitModal(true); return; }
@@ -568,12 +589,13 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 {tx.reference && <p className="text-xs text-gray-400 mt-0.5">{tx.reference}</p>}
               </div>
               <div className="flex flex-col gap-1 flex-shrink-0">
-                {tx.receiptUrl && (
-                  <button onClick={() => setReceiptView(tx.receiptUrl!)} title={(lang === 'is' ? 'Kvittun' : 'Receipt')}
-                    className="text-green-600 hover:text-green-700 p-1.5 rounded-lg hover:bg-green-50">
-                    <Receipt className="w-4 h-4" />
-                  </button>
-                )}
+                <button onClick={() => openPhoto(tx)}
+                  title={tx.receiptUrl ? (lang === 'is' ? 'Skoða mynd' : 'View photo') : (lang === 'is' ? 'Bæta við mynd' : 'Add photo')}
+                  className={tx.receiptUrl
+                    ? 'text-green-600 hover:text-green-700 p-1.5 rounded-lg hover:bg-green-50'
+                    : 'text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50'}>
+                  {tx.receiptUrl ? <Receipt className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+                </button>
                 <button onClick={() => setModal({ open: true, tx })}
                   className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50">
                   <Pencil className="w-4 h-4" />
@@ -648,12 +670,11 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                     </td>
                     <td className={tdCls}>
                       <div className="flex gap-1">
-                        {tx.receiptUrl && (
-                          <button onClick={() => setReceiptView(tx.receiptUrl!)} title={(lang === 'is' ? 'Kvittun' : 'Receipt')}
-                            className="text-green-600 hover:text-green-700 p-1 rounded">
-                            <Receipt className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button onClick={() => openPhoto(tx)}
+                          title={tx.receiptUrl ? (lang === 'is' ? 'Skoða mynd' : 'View photo') : (lang === 'is' ? 'Bæta við mynd' : 'Add photo')}
+                          className={tx.receiptUrl ? 'text-green-600 hover:text-green-700 p-1 rounded' : 'text-gray-400 hover:text-blue-600 p-1 rounded'}>
+                          {tx.receiptUrl ? <Receipt className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5" />}
+                        </button>
                         <button onClick={() => setModal({ open: true, tx })}
                           className="text-gray-400 hover:text-blue-600 p-1 rounded">
                           <Pencil className="w-3.5 h-3.5" />
@@ -715,6 +736,10 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         />
       )}
       {scannerOpen && <ReceiptScanner onClose={() => setScannerOpen(false)} />}
+
+      {/* Hidden camera/file input for attaching a photo to an existing entry */}
+      <input ref={receiptInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={e => { attachReceipt(e.target.files); e.target.value = ''; }} />
 
       {/* Receipt image viewer */}
       {receiptView && (
