@@ -5,7 +5,7 @@ import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
   StockItem, StockMovement, Supplier, Customer, Job, TimeEntry, JobMaterial, JobPhoto, AppUser, Employee,
-  DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, Language, CountryConfig,
+  DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY, Language, CountryConfig,
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
 import { COUNTRY_CONFIGS } from '../data/countries';
@@ -240,8 +240,8 @@ function migrateData(parsed: Partial<AppData>): AppData {
       salesTaxRate: parsed.settings?.salesTaxRate ?? 8,
       corporateTaxRate: parsed.settings?.corporateTaxRate ?? 20,
       quoteLastNumber: parsed.settings?.quoteLastNumber ?? 0,
-      supabaseUrl: parsed.settings?.supabaseUrl ?? '',
-      supabaseKey: parsed.settings?.supabaseKey ?? '',
+      supabaseUrl: parsed.settings?.supabaseUrl || DEFAULT_SUPABASE_URL,
+      supabaseKey: parsed.settings?.supabaseKey || DEFAULT_SUPABASE_ANON_KEY,
       supabaseUserKey: parsed.settings?.supabaseUserKey ?? '',
       anthropicKey: parsed.settings?.anthropicKey ?? '',
       vatRates: parsed.settings?.vatRates ?? [],

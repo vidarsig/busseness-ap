@@ -485,6 +485,12 @@ export const DEFAULT_COMPANY: CompanyInfo = {
   vskNumber: '', auditor: '',
 };
 
+// Public Supabase connection, baked into the app so EVERY device and worker
+// just logs in — no manual URL/key entry per device. The anon key is public by
+// design (it ships in every client); Row-Level Security is what protects the data.
+export const DEFAULT_SUPABASE_URL = 'https://gculnifrbgwdvnfzcrlz.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdWxuaWZyYmd3ZHZuZnpjcmx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMjg0OTgsImV4cCI6MjA5NDgwNDQ5OH0.m8iDYKIF3YDQ4cYtOFkbEz0zHXVkFgKb4oZER4JJE64';
+
 export const DEFAULT_SETTINGS: AppSettings = {
   language: 'is',
   defaultCurrency: 'ISK',
@@ -508,8 +514,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   taxAuthority: 'RSK',
   companyIdLabel: 'Kennitala',
   vatNumberLabel: 'VSK-númer',
-  supabaseUrl: '',
-  supabaseKey: '',
+  supabaseUrl: DEFAULT_SUPABASE_URL,
+  supabaseKey: DEFAULT_SUPABASE_ANON_KEY,
   supabaseUserKey: '',
   anthropicKey: '',
   plan: 'free',
