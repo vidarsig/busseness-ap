@@ -268,6 +268,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -293,12 +295,14 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         if (filterType !== 'all' && tx.type !== filterType) return false;
         if (filterYear !== 'all' && new Date(tx.date).getFullYear() !== filterYear) return false;
         if (filterCategory !== 'all' && tx.category !== filterCategory) return false;
+        if (dateFrom && tx.date < dateFrom) return false;
+        if (dateTo && tx.date > dateTo) return false;
         if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
           !tx.reference?.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filterType, filterYear, filterCategory, search]);
+  }, [data.transactions, filterType, filterYear, filterCategory, dateFrom, dateTo, search]);
 
   // Keys (categories) actually in use, so the filter only lists real ones.
   const usedCategories = useMemo(() =>
@@ -323,7 +327,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // bank import). Reset back to the first page whenever the filters change.
   const PAGE = 150;
   const [visibleCount, setVisibleCount] = useState(PAGE);
-  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, search]);
+  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, dateFrom, dateTo, search]);
   const paged = filtered.slice(0, visibleCount);
 
   function handleSave(tx: Transaction) {
@@ -479,7 +483,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <button
             onClick={() => setShowFilters(f => !f)}
             className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
-              showFilters || filterType !== 'all' || filterYear !== 'all'
+              showFilters || filterType !== 'all' || filterYear !== 'all' || dateFrom || dateTo
                 ? 'bg-blue-50 border-blue-300 text-blue-700'
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
@@ -518,6 +522,20 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               <option value="all">{lang === 'is' ? 'Allir lyklar' : 'All keys'}</option>
               {usedCategories.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
             </select>
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                title={lang === 'is' ? 'Frá dagsetningu' : 'From date'}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <span className="text-gray-400 text-sm">–</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                title={lang === 'is' ? 'Til dagsetningar' : 'To date'}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              {(dateFrom || dateTo) && (
+                <button onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  title={lang === 'is' ? 'Hreinsa dagsetningar' : 'Clear dates'}
+                  className="text-gray-400 hover:text-gray-600 p-1"><X className="w-4 h-4" /></button>
+              )}
+            </div>
             <button onClick={exportToPDF} className="sm:hidden flex items-center gap-1 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm">
               <FileText className="w-4 h-4" />PDF
             </button>
