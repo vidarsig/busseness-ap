@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt } from 'lucide-react';
 import ReceiptMatcher from './ReceiptMatcher';
+import OpeningBalances from './OpeningBalances';
 import { useApp } from '../contexts/AppContext';
 import { Transaction, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
 import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/ai';
@@ -380,6 +381,9 @@ export default function BankImport() {
       </div>
 
       {showReceipts && <ReceiptMatcher onClose={() => setShowReceipts(false)} />}
+
+      {/* Migration Stage 2: opening balances (collapsed by default) */}
+      <div className="mb-4"><OpeningBalances /></div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <h2 className="text-sm font-semibold text-gray-800 mb-3">{lang === 'is' ? '1. Veldu snið og skrá' : '1. Select format and file'}</h2>
