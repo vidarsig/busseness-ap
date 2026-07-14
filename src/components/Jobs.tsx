@@ -39,7 +39,7 @@ const STATUS_ICONS: Record<JobStatus, React.ElementType> = {
 // Plain-language stage names. Survey-first pipeline the foreman actually follows.
 const STATUS_LABELS: Record<JobStatus, { is: string; en: string }> = {
   survey:    { is: 'Vettvangsskoðun', en: 'Site visit' },
-  scheduled: { is: 'Tímaskipulag',    en: 'Scheduling' },
+  scheduled: { is: 'Færslur',         en: 'Entries' },
   active:    { is: 'Í vinnslu',       en: 'Active' },
   paused:    { is: 'Á bið',           en: 'Paused' },
   complete:  { is: 'Lokið',           en: 'Complete' },

@@ -55,7 +55,7 @@ clear PWA cache with Ctrl+Shift+R (2-3x) or force-close/reopen the Android app.
   [NEXT] in the story script; not built yet.
 
 ## Job pipeline (site-visit-first)
-JobStatus = survey (Vettvangsskoðun / Site visit) → scheduled (Tímaskipulag) →
+JobStatus = survey (Vettvangsskoðun / Site visit) → scheduled (Færslur) →
 active (Í vinnslu; logs hours/materials/photos) → complete (Lokið → invoice).
 Plus paused (Á bið) and cancelled (Hætt við, reachable from any stage incl. site
 visit). Offers/quotes live in INVOICES, not Jobs — there is no "waiting" stage.
