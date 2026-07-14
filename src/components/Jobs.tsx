@@ -11,6 +11,7 @@ import { isJobLimitReached } from '../utils/planLimits';
 import { sharePDF } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
 import PhotoViewer from './PhotoViewer';
+import NumberInput from './NumberInput';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
 import type { SessionUser } from '../App';
@@ -1295,13 +1296,13 @@ export default function Jobs({ sessionUser }: JobsProps) {
                     <div className="flex gap-2">
                       <label className="flex-1">
                         <span className="text-xs text-gray-500">{t('Fjöldi', 'Qty')}</span>
-                        <input type="number" inputMode="decimal" value={l.quantity}
-                          onChange={e => offerLineChange(idx, 'quantity', e.target.value)} className={inp} />
+                        <NumberInput value={l.quantity}
+                          onValue={n => offerLineChange(idx, 'quantity', String(n))} className={inp} />
                       </label>
                       <label className="flex-1">
                         <span className="text-xs text-gray-500">{t('Verð á einingu', 'Unit price')}</span>
-                        <input type="number" inputMode="decimal" value={l.unitPrice}
-                          onChange={e => offerLineChange(idx, 'unitPrice', e.target.value)} className={inp} />
+                        <NumberInput value={l.unitPrice}
+                          onValue={n => offerLineChange(idx, 'unitPrice', String(n))} className={inp} />
                       </label>
                       <div className="flex-1">
                         <span className="text-xs text-gray-500">{t('Samtals', 'Line total')}</span>

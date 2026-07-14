@@ -9,6 +9,7 @@ import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
 import PhotoViewer from './PhotoViewer';
+import NumberInput from './NumberInput';
 
 function newId() { return `inv_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function lineId() { return `ln_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -248,12 +249,12 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
                         </div>
                       </td>
                       <td className="px-2 py-1.5">
-                        <input type="number" className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          value={line.quantity} onChange={e => setLine(line.id, 'quantity', parseFloat(e.target.value) || 0)} min={0} step="0.01" />
+                        <NumberInput className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          value={line.quantity} onValue={n => setLine(line.id, 'quantity', n)} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <input type="number" className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          value={line.unitPrice} onChange={e => setLine(line.id, 'unitPrice', parseFloat(e.target.value) || 0)} min={0} step="1" />
+                        <NumberInput className="w-full border border-gray-200 rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          value={line.unitPrice} onValue={n => setLine(line.id, 'unitPrice', n)} />
                       </td>
                       <td className="px-2 py-1.5">
                         <select className="w-full border border-gray-200 rounded px-1 py-1 text-xs focus:outline-none"
