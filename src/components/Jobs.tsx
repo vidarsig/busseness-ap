@@ -12,6 +12,7 @@ import { sharePDF } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
 import PhotoViewer from './PhotoViewer';
 import NumberInput from './NumberInput';
+import CustomerAutocomplete from './CustomerAutocomplete';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
 import type { SessionUser } from '../App';
@@ -166,6 +167,15 @@ export default function Jobs({ sessionUser }: JobsProps) {
       dispatch({ type:'UPDATE_JOB', payload:{ ...f, updatedAt:now } as Job });
     } else {
       dispatch({ type:'ADD_JOB', payload:{ ...f, id:newId('job'), number:nextJobNumber(), createdAt:now, updatedAt:now } as Job });
+    }
+    // Remember a new client in Viðskiptavinir so it autocompletes everywhere.
+    const cname = (f.clientName ?? '').trim();
+    if (cname && !(data.customers ?? []).some(c => c.name.trim().toLowerCase() === cname.toLowerCase())) {
+      dispatch({ type:'ADD_CUSTOMER', payload:{
+        id:newId('cust'), name:cname,
+        address: f.address || undefined, email: f.clientEmail || undefined, phone: f.clientPhone || undefined,
+        createdAt: now,
+      } });
     }
     setJobForm({ open:false });
   }
@@ -1108,7 +1118,18 @@ export default function Jobs({ sessionUser }: JobsProps) {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-700 mb-1">{t('Viðskiptavinur *','Client *')}</label>
-                  <input className={inp} value={jobForm.job?.clientName ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, clientName:e.target.value } }))} />
+                  <CustomerAutocomplete
+                    className={inp}
+                    value={jobForm.job?.clientName ?? ''}
+                    onName={name => setJobForm(f => ({ ...f, job:{ ...f.job, clientName:name } }))}
+                    onPick={c => setJobForm(f => ({ ...f, job:{ ...f.job,
+                      clientName: c.name,
+                      clientEmail: c.email ?? f.job?.clientEmail ?? '',
+                      clientPhone: c.phone ?? f.job?.clientPhone ?? '',
+                      address: c.address ?? f.job?.address ?? '',
+                    } }))}
+                    customers={data.customers ?? []}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tengiliður','Contact person')}</label>
