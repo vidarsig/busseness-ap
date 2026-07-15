@@ -204,6 +204,8 @@ export interface Employee {
   kennitala?: string;
   monthlySalary: number; // agreed gross monthly salary
   hourlyRate: number;    // agreed gross hourly rate
+  personalAllowancePct?: number;        // % of persónuafsláttur to apply (default 100)
+  payFrequency?: 'monthly' | 'weekly';  // pay period — weekly prorates the allowance (default monthly)
   active: boolean;
   notes?: string;
 }

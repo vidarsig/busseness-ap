@@ -25,6 +25,8 @@ function EmployeeModal({ initial, onSave, onClose }: {
   const [kennitala, setKennitala] = useState(initial?.kennitala ?? '');
   const [monthlySalary, setMonthlySalary] = useState(initial?.monthlySalary ?? 0);
   const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate ?? 0);
+  const [allowancePct, setAllowancePct] = useState(initial?.personalAllowancePct ?? 100);
+  const [payFrequency, setPayFrequency] = useState<'monthly' | 'weekly'>(initial?.payFrequency ?? 'monthly');
   const [active, setActive] = useState(initial?.active ?? true);
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
@@ -35,7 +37,8 @@ function EmployeeModal({ initial, onSave, onClose }: {
   function handleSave() {
     onSave({
       id: initial?.id ?? newEmpId(), name, kennitala: kennitala || undefined,
-      monthlySalary, hourlyRate, active, notes: notes || undefined,
+      monthlySalary, hourlyRate, personalAllowancePct: allowancePct, payFrequency,
+      active, notes: notes || undefined,
     });
   }
 
@@ -67,6 +70,20 @@ function EmployeeModal({ initial, onSave, onClose }: {
               <input type="number" className={inp} value={hourlyRate || ''} onChange={e => setHourlyRate(parseInt(e.target.value) || 0)} min={0} step={50} />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>{lang === 'is' ? 'Persónuafsláttur (%)' : 'Personal tax credit (%)'}</label>
+              <input type="number" className={inp} value={allowancePct} onChange={e => setAllowancePct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))} min={0} max={100} step={1} />
+              <p className="text-[11px] text-gray-400 mt-1">{lang === 'is' ? 'Hlutfall nýtt hjá þér (oft 100%)' : 'Share used here (often 100%)'}</p>
+            </div>
+            <div>
+              <label className={lbl}>{lang === 'is' ? 'Greiðslutíðni' : 'Pay frequency'}</label>
+              <select className={inp} value={payFrequency} onChange={e => setPayFrequency(e.target.value as 'monthly' | 'weekly')}>
+                <option value="monthly">{lang === 'is' ? 'Mánaðarlega' : 'Monthly'}</option>
+                <option value="weekly">{lang === 'is' ? 'Vikulega' : 'Weekly'}</option>
+              </select>
+            </div>
+          </div>
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="w-4 h-4" />
             {lang === 'is' ? 'Virkur starfsmaður' : 'Active employee'}
@@ -86,14 +103,16 @@ function EmployeeModal({ initial, onSave, onClose }: {
   );
 }
 
-function calcPayroll(gross: number, settings: { taxWithholdingRate: number; employeePensionRate: number; employerPensionRate: number; socialInsuranceRate: number; personalDeductionMonthly: number }) {
+function calcPayroll(gross: number, settings: { taxWithholdingRate: number; employeePensionRate: number; employerPensionRate: number; socialInsuranceRate: number; personalDeductionMonthly: number }, allowanceOverride?: number) {
+  // Persónuafsláttur actually applied this period (per-employee %, prorated for weekly pay).
+  const allowance = allowanceOverride ?? settings.personalDeductionMonthly;
   const employeePension = Math.round(gross * settings.employeePensionRate / 100);
-  const taxBase = Math.max(0, gross - employeePension - settings.personalDeductionMonthly);
+  const taxBase = Math.max(0, gross - employeePension - allowance);
   const taxWithheld = Math.round(taxBase * settings.taxWithholdingRate / 100);
   const netWage = gross - employeePension - taxWithheld;
   const employerPension = Math.round(gross * settings.employerPensionRate / 100);
   const socialInsurance = Math.round(gross * settings.socialInsuranceRate / 100);
-  return { employeePension, taxWithheld, netWage, employerPension, socialInsurance };
+  return { employeePension, taxWithheld, netWage, employerPension, socialInsurance, allowance };
 }
 
 const thisMonth = () => new Date().toISOString().slice(0, 7);
@@ -128,7 +147,14 @@ function PayrollModal({ initial, onSave, onClose }: {
     if (selectedEmp && selectedEmp.hourlyRate > 0) setGross(Math.round(h * selectedEmp.hourlyRate));
   }
 
-  const calc = useMemo(() => calcPayroll(gross, s), [gross, s]);
+  // Persónuafsláttur for THIS pay period: the employee's chosen % of the monthly
+  // allowance, prorated to a week when they're paid weekly.
+  const allowance = useMemo(() => {
+    const pct = selectedEmp?.personalAllowancePct ?? 100;
+    const weekly = (selectedEmp?.payFrequency ?? 'monthly') === 'weekly';
+    return Math.round(s.personalDeductionMonthly * (pct / 100) * (weekly ? 12 / 52 : 1));
+  }, [selectedEmp, s.personalDeductionMonthly]);
+  const calc = useMemo(() => calcPayroll(gross, s, allowance), [gross, s, allowance]);
   const taxWithheld = overrideTax !== null ? overrideTax : calc.taxWithheld;
   const netWage = gross - calc.employeePension - taxWithheld;
 
@@ -213,6 +239,10 @@ function PayrollModal({ initial, onSave, onClose }: {
                     <button onClick={() => setOverrideTax(null)} className="text-blue-600 text-xs">{lang === 'is' ? 'Endurstilla' : 'Reset'}</button>
                   )}
                 </div>
+              </div>
+              <div className="flex justify-between text-[11px] text-gray-400 pb-1">
+                <span>{lang === 'is' ? 'Persónuafsláttur nýttur' : 'Personal tax credit applied'}{(selectedEmp?.payFrequency ?? 'monthly') === 'weekly' ? (lang === 'is' ? ' (vika)' : ' (weekly)') : ''}</span>
+                <span className="font-mono">{fmt(calc.allowance)}</span>
               </div>
               <div className="flex justify-between text-sm font-bold pt-1.5">
                 <span className="text-gray-700">{lang === 'is' ? 'Nettólaun' : 'Net wage'}</span>
