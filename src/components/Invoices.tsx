@@ -734,7 +734,11 @@ export default function Invoices() {
     .reduce((s, i) => s + i.lines.reduce((ls, l) => ls + l.quantity * l.unitPrice * (1 + l.vatRate/100), 0), 0);
 
   return (
-    <div>
+    <>
+    {/* The formatted invoice — kept OUTSIDE the no-print wrapper so it's the only
+        thing that prints (the screen UI below is hidden with no-print). */}
+    {printInv && <PrintableInvoice inv={printInv} />}
+    <div className="no-print">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('invoices')}</h1>
@@ -1026,7 +1030,6 @@ export default function Invoices() {
 
       <input ref={invCameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
         onChange={e => { attachPhotoToInvoice(e.target.files); e.target.value = ''; }} />
-      {printInv && <PrintableInvoice inv={printInv} />}
       {photoView && (
         <PhotoViewer
           photos={photoView.map(p => ({ dataUrl: p.dataUrl, caption: p.caption }))}
@@ -1052,5 +1055,6 @@ export default function Invoices() {
         </div>
       )}
     </div>
+    </>
   );
 }
