@@ -183,14 +183,7 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
         </div>
       )}
 
-      <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0 flex items-center gap-2">
-        <button
-          onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 text-sm transition-colors flex-1"
-        >
-          <Globe className="w-4 h-4" />
-          {lang === 'is' ? 'English' : 'Íslenska'}
-        </button>
+      <div className="px-4 py-3 border-t border-gray-100 flex-shrink-0 flex items-center justify-end gap-2">
         <SyncIndicator />
       </div>
     </>
