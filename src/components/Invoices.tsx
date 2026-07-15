@@ -10,6 +10,7 @@ import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
 import PhotoViewer from './PhotoViewer';
 import NumberInput from './NumberInput';
+import CustomerAutocomplete from './CustomerAutocomplete';
 
 function newId() { return `inv_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function lineId() { return `ln_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -194,7 +195,16 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('customerName')} *</label>
-                <input className={`${inp} w-full`} value={form.customer.name} onChange={e => setCust('name', e.target.value)} required />
+                <CustomerAutocomplete
+                  className={`${inp} w-full`}
+                  value={form.customer.name}
+                  onName={name => setCust('name', name)}
+                  onPick={c => setForm(f => ({ ...f, customer: {
+                    name: c.name, kennitala: c.kennitala ?? '', address: c.address ?? '',
+                    postalCode: c.postalCode ?? '', city: c.city ?? '', email: c.email ?? '', phone: c.phone ?? '',
+                  } }))}
+                  customers={data.customers ?? []}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('customerKennitala')}</label>
@@ -615,6 +625,21 @@ export default function Invoices() {
       } else {
         dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: data.settings.invoiceLastNumber + 1 } });
       }
+    }
+    // Remember a new customer name in Viðskiptavinir so it autocompletes next time.
+    const cname = inv.customer.name.trim();
+    if (cname && !(data.customers ?? []).some(c => c.name.trim().toLowerCase() === cname.toLowerCase())) {
+      dispatch({ type: 'ADD_CUSTOMER', payload: {
+        id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: cname,
+        kennitala: inv.customer.kennitala || undefined,
+        address: inv.customer.address || undefined,
+        postalCode: inv.customer.postalCode || undefined,
+        city: inv.customer.city || undefined,
+        email: inv.customer.email || undefined,
+        phone: inv.customer.phone || undefined,
+        createdAt: new Date().toISOString(),
+      } });
     }
     setModal({ open: false });
   }
