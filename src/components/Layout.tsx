@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   BookOpen, LayoutDashboard, List, Calculator, BarChart2, FileText,
-  Settings, Globe, Menu, X, RefreshCw, Upload, Receipt,
+  Settings, Menu, X, RefreshCw, Upload, Receipt,
   BookMarked, TrendingUp, Users, ClipboardList, Zap, CheckSquare,
   Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle, Crown, Star, Contact,
 } from 'lucide-react';
@@ -87,7 +87,7 @@ function SyncIndicator() {
 }
 
 export default function Layout({ view, setView, children, sessionUser, perms, onSignOut }: Props) {
-  const { t, lang, setLang, data } = useApp();
+  const { t, lang, data } = useApp();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const companyName = data.settings.company.name || t('appName');
   const supabaseConfigured = !!(data.settings.supabaseUrl && data.settings.supabaseKey);
@@ -206,13 +206,6 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
         </div>
         <span className="font-bold text-blue-600 text-sm tracking-wide uppercase flex-shrink-0">Jobboks</span>
         <span className="text-gray-400 text-sm truncate flex-1">{companyName !== 'Jobboks' ? companyName : ''}</span>
-        <button
-          onClick={() => setLang(lang === 'is' ? 'en' : 'is')}
-          className="p-1 rounded-lg hover:bg-gray-100 flex items-center gap-1 text-gray-500 text-xs"
-        >
-          <Globe className="w-4 h-4" />
-          {lang === 'is' ? 'EN' : 'IS'}
-        </button>
         <SyncIndicator />
       </div>
 
