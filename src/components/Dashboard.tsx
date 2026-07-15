@@ -6,11 +6,14 @@ import {
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary } from '../utils/calculations';
 import { formatDate } from '../utils/formatters';
-import { View } from '../types';
+import { View, UserPermissions } from '../types';
 
-interface Props { setView: (v: View) => void; }
+interface Props { setView: (v: View) => void; perms?: UserPermissions | null; }
 
-export default function Dashboard({ setView }: Props) {
+export default function Dashboard({ setView, perms }: Props) {
+  // Workers (e.g. staff) must not see the company's financial situation.
+  const canViewFinancials = !perms || perms.canViewFinancials;
+  const canExport = !perms || perms.canExportData;
   const { data, t, lang, fmtISK } = useApp();
   const [backedUp, setBackedUp] = useState(false);
   const [lastBackup, setLastBackup] = useState<string | null>(
@@ -105,14 +108,17 @@ export default function Dashboard({ setView }: Props) {
       <div className="flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('dashboard')}</h1>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-sm text-gray-500">{t('thisYear')}:</span>
-            <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-              className="text-sm font-semibold text-gray-800 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
-              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
+          {canViewFinancials && (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-sm text-gray-500">{t('thisYear')}:</span>
+              <select value={year} onChange={e => setYear(parseInt(e.target.value))}
+                className="text-sm font-semibold text-gray-800 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+          )}
         </div>
+        {canExport && (
         <button
           onClick={backupNow}
           className={`flex items-center gap-2 px-4 py-3 rounded-xl font-semibold text-sm shadow-sm transition-all flex-shrink-0 ${
@@ -131,10 +137,11 @@ export default function Dashboard({ setView }: Props) {
             {backedUp ? (lang === 'is' ? 'Vistað!' : 'Saved!') : (lang === 'is' ? 'Afrit' : 'Backup')}
           </span>
         </button>
+        )}
       </div>
 
       {/* Gentle backup reminder */}
-      {showBackupReminder && (
+      {canExport && showBackupReminder && (
         <button
           onClick={backupNow}
           className="w-full flex items-center gap-3 mb-6 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-left hover:bg-amber-100 transition-colors"
@@ -154,6 +161,7 @@ export default function Dashboard({ setView }: Props) {
         </button>
       )}
 
+      {canViewFinancials ? (<>
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {cards.map(card => (
@@ -228,6 +236,11 @@ export default function Dashboard({ setView }: Props) {
           </div>
         )}
       </div>
+      </>) : (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-500 text-sm mb-6">
+          {lang === 'is' ? 'Verkefnin þín og verkefnalistinn eru hér að neðan.' : 'Your jobs and tasks are below.'}
+        </div>
+      )}
 
       {/* Upcoming tasks widget */}
       {(() => {

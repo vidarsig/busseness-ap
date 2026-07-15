@@ -130,7 +130,7 @@ function AppInner() {
   return (
     <Layout view={safeView} setView={setView} sessionUser={sessionUser} perms={perms}
       onSignOut={() => setSessionUser(null)}>
-      {safeView === 'dashboard'    && <Dashboard setView={setView} />}
+      {safeView === 'dashboard'    && <Dashboard setView={setView} perms={perms} />}
       {safeView === 'transactions' && <Transactions initialFilter={txDrill} onFilterConsumed={clearTxDrill} />}
       {safeView === 'recurring'    && <Recurring />}
       {safeView === 'bankimport'   && <BankImport />}
