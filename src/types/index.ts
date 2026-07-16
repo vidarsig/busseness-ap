@@ -41,6 +41,10 @@ export interface UserPermissions {
   canApproveJobReports: boolean; // approve a job report & convert it to an invoice
   canViewSettings: boolean;
   canExportData: boolean;
+  // Optional per-screen access overrides. When a screen has an explicit entry
+  // here it wins over the grouped flags above — lets the owner turn any single
+  // screen on/off. Absent = fall back to the grouped logic.
+  viewOverrides?: Partial<Record<View, boolean>>;
 }
 
 export const DEFAULT_PERMISSIONS: Record<UserRole, UserPermissions> = {

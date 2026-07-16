@@ -4,7 +4,8 @@ import {
   Users as UsersIcon, UserPlus, Shield, Edit2, Trash2, X, Check,
   UserCircle, Crown, Briefcase, Calculator, HardHat, Eye,
 } from 'lucide-react';
-import { AppUser, UserRole, UserPermissions, DEFAULT_PERMISSIONS } from '../types';
+import { AppUser, UserRole, UserPermissions, DEFAULT_PERMISSIONS, View } from '../types';
+import { canAccessView } from '../utils/access';
 import type { SessionUser } from '../App';
 
 interface Props { sessionUser?: SessionUser | null; }
@@ -36,6 +37,31 @@ const PERMISSION_LABELS: { key: keyof UserPermissions; labelEn: string; labelIs:
   { key: 'canApproveJobReports', labelEn: 'Approve & invoice jobs', labelIs: 'Samþykkja & reikningsfæra verk' },
   { key: 'canViewSettings',      labelEn: 'View settings',         labelIs: 'Sjá stillingar' },
   { key: 'canExportData',        labelEn: 'Export data',           labelIs: 'Flytja út gögn' },
+];
+
+// Every screen the owner can turn on/off per user (in addition to the grouped
+// permissions above). Order roughly follows the nav.
+const SCREEN_VIEWS: { view: View; is: string; en: string }[] = [
+  { view: 'transactions', is: 'Færslur',         en: 'Transactions' },
+  { view: 'recurring',    is: 'Endurteknar',     en: 'Recurring' },
+  { view: 'bankimport',   is: 'Bankaimport',     en: 'Bank import' },
+  { view: 'rules',        is: 'Flokkunarreglur', en: 'Rules' },
+  { view: 'invoices',     is: 'Reikningar',      en: 'Invoices' },
+  { view: 'jobs',         is: 'Verkbókhald',     en: 'Work Book' },
+  { view: 'stock',        is: 'Birgðir',         en: 'Stock' },
+  { view: 'contacts',     is: 'Tengiliðir',      en: 'Contacts' },
+  { view: 'accounts',     is: 'Reikningslykill', en: 'Chart of accounts' },
+  { view: 'budget',       is: 'Áætlun',          en: 'Budget' },
+  { view: 'payroll',      is: 'Laun',            en: 'Payroll' },
+  { view: 'vat',          is: 'VSK',             en: 'VAT' },
+  { view: 'vatreturn',    is: 'VSK-skýrsla',     en: 'VAT return' },
+  { view: 'reports',      is: 'Skýrslur',        en: 'Reports' },
+  { view: 'annual',       is: 'Ársreikningur',   en: 'Annual accounts' },
+  { view: 'ai',           is: 'AI aðstoðarmaður', en: 'AI assistant' },
+  { view: 'reviews',      is: 'Umsagnastjórnun', en: 'Reviews' },
+  { view: 'tasks',        is: 'Verkefnalisti',   en: 'Tasks' },
+  { view: 'settings',     is: 'Stillingar',      en: 'Settings' },
+  { view: 'users',        is: 'Notendur',        en: 'Users' },
 ];
 
 const ROLES: UserRole[] = ['owner', 'manager', 'accountant', 'staff', 'viewer'];
@@ -77,6 +103,15 @@ export default function Users({ sessionUser }: Props) {
 
   function togglePerm(key: keyof UserPermissions) {
     setForm(f => ({ ...f, permissions: { ...f.permissions, [key]: !f.permissions[key] } }));
+  }
+
+  // Turn a single screen on/off. Records an explicit override vs the current
+  // effective access (so a tick means "definitely allow", untick "definitely deny").
+  function toggleScreen(view: View) {
+    setForm(f => {
+      const current = canAccessView(view, f.permissions);
+      return { ...f, permissions: { ...f.permissions, viewOverrides: { ...(f.permissions.viewOverrides ?? {}), [view]: !current } } };
+    });
   }
 
   function save() {
@@ -330,12 +365,33 @@ export default function Users({ sessionUser }: Props) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-3">
                   {PERMISSION_LABELS.map(({ key, labelEn, labelIs }) => (
                     <label key={key} className="flex items-center gap-2 cursor-pointer group">
-                      <input type="checkbox" checked={form.permissions[key]}
+                      <input type="checkbox" checked={!!form.permissions[key]}
                         onChange={() => togglePerm(key)}
                         className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300" />
                       <span className="text-xs text-gray-600 group-hover:text-gray-900">
                         {lang === 'is' ? labelIs : labelEn}
                       </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Per-screen access — a checkbox for every screen */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-4 h-4 text-gray-500" />
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                    {lang === 'is' ? 'Aðgangur að skjám' : 'Screen access'}
+                  </label>
+                  <span className="text-[10px] text-gray-400">{lang === 'is' ? '(hver skjár fyrir sig)' : '(each screen)'}</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-1 gap-x-3">
+                  {SCREEN_VIEWS.map(({ view, is, en }) => (
+                    <label key={view} className="flex items-center gap-2 cursor-pointer group">
+                      <input type="checkbox" checked={canAccessView(view, form.permissions)}
+                        onChange={() => toggleScreen(view)}
+                        className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300" />
+                      <span className="text-xs text-gray-600 group-hover:text-gray-900">{lang === 'is' ? is : en}</span>
                     </label>
                   ))}
                 </div>

@@ -34,6 +34,9 @@ export function resolvePermissions(
  */
 export function canAccessView(view: View, perms: UserPermissions | null): boolean {
   if (perms === null) return true;
+  // An explicit per-screen override always wins over the grouped flags below.
+  const override = perms.viewOverrides?.[view];
+  if (override !== undefined) return override;
   switch (view) {
     // Always available
     case 'dashboard':
