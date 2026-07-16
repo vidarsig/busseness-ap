@@ -95,6 +95,7 @@ export interface Transaction {
   accountNumber?: string;
   receiptNote?: string;
   receiptUrl?: string;   // base64 image of the attached receipt/invoice (proof)
+  jobId?: string;        // optional: tag this purchase to a Verkbókhald project (shows as a job cost; NOT double-booked)
 }
 
 export interface BalanceSheetItem {

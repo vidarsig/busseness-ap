@@ -25,6 +25,7 @@ const EMPTY_FORM: Omit<Transaction, 'id'> = {
   vatRate: 24,
   reference: '',
   receiptNote: '',
+  jobId: '',
 };
 
 function newId() {
@@ -131,6 +132,19 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               <MicButton value={form.description} onChange={v => set('description', v)} lang={lang} />
             </div>
           </div>
+
+          {(data.jobs ?? []).length > 0 && (
+            <div>
+              <label className={labelCls}>{lang === 'is' ? 'Verkefni (valfrjálst)' : 'Project (optional)'}</label>
+              <select className={inputCls} value={form.jobId ?? ''} onChange={e => set('jobId', e.target.value)}>
+                <option value="">{lang === 'is' ? 'Ekkert verkefni' : 'No project'}</option>
+                {(data.jobs ?? []).filter(j => j.status !== 'cancelled').map(j => (
+                  <option key={j.id} value={j.id}>{j.number}{j.name ? ` — ${j.name}` : ''}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Bókast áfram sem færsla — birtist líka sem kostnaður á verkefninu (ekki tvíbókað).' : 'Still booked as a transaction — also shows as a cost on the project (not double-booked).'}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

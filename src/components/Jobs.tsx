@@ -143,9 +143,14 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const jobTimes  = (id: string) => times.filter(t => t.jobId === id);
   const jobMats   = (id: string) => materials.filter(m => m.jobId === id);
   const jobPhotos = (id: string) => photos.filter(p => p.jobId === id);
+  // Purchases tagged to this project in Færslur (expenses/transfers). They stay a
+  // single transaction — we just read them here as a job cost, so nothing is
+  // double-booked.
+  const jobPurchases = (id: string) => (data.transactions ?? []).filter(tx => tx.jobId === id && tx.type !== 'income');
   const labourCost = (id: string) => jobTimes(id).reduce((s,t) => s + t.hours * t.hourlyRate, 0);
   const matCost    = (id: string) => jobMats(id).reduce((s,m) => s + m.qty * m.unitCost, 0);
-  const totalCost  = (id: string) => labourCost(id) + matCost(id);
+  const purchaseCost = (id: string) => jobPurchases(id).reduce((s,tx) => s + tx.amount, 0);
+  const totalCost  = (id: string) => labourCost(id) + matCost(id) + purchaseCost(id);
   const profit     = (j: Job)    => (j.quotedAmount ?? 0) - totalCost(j.id);
 
   const getTab = (id: string): TabType => tab[id] ?? 'summary';
@@ -969,6 +974,25 @@ export default function Jobs({ sessionUser }: JobsProps) {
                               <div className="flex justify-between text-xs font-semibold text-gray-700 px-3 py-2 bg-green-50 rounded-lg">
                                 <span>{jMats.length} {t('liðir','lines')}</span>
                                 <span>{fmt(mat)}</span>
+                              </div>
+                            </div>
+                          )}
+                          {jobPurchases(job.id).length > 0 && (
+                            <div className="space-y-1 pt-1">
+                              <div className="text-[11px] font-semibold text-gray-500 px-1">{t('Innkaup merkt verkefninu (úr Færslum)', 'Purchases tagged to this job (from Færslur)')}</div>
+                              {jobPurchases(job.id).map(tx => (
+                                <div key={tx.id} className="flex items-center gap-3 bg-blue-50/50 rounded-lg px-3 py-2">
+                                  <Package className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-900 truncate">{tx.description}</div>
+                                    <div className="text-xs text-gray-500">{tx.date}</div>
+                                  </div>
+                                  <div className="text-sm font-semibold text-gray-900 flex-shrink-0">{fmt(tx.amount)}</div>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-xs font-semibold text-gray-700 px-3 py-2 bg-blue-50 rounded-lg">
+                                <span>{jobPurchases(job.id).length} {t('innkaup','purchases')}</span>
+                                <span>{fmt(purchaseCost(job.id))}</span>
                               </div>
                             </div>
                           )}
