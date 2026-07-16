@@ -134,6 +134,8 @@ export default function Jobs({ sessionUser }: JobsProps) {
   // Pick materials from Birgðir (stock) straight into the offer.
   const [stockPick, setStockPick]       = useState(false);
   const [stockSearch, setStockSearch]   = useState('');
+  // Pick a stock item straight onto a running job (its Materials tab).
+  const [matStockJob, setMatStockJob]   = useState<string | null>(null);
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
@@ -218,6 +220,24 @@ export default function Jobs({ sessionUser }: JobsProps) {
       dispatch({ type:'ADD_JOB_MATERIAL', payload:{ ...f, id:newId('jm'), jobId:matForm.jobId, createdAt:now } as JobMaterial });
     }
     setMatForm(v => ({ ...v, open:false, mat:undefined }));
+  }
+
+  // Add a Birgðir (stock) item onto the job as a material. We open the material
+  // form pre-filled (name, unit, price, supplier + stock link) so the worker just
+  // sets the quantity and saves — same one-tap picker the offer editor uses.
+  function addStockToMaterial(item: StockItem) {
+    const jobId = matStockJob;
+    if (!jobId) return;
+    setMatStockJob(null);
+    setMatForm({ open: true, jobId, mat: {
+      date: todayISO(),
+      description: item.unit ? `${item.name}` : item.name,
+      qty: 1,
+      unit: item.unit || 'stk',
+      unitCost: item.sellPrice || 0,
+      stockItemId: item.id,
+      supplierName: item.supplierName || '',
+    }});
   }
 
   // ── photos ────────────────────────────────────────────────
@@ -939,11 +959,18 @@ export default function Jobs({ sessionUser }: JobsProps) {
                       {/* ── MATERIALS TAB ── */}
                       {currentTab === 'materials' && (
                         <div className="space-y-3">
-                          <button onClick={() => setMatForm({ open:true, jobId:job.id, mat:{ date:todayISO(), qty:1, unitCost:0, unit:'stk' } })}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition">
-                            <Plus className="w-3.5 h-3.5" />
-                            {t('Bæta við efni', 'Add material')}
-                          </button>
+                          <div className="flex gap-2 flex-wrap">
+                            <button onClick={() => setMatForm({ open:true, jobId:job.id, mat:{ date:todayISO(), qty:1, unitCost:0, unit:'stk' } })}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition">
+                              <Plus className="w-3.5 h-3.5" />
+                              {t('Bæta við efni', 'Add material')}
+                            </button>
+                            <button onClick={() => { setStockSearch(''); setMatStockJob(job.id); }}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-xs font-medium transition">
+                              <Package className="w-3.5 h-3.5" />
+                              {t('Úr birgðum', 'From stock')}
+                            </button>
+                          </div>
                           {jMats.length === 0 ? (
                             <p className="text-xs text-gray-400 text-center py-4">{t('Ekkert efni skráð','No materials logged')}</p>
                           ) : (
@@ -1446,6 +1473,40 @@ export default function Jobs({ sessionUser }: JobsProps) {
                 .map(it => (
                   <button key={it.id} onClick={() => { offerAddStock(it); setStockPick(false); }}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-blue-50/50 transition">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-800 truncate">{it.name}</div>
+                      <div className="text-xs text-gray-400">{[it.sku, it.category, it.unit].filter(Boolean).join(' · ')}</div>
+                    </div>
+                    <div className="text-sm font-mono font-semibold text-gray-700 flex-shrink-0">{fmt(it.sellPrice || 0)}</div>
+                  </button>
+                ))}
+              {(data.stockItems ?? []).length === 0 && (
+                <div className="px-4 py-10 text-center text-sm text-gray-400">{t('Engar vörur í birgðum enn — bættu við í Birgðum.', 'No stock items yet — add them in Birgðir.')}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock picker for a job's Materials — choose a Birgðir item to log on the job */}
+      {matStockJob && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setMatStockJob(null)}>
+          <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="font-bold text-gray-900 flex items-center gap-2"><Package className="w-5 h-5 text-green-600" />{t('Efni úr birgðum', 'Material from stock')}</h2>
+              <button onClick={() => setMatStockJob(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-4 py-3 border-b border-gray-100">
+              <input autoFocus value={stockSearch} onChange={e => setStockSearch(e.target.value)}
+                placeholder={t('Leita að vöru…', 'Search item…')} className={inp} />
+            </div>
+            <div className="overflow-y-auto divide-y divide-gray-50">
+              {(data.stockItems ?? [])
+                .filter(it => !stockSearch || it.name.toLowerCase().includes(stockSearch.toLowerCase()) || (it.sku ?? '').toLowerCase().includes(stockSearch.toLowerCase()))
+                .slice(0, 100)
+                .map(it => (
+                  <button key={it.id} onClick={() => addStockToMaterial(it)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-green-50/50 transition">
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-gray-800 truncate">{it.name}</div>
                       <div className="text-xs text-gray-400">{[it.sku, it.category, it.unit].filter(Boolean).join(' · ')}</div>
