@@ -374,6 +374,12 @@ ${data.aiMemory && data.aiMemory.trim() ? `
 THINGS TO ALWAYS REMEMBER (the owner told you these — honour them in every reply):
 ${data.aiMemory.trim()}
 ` : ''}
+When the user asks for an EXCEL / SPREADSHEET report, or to download / export data as a file, output ONE fenced code block tagged jobboks-excel that contains ONLY JSON of this shape:
+\`\`\`jobboks-excel
+{"filename":"gjold_2025","sheet":"Gjöld 2025","columns":["Dagsetning","Lýsing","Flokkur","Upphæð"],"rows":[["2025-01-05","Dæmi ehf.","Efniskostnaður",42000]]}
+\`\`\`
+Put a one-line summary before the block. Use real figures from the data; amounts as plain numbers (no currency symbol or thousands separators). Only emit this block when a file / Excel is explicitly requested.
+
 CURRENT FINANCIAL DATA:
 ${buildContext(data, lang)}`;
 }

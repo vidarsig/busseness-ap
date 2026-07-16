@@ -117,6 +117,19 @@ export interface ExcelSheet {
   rows: ExportRow[];
 }
 
+// Build + download an .xlsx from a simple table (used for AI-generated reports:
+// the AI returns columns + rows, we turn them into a spreadsheet).
+export function exportExcelTable(filename: string, sheetName: string, columns: string[], rows: (string | number)[][]) {
+  const cols: ExportColumn[] = columns.map((h, i) => ({ header: String(h), key: `c${i}`, width: 18 }));
+  const rowObjs: ExportRow[] = rows.map(r => {
+    const o: ExportRow = {};
+    (r ?? []).forEach((v, i) => { o[`c${i}`] = (typeof v === 'number' ? v : String(v ?? '')); });
+    return o;
+  });
+  const fname = filename.toLowerCase().endsWith('.xlsx') ? filename : `${filename}.xlsx`;
+  exportExcel([{ name: (sheetName || 'Skýrsla').slice(0, 31), columns: cols, rows: rowObjs }], fname);
+}
+
 export function exportExcel(sheets: ExcelSheet[], filename: string) {
   const wb = XLSX.utils.book_new();
 

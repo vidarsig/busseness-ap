@@ -1,9 +1,27 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X } from 'lucide-react';
+import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
+import { exportExcelTable } from '../utils/exports';
+
+interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
+
+// Pull an AI-generated ```jobboks-excel``` block out of a reply → the cleaned
+// text (without the raw JSON) plus the report to offer as a download.
+function extractExcel(content: string): { text: string; excel: ExcelReport | null } {
+  const m = content.match(/```jobboks-excel\s*([\s\S]*?)```/);
+  if (!m) return { text: content, excel: null };
+  let excel: ExcelReport | null = null;
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (p && Array.isArray(p.columns) && Array.isArray(p.rows)) {
+      excel = { filename: String(p.filename || 'skyrsla'), sheet: String(p.sheet || 'Skýrsla'), columns: p.columns.map(String), rows: p.rows };
+    }
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), excel };
+}
 
 function renderMarkdown(text: string): string {
   return text
@@ -255,7 +273,21 @@ export default function AIAssistant() {
                       <span className="text-xs">{lang === 'is' ? 'Hugsa...' : 'Thinking...'}</span>
                     </div>
                   ) : msg.role === 'assistant' ? (
-                    <div dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                    (() => {
+                      const { text, excel } = extractExcel(msg.content);
+                      return (
+                        <>
+                          <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+                          {excel && (
+                            <button onClick={() => exportExcelTable(excel.filename, excel.sheet, excel.columns, excel.rows)}
+                              className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700">
+                              <FileSpreadsheet className="w-4 h-4" />
+                              {lang === 'is' ? `Sækja Excel (${excel.rows.length} línur)` : `Download Excel (${excel.rows.length} rows)`}
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()
                   ) : (
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                   )}
