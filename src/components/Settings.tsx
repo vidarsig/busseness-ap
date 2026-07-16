@@ -346,6 +346,12 @@ export default function Settings() {
               <label className={labelCls}>{t('auditor')}</label>
               <input className={inputCls} value={form.company.auditor} onChange={e => setCompany('auditor', e.target.value)} />
             </div>
+            <div className="sm:col-span-2">
+              <label className={labelCls}>{lang === 'is' ? 'Sendandi tölvupósts (reikningar)' : 'Email sender (invoices)'}</label>
+              <input className={inputCls} value={form.invoiceEmailFrom ?? ''} onChange={e => setTop('invoiceEmailFrom', e.target.value)}
+                placeholder="Jobboks <accounts@jobboks.app>" />
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Staðfest netfang í Resend fyrir „Senda beint“ hnappinn. Þarf uppsetningu (RESEND_API_KEY á Netlify + staðfest lén).' : 'Verified Resend address for the "Send direct" button. Requires setup (RESEND_API_KEY on Netlify + verified domain).'}</p>
+            </div>
           </div>
         </div>
 

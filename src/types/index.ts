@@ -279,6 +279,7 @@ export interface AppSettings {
   corporateTaxRate: number;
   vatRates: number[];
   aiMaxTransactions?: number; // how many recent transactions the in-app AI reads (default 12,000)
+  invoiceEmailFrom?: string;  // verified sender for app-sent invoices, e.g. "Jobboks <accounts@jobboks.app>"
   standardRate: number;
   vatTerm: string;
   taxAuthority: string;

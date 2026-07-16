@@ -3,6 +3,11 @@
   to = "/.netlify/functions/claude"
   status = 200
 
+[[redirects]]
+  from = "/api/send-email"
+  to = "/.netlify/functions/send-email"
+  status = 200
+
 # Clean URL for the public info / marketing page
 [[redirects]]
   from = "/kynning"

@@ -63,6 +63,13 @@ export function exportPDF(
   buildPDFDoc(title, subtitle, columns, rows).save(filename);
 }
 
+// The PDF as raw base64 (no data-uri prefix) — for attaching to a server-sent email.
+export function pdfBase64(title: string, subtitle: string, columns: ExportColumn[], rows: ExportRow[]): string {
+  const uri = buildPDFDoc(title, subtitle, columns, rows).output('datauristring');
+  const idx = uri.indexOf('base64,');
+  return idx >= 0 ? uri.slice(idx + 7) : '';
+}
+
 // Send a PDF to a customer in one tap. On a phone this opens the native share
 // sheet with the PDF already attached — the user just picks Gmail / WhatsApp /
 // Messages and hits send. On desktop (no file sharing) it downloads the PDF and

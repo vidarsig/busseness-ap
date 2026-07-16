@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusC
 import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency, InvoicePhoto, StockItem } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
-import { exportPDF, sharePDF } from '../utils/exports';
+import { exportPDF, sharePDF, pdfBase64 } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
 import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
@@ -497,6 +497,8 @@ export default function Invoices() {
   const [photoPicker, setPhotoPicker] = useState(false);
   const [photoInvId, setPhotoInvId] = useState('');
   const [photoView, setPhotoView] = useState<InvoicePhoto[] | null>(null);
+  const [emailToast, setEmailToast] = useState<{ ok: boolean; text: string } | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
   const invCameraRef = useRef<HTMLInputElement>(null);
 
   function openAddModal(defaultType: 'invoice' | 'quote', autoCamera = false) {
@@ -741,6 +743,42 @@ export default function Invoices() {
     sharePDF(d.title, d.subtitle, d.cols, d.rows, d.filename, { emailTo: to, subject, body });
   }
 
+  // Send the invoice straight from the company address (server → Resend), with the
+  // PDF attached. Falls back to a clear message if email isn't set up yet.
+  async function emailInvoiceFromCompany(inv: Invoice) {
+    const to = inv.customer.email?.trim();
+    if (!to) { setEmailToast({ ok: false, text: lang === 'is' ? 'Viðskiptavinur er ekki með netfang.' : 'Customer has no email.' }); return; }
+    setSendingId(inv.id);
+    setEmailToast(null);
+    try {
+      const d = invoicePdfData(inv);
+      const { subject, body } = buildInvoiceEmail(inv, data.settings.company.name || '', lang);
+      const content = pdfBase64(d.title, d.subtitle, d.cols, d.rows);
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: data.settings.invoiceEmailFrom || 'Jobboks <accounts@jobboks.app>',
+          to,
+          replyTo: data.settings.company.email || undefined,
+          subject,
+          text: body,
+          attachments: [{ filename: d.filename, content }],
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `Error ${res.status}`);
+      }
+      setEmailToast({ ok: true, text: lang === 'is' ? `Reikningur sendur á ${to}` : `Invoice emailed to ${to}` });
+    } catch (e) {
+      setEmailToast({ ok: false, text: (e as Error).message });
+    } finally {
+      setSendingId(null);
+      setTimeout(() => setEmailToast(null), 6000);
+    }
+  }
+
   const docTabs: Array<{ v: 'all' | 'invoice' | 'quote'; label: string }> = [
     { v: 'all', label: t('allDocuments') },
     { v: 'invoice', label: t('invoices') },
@@ -764,6 +802,11 @@ export default function Invoices() {
         thing that prints (the screen UI below is hidden with no-print). */}
     {printInv && <PrintableInvoice inv={printInv} />}
     <div className="no-print">
+      {emailToast && (
+        <div className={`fixed top-4 right-4 z-[70] px-4 py-3 rounded-xl shadow-lg text-sm font-medium max-w-xs ${emailToast.ok ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+          {emailToast.text}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('invoices')}</h1>
@@ -953,6 +996,13 @@ export default function Invoices() {
                     className="flex items-center gap-1 text-xs text-white bg-blue-600 border border-blue-600 px-2.5 py-1.5 rounded-lg hover:bg-blue-700">
                     <Mail className="w-3.5 h-3.5" /> {lang === 'is' ? 'Senda' : 'Send'}
                   </button>
+                  {/* Send straight from the company address (accounts@jobboks.app) with the PDF attached */}
+                  {inv.customer.email && (
+                    <button onClick={() => emailInvoiceFromCompany(inv)} disabled={sendingId === inv.id}
+                      className="flex items-center gap-1 text-xs text-blue-700 border border-blue-200 bg-blue-50 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 disabled:opacity-50">
+                      <Send className="w-3.5 h-3.5" /> {sendingId === inv.id ? (lang === 'is' ? 'Sendi…' : 'Sending…') : (lang === 'is' ? 'Senda beint' : 'Send direct')}
+                    </button>
+                  )}
                   {/* PDF */}
                   <button onClick={() => exportInvoicePDF(inv)}
                     className="flex items-center gap-1 text-xs text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50">
