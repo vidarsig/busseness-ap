@@ -304,6 +304,12 @@ export function buildContext(data: AppData, lang: string): string {
     ? `TRANSACTIONS (most recent ${txRows.length} of ${data.transactions.length} — older years are covered by the summaries above)`
     : `TRANSACTIONS (all ${txRows.length})`;
 
+  // How the owner keys purchases/income — so the AI knows which category things go on.
+  const catRules = (data.categoryRules ?? [])
+    .slice().sort((a, b) => b.useCount - a.useCount).slice(0, 60)
+    .map(r => `  "${r.pattern}" → ${r.category} (${r.type}, VSK ${r.vatRate}%)`)
+    .join('\n');
+
   return `COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
 FISCAL YEAR (default): ${data.settings.fiscalYear} | CORPORATE TAX RATE: ${data.settings.corporateTaxRate}%
@@ -318,6 +324,11 @@ ${perYear}
 
 MONTHLY BREAKDOWN — every year, Jan→Dec (income +, expense -):
 ${monthlyBreakdown(data)}
+
+CATEGORISATION RULES — how the owner keys purchases/income (pattern found in a
+transaction's description → the key/category it goes on). Use these to answer
+"which key does X go on?" and stay consistent with how the books are kept:
+${catRules || '  (none set yet — the owner keys transactions manually or via the AI)'}
 
 COUNTERPARTY INDEX — every party across ALL years (grouped by description, top by
 volume; n=number of transactions, then total in / out, then per-year in/out). Use
