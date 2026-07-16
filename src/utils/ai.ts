@@ -359,7 +359,10 @@ When the user asks about a specific year, use that year's summary. When comparin
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
 When asked about specific transactions, reference the data provided.
-
+${data.aiMemory && data.aiMemory.trim() ? `
+THINGS TO ALWAYS REMEMBER (the owner told you these — honour them in every reply):
+${data.aiMemory.trim()}
+` : ''}
 CURRENT FINANCIAL DATA:
 ${buildContext(data, lang)}`;
 }

@@ -5,27 +5,6 @@ import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buil
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 
-// Chat memory: keep the conversation for a while so leaving the screen or
-// refreshing doesn't wipe it. We forget a conversation after 2 hours of
-// inactivity (kept small — chat is just text, so localStorage is plenty).
-const CHAT_KEY = 'jobboks_ai_chat';
-const CHAT_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
-
-function loadChat(): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(CHAT_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { savedAt?: string; messages?: ChatMessage[] };
-    if (!parsed.savedAt || Date.now() - new Date(parsed.savedAt).getTime() > CHAT_TTL_MS) {
-      localStorage.removeItem(CHAT_KEY);
-      return [];
-    }
-    return Array.isArray(parsed.messages) ? parsed.messages : [];
-  } catch {
-    return [];
-  }
-}
-
 function renderMarkdown(text: string): string {
   return text
     .replace(/^## (.+)$/gm, '<h3 class="text-base font-bold text-gray-900 mt-4 mb-1">$1</h3>')
@@ -37,9 +16,9 @@ function renderMarkdown(text: string): string {
 }
 
 export default function AIAssistant() {
-  const { data, t, lang } = useApp();
-  const [tab, setTab] = useState<'chat' | 'insights'>('chat');
-  const [messages, setMessages] = useState<ChatMessage[]>(loadChat);
+  const { data, t, lang, dispatch } = useApp();
+  const [tab, setTab] = useState<'chat' | 'insights' | 'memory'>('chat');
+  const [messages, setMessages] = useState<ChatMessage[]>(() => data.aiChat ?? []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -98,15 +77,13 @@ export default function AIAssistant() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Remember the conversation. Save once a reply finishes streaming (not on
-  // every token), stamped with the time so it can expire after 2 hours.
+  // Remember the conversation long-term in the synced data (follows the user
+  // across devices). Save once a reply finishes streaming, keeping the most
+  // recent 100 messages so the blob can't grow without bound.
   useEffect(() => {
     if (loading) return;
-    try {
-      if (messages.length === 0) localStorage.removeItem(CHAT_KEY);
-      else localStorage.setItem(CHAT_KEY, JSON.stringify({ savedAt: new Date().toISOString(), messages }));
-    } catch { /* ignore storage errors */ }
-  }, [messages, loading]);
+    dispatch({ type: 'SET_AI_CHAT', payload: messages.slice(-100) });
+  }, [messages, loading, dispatch]);
 
   async function sendMessage() {
     if ((!input.trim() && attachments.length === 0) || loading) return;
@@ -212,6 +189,10 @@ export default function AIAssistant() {
             <button onClick={() => setTab('insights')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === 'insights' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
               <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" />{t('aiInsights')}</span>
+            </button>
+            <button onClick={() => setTab('memory')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${tab === 'memory' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+              {lang === 'is' ? 'Minni' : 'Memory'}
             </button>
           </div>
           {tab === 'chat' && messages.length > 0 && (
@@ -419,6 +400,27 @@ export default function AIAssistant() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === 'memory' && (
+        <div className="flex-1 overflow-y-auto">
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">{lang === 'is' ? 'Hvað á gervigreindin alltaf að muna?' : 'What should the AI always remember?'}</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              {lang === 'is'
+                ? 'Skrifaðu staðreyndir um fyrirtækið sem gervigreindin á að muna í hverju spjalli — t.d. reglur, viðskiptavini, óskir. Vistast sjálfkrafa og fylgir þér milli tækja.'
+                : 'Write facts about your business the AI should recall in every chat — e.g. rules, key customers, preferences. Saved automatically and synced across your devices.'}
+            </p>
+            <textarea
+              value={data.aiMemory ?? ''}
+              onChange={e => dispatch({ type: 'SET_AI_MEMORY', payload: e.target.value })}
+              rows={12}
+              placeholder={lang === 'is' ? 'T.d. „Reikningar fara alltaf í tölvupósti, ekki prentað.“  „Aðalviðskiptavinur er Efra Skrið ehf.“' : 'e.g. "Always email invoices, never print."  "Main client is Efra Skrið ehf."'}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-[11px] text-gray-400 mt-2">{lang === 'is' ? 'Gervigreindin les þetta í hvert skipti sem þú spjallar. Vistast sjálfkrafa.' : 'The AI reads this every time you chat. Saved automatically.'}</p>
+          </div>
         </div>
       )}
     </div>

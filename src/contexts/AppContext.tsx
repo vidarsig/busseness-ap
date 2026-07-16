@@ -52,6 +52,8 @@ type Action =
   | { type: 'DELETE_TRANSACTION'; payload: string }
   | { type: 'DELETE_TRANSACTIONS'; payload: string[] }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<AppSettings> }
+  | { type: 'SET_AI_CHAT'; payload: { role: 'user' | 'assistant'; content: string }[] }
+  | { type: 'SET_AI_MEMORY'; payload: string }
   | { type: 'ADD_BS_ITEM'; payload: BalanceSheetItem }
   | { type: 'UPDATE_BS_ITEM'; payload: BalanceSheetItem }
   | { type: 'DELETE_BS_ITEM'; payload: string }
@@ -118,6 +120,8 @@ function reducer(state: AppData, action: Action): AppData {
     case 'DELETE_TRANSACTION': return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
     case 'DELETE_TRANSACTIONS': { const ids = new Set(action.payload); return { ...state, transactions: state.transactions.filter(t => !ids.has(t.id)) }; }
     case 'UPDATE_SETTINGS': return { ...state, settings: { ...state.settings, ...action.payload } };
+    case 'SET_AI_CHAT': return { ...state, aiChat: action.payload };
+    case 'SET_AI_MEMORY': return { ...state, aiMemory: action.payload };
     case 'ADD_BS_ITEM': return { ...state, balanceSheetItems: [...state.balanceSheetItems, action.payload] };
     case 'UPDATE_BS_ITEM': return { ...state, balanceSheetItems: state.balanceSheetItems.map(b => b.id === action.payload.id ? action.payload : b) };
     case 'DELETE_BS_ITEM': return { ...state, balanceSheetItems: state.balanceSheetItems.filter(b => b.id !== action.payload) };

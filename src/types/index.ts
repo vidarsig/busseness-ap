@@ -446,6 +446,8 @@ export interface AppData {
   jobMaterials: JobMaterial[];
   jobPhotos: JobPhoto[];
   appUsers: AppUser[];
+  aiChat?: { role: 'user' | 'assistant'; content: string }[]; // persisted AI assistant conversation
+  aiMemory?: string;                                           // facts the AI should always remember
   settings: AppSettings;
 }
 
