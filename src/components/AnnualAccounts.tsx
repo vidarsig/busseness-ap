@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Printer, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss } from '../utils/calculations';
@@ -73,7 +73,15 @@ function BSModal({ initial, onSave, onClose }: BSModalProps) {
 
 export default function AnnualAccounts() {
   const { data, dispatch, t, lang, fmtISK } = useApp();
-  const year = data.settings.fiscalYear;
+  // Browse the accounts for any year with data (not just the fiscal year), so the
+  // owner can see all years. Only the displayed year changes — the figures come
+  // from the same calcProfitLoss engine as before.
+  const years = useMemo(() => {
+    const ys = new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()));
+    ys.add(data.settings.fiscalYear);
+    return [...ys].sort((a, b) => b - a);
+  }, [data.transactions, data.settings.fiscalYear]);
+  const [year, setYear] = useState(data.settings.fiscalYear);
   const company = data.settings.company;
   const txs = filterByYear(data.transactions, year);
   const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
@@ -136,7 +144,15 @@ export default function AnnualAccounts() {
           <h1 className="text-2xl font-bold text-gray-900">{t('annualAccounts')}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{t('annualAccountsTitle')}</p>
         </div>
-        <div className="flex gap-2 no-print">
+        <div className="flex gap-2 no-print items-center">
+          <select
+            value={year}
+            onChange={e => setYear(parseInt(e.target.value))}
+            title={lang === 'is' ? 'Reikningsár' : 'Financial year'}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
           <button
             onClick={() => setBsModal({ open: true })}
             className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
