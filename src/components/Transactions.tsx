@@ -289,6 +289,9 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
+  const [filterName, setFilterName] = useState('');
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   // When arriving from a drill-down (e.g. clicking a key in Skýrslur), pre-filter
@@ -317,10 +320,17 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         if (dateTo && tx.date > dateTo) return false;
         if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
           !tx.reference?.toLowerCase().includes(search.toLowerCase())) return false;
+        if (filterName) {
+          const q = filterName.toLowerCase();
+          if (!tx.description.toLowerCase().includes(q) && !tx.reference?.toLowerCase().includes(q)) return false;
+        }
+        const min = parseFloat(amountMin), max = parseFloat(amountMax);
+        if (!isNaN(min) && tx.amount < min) return false;
+        if (!isNaN(max) && tx.amount > max) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filterType, filterYear, filterCategory, dateFrom, dateTo, search]);
+  }, [data.transactions, filterType, filterYear, filterCategory, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
 
   // Keys (categories) actually in use, so the filter only lists real ones.
   const usedCategories = useMemo(() =>
@@ -345,7 +355,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // bank import). Reset back to the first page whenever the filters change.
   const PAGE = 150;
   const [visibleCount, setVisibleCount] = useState(PAGE);
-  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, dateFrom, dateTo, search]);
+  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
   const paged = filtered.slice(0, visibleCount);
 
   function handleSave(tx: Transaction) {
@@ -503,7 +513,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <button
             onClick={() => setShowFilters(f => !f)}
             className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
-              showFilters || filterType !== 'all' || filterYear !== 'all' || dateFrom || dateTo
+              showFilters || filterType !== 'all' || filterYear !== 'all' || filterCategory !== 'all' || dateFrom || dateTo || filterName || amountMin || amountMax
                 ? 'bg-blue-50 border-blue-300 text-blue-700'
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
@@ -553,6 +563,26 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               {(dateFrom || dateTo) && (
                 <button onClick={() => { setDateFrom(''); setDateTo(''); }}
                   title={lang === 'is' ? 'Hreinsa dagsetningar' : 'Clear dates'}
+                  className="text-gray-400 hover:text-gray-600 p-1"><X className="w-4 h-4" /></button>
+              )}
+            </div>
+            <input type="text" value={filterName} onChange={e => setFilterName(e.target.value)}
+              placeholder={lang === 'is' ? 'Nafn' : 'Name'}
+              title={lang === 'is' ? 'Nafn viðskiptaaðila' : 'Counterparty name'}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="flex items-center gap-1.5">
+              <input type="number" inputMode="decimal" value={amountMin} onChange={e => setAmountMin(e.target.value)}
+                placeholder={lang === 'is' ? 'Lágm. upphæð' : 'Min amount'}
+                title={lang === 'is' ? 'Lágmarksupphæð' : 'Minimum amount'}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <span className="text-gray-400 text-sm">–</span>
+              <input type="number" inputMode="decimal" value={amountMax} onChange={e => setAmountMax(e.target.value)}
+                placeholder={lang === 'is' ? 'Hám. upphæð' : 'Max amount'}
+                title={lang === 'is' ? 'Hámarksupphæð' : 'Maximum amount'}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              {(amountMin || amountMax) && (
+                <button onClick={() => { setAmountMin(''); setAmountMax(''); }}
+                  title={lang === 'is' ? 'Hreinsa upphæð' : 'Clear amount'}
                   className="text-gray-400 hover:text-gray-600 p-1"><X className="w-4 h-4" /></button>
               )}
             </div>
