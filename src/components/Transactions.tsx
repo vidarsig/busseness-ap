@@ -26,6 +26,7 @@ const EMPTY_FORM: Omit<Transaction, 'id'> = {
   reference: '',
   receiptNote: '',
   jobId: '',
+  accountId: '',
 };
 
 function newId() {
@@ -147,6 +148,21 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                 ))}
               </select>
               <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Bókast áfram sem færsla — birtist líka sem kostnaður á verkefninu (ekki tvíbókað).' : 'Still booked as a transaction — also shows as a cost on the project (not double-booked).'}</p>
+            </div>
+          )}
+
+          {data.accounts.filter(a => a.isActive).length > 0 && (
+            <div>
+              <label className={labelCls}>{lang === 'is' ? 'Bókhaldslykill (valfrjálst)' : 'Key / account (optional)'}</label>
+              <select className={inputCls} value={form.accountId ?? ''} onChange={e => set('accountId', e.target.value)}>
+                <option value="">{lang === 'is' ? 'Enginn lykill' : 'No key'}</option>
+                {data.accounts.filter(a => a.isActive)
+                  .sort((a, b) => a.number.localeCompare(b.number))
+                  .map(a => (
+                    <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
+                  ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Bókar færsluna á tiltekinn lykil (t.d. veðskuldabréf, leigutekjur).' : 'Books this entry onto a specific key (e.g. a loan, rent income).'}</p>
             </div>
           )}
 
@@ -651,6 +667,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                   <span className="text-xs text-gray-400">{formatDate(tx.date, lang)}</span>
                   <span className="text-xs text-gray-400">·</span>
                   <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{t(tx.category as never)}</span>
+                  {tx.accountId && (() => { const acc = data.accounts.find(a => a.id === tx.accountId); return acc ? <span className="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</span> : null; })()}
                   {tx.vatRate > 0 && <span className="text-xs text-gray-400">{cc.vatTerm} {tx.vatRate}%</span>}
                   {tx.currency === 'EUR' && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">EUR</span>}
                 </div>
