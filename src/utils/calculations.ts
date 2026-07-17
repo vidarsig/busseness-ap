@@ -1,4 +1,4 @@
-import { Transaction, Currency } from '../types';
+import { Transaction, Currency, Account } from '../types';
 
 export function toISK(amount: number, currency: Currency, rate: number): number {
   return currency === 'ISK' ? amount : amount * rate;
@@ -14,6 +14,32 @@ export function calcAmountIncVAT(amountExVat: number, vatRate: number): number {
 
 export function getTransactionISK(t: Transaction): number {
   return toISK(t.amount, t.currency, t.eurToIskRate);
+}
+
+// Carry-forward: a balance-sheet key's closing balance at the end of each year =
+// opening balance + the entries booked onto it (money in +, money out −), rolled
+// forward so each year's close is the next year's open. By-the-book normal
+// balances: assets/liabilities/equity all move with the cash booked to the key
+// (repayment out → liability down; borrowing in → up). NOTE: 'transfer' entries
+// are treated as money OUT; interest vs principal is not split (owner books the
+// principal portion onto the key). Returns [] for P&L keys / keys with no data.
+export function accountBalanceByYear(account: Account, transactions: Transaction[]): { year: number; closing: number }[] {
+  const movs = transactions.filter(tx => tx.accountId === account.id);
+  if (!movs.length && account.openingBalance == null) return [];
+  const movYears = movs.map(tx => new Date(tx.date).getFullYear());
+  const start = account.openingYear ?? (movYears.length ? Math.min(...movYears) : NaN);
+  const end = movYears.length ? Math.max(start, ...movYears) : start;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  const rows: { year: number; closing: number }[] = [];
+  let bal = account.openingBalance ?? 0;
+  for (let y = start; y <= end; y++) {
+    const net = movs
+      .filter(tx => new Date(tx.date).getFullYear() === y)
+      .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
+    bal += net;
+    rows.push({ year: y, closing: bal });
+  }
+  return rows;
 }
 
 export function getVATAmountISK(t: Transaction): number {

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, X, Lock } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Account } from '../types';
-import { getTransactionISK } from '../utils/calculations';
+import { accountBalanceByYear } from '../utils/calculations';
 
 function newId() { return `ac_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
@@ -126,28 +126,7 @@ export default function ChartOfAccounts() {
     setModal({ open: false });
   }
 
-  // Read-only carry-forward preview: a balance key's closing balance at the end
-  // of each year = opening balance + the entries booked onto it (money in +,
-  // money out −), rolled forward. Direction of 'transfer' entries (e.g. loan
-  // repayments) is treated as money OUT — owner to confirm this convention.
-  function runningByYear(acc: Account): { year: number; closing: number }[] {
-    const movs = data.transactions.filter(tx => tx.accountId === acc.id);
-    if (!movs.length && acc.openingBalance == null) return [];
-    const movYears = movs.map(tx => new Date(tx.date).getFullYear());
-    const start = acc.openingYear ?? Math.min(...movYears);
-    const end = Math.max(start, ...movYears);
-    if (!isFinite(start) || !isFinite(end)) return [];
-    const rows: { year: number; closing: number }[] = [];
-    let bal = acc.openingBalance ?? 0;
-    for (let y = start; y <= end; y++) {
-      const net = movs
-        .filter(tx => new Date(tx.date).getFullYear() === y)
-        .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
-      bal += net;
-      rows.push({ year: y, closing: bal });
-    }
-    return rows;
-  }
+  const runningByYear = (acc: Account) => accountBalanceByYear(acc, data.transactions);
 
   const types: Array<{ v: Account['type'] | 'all'; label: string }> = [
     { v: 'all', label: t('all') },

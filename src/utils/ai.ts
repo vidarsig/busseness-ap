@@ -1,5 +1,5 @@
 import { AppData } from '../types';
-import { calcProfitLoss, calcVATSummary, filterByYear } from './calculations';
+import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear } from './calculations';
 
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
@@ -321,7 +321,12 @@ export function buildContext(data: AppData, lang: string): string {
       const ob = isBalance && a.openingBalance != null && a.openingBalance !== 0
         ? `, opening ${fmtNum(a.openingBalance)}${a.openingYear ? ` @${a.openingYear}` : ''}` : '';
       const en = a.nameEn && a.nameEn !== a.name ? ` / ${a.nameEn}` : '';
-      return `  ${a.number} ${a.name}${en} [${a.type}${isBalance ? ', balance — carries forward' : ', P&L — resets yearly'}${ob}]`;
+      // For balance keys, the closing balance carried into each year (use these
+      // exact figures in a year's return, e.g. the loan still owed at year-end).
+      const byYear = isBalance ? accountBalanceByYear(a, data.transactions) : [];
+      const yearEnd = byYear.length
+        ? `\n      year-end: ${byYear.map(r => `${r.year}=${fmtNum(r.closing)}`).join(', ')}` : '';
+      return `  ${a.number} ${a.name}${en} [${a.type}${isBalance ? ', balance — carries forward' : ', P&L — resets yearly'}${ob}]${yearEnd}`;
     })
     .join('\n');
 
