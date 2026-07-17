@@ -114,6 +114,12 @@ export interface Account {
   type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
   isSystem: boolean;
   isActive: boolean;
+  // Balance-sheet accounts (asset/liability/equity) carry a balance across years.
+  // openingBalance is the starting figure as of openingYear; later years are
+  // derived by rolling this forward with the account's movements. Undefined for
+  // revenue/expense (P&L) accounts, which reset each year.
+  openingBalance?: number;
+  openingYear?: number;
 }
 
 export interface InvoiceLine {

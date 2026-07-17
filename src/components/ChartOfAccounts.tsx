@@ -60,6 +60,27 @@ function AccountModal({ initial, onSave, onClose }: {
               <span className="text-sm text-gray-700">{t('active')}</span>
             </label>
           </div>
+          {(['asset','liability','equity'] as Account['type'][]).includes(form.type) && (
+            <div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={lbl}>{lang === 'is' ? 'Opnunarstaða (ISK)' : 'Opening balance (ISK)'}</label>
+                  <input type="number" inputMode="decimal" className={inp} placeholder="0"
+                    value={form.openingBalance ?? ''}
+                    onChange={e => set('openingBalance', e.target.value === '' ? undefined : Number(e.target.value))} />
+                </div>
+                <div>
+                  <label className={lbl}>{lang === 'is' ? 'Upphafsár' : 'Opening year'}</label>
+                  <input type="number" className={inp} placeholder="2020"
+                    value={form.openingYear ?? ''}
+                    onChange={e => set('openingYear', e.target.value === '' ? undefined : Number(e.target.value))} />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {lang === 'is' ? 'Staða flyst milli ára — lokastaða hvers árs verður opnunarstaða þess næsta.' : 'This balance carries across years — each year’s closing becomes the next year’s opening.'}
+              </p>
+            </div>
+          )}
           {form.isSystem && (
             <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5" /> {t('systemAccount')} — {lang === 'is' ? 'kerfislykill er ekki hægt að breyta' : 'system accounts cannot be fully edited'}
@@ -84,7 +105,7 @@ const typeColor: Record<Account['type'], string> = {
 };
 
 export default function ChartOfAccounts() {
-  const { data, dispatch, t, lang } = useApp();
+  const { data, dispatch, t, lang, fmtISK } = useApp();
   const [modal, setModal] = useState<{ open: boolean; acc?: Account }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<Account['type'] | 'all'>('all');
@@ -180,6 +201,11 @@ export default function ChartOfAccounts() {
                     <td className="px-2 py-2.5">
                       <div className="text-sm font-medium text-gray-800">{lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</div>
                       {lang === 'is' && acc.nameEn && <div className="text-xs text-gray-400">{acc.nameEn}</div>}
+                      {acc.openingBalance != null && acc.openingBalance !== 0 && (
+                        <div className="text-xs text-gray-500">
+                          {lang === 'is' ? 'Opnun' : 'Opening'} {acc.openingYear ?? ''}: <span className="font-mono">{fmtISK(acc.openingBalance)}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-2.5 hidden sm:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeColor[acc.type]}`}>
