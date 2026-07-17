@@ -310,6 +310,21 @@ export function buildContext(data: AppData, lang: string): string {
     .map(r => `  "${r.pattern}" → ${r.category} (${r.type}, VSK ${r.vatRate}%)`)
     .join('\n');
 
+  // The owner's chart of accounts ("Bókhaldslyklar") — the real keys a
+  // transaction can be booked onto (tx.accountId). Balance-sheet keys carry a
+  // balance forward year to year; revenue/expense keys reset each year.
+  const keysList = (data.accounts ?? [])
+    .filter(a => a.isActive)
+    .slice().sort((a, b) => a.number.localeCompare(b.number))
+    .map(a => {
+      const isBalance = ['asset', 'liability', 'equity'].includes(a.type);
+      const ob = isBalance && a.openingBalance != null && a.openingBalance !== 0
+        ? `, opening ${fmtNum(a.openingBalance)}${a.openingYear ? ` @${a.openingYear}` : ''}` : '';
+      const en = a.nameEn && a.nameEn !== a.name ? ` / ${a.nameEn}` : '';
+      return `  ${a.number} ${a.name}${en} [${a.type}${isBalance ? ', balance — carries forward' : ', P&L — resets yearly'}${ob}]`;
+    })
+    .join('\n');
+
   return `COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
 FISCAL YEAR (default): ${data.settings.fiscalYear} | CORPORATE TAX RATE: ${data.settings.corporateTaxRate}%
@@ -329,6 +344,14 @@ CATEGORISATION RULES — how the owner keys purchases/income (pattern found in a
 transaction's description → the key/category it goes on). Use these to answer
 "which key does X go on?" and stay consistent with how the books are kept:
 ${catRules || '  (none set yet — the owner keys transactions manually or via the AI)'}
+
+CHART OF ACCOUNTS / KEYS (Bókhaldslyklar) — the actual keys a transaction can be
+booked onto. "balance" keys (asset/liability/equity, e.g. loans/veðskuldabréf)
+carry their balance forward year to year from the opening figure; "P&L" keys
+(revenue/expense) reset each year. When asked where something should be booked,
+name the exact key from this list; remember per-counterparty booking choices via
+a jobboks-remember block so they stick:
+${keysList || '  (no keys defined yet — see Bókhaldslyklar)'}
 
 COUNTERPARTY INDEX — every party across ALL years (grouped by description, top by
 volume; n=number of transactions, then total in / out, then per-year in/out). Use
