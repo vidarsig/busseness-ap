@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Plus, Pencil, Trash2, X, Lock } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Account } from '../types';
+import { getTransactionISK } from '../utils/calculations';
 
 function newId() { return `ac_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
@@ -125,6 +126,29 @@ export default function ChartOfAccounts() {
     setModal({ open: false });
   }
 
+  // Read-only carry-forward preview: a balance key's closing balance at the end
+  // of each year = opening balance + the entries booked onto it (money in +,
+  // money out −), rolled forward. Direction of 'transfer' entries (e.g. loan
+  // repayments) is treated as money OUT — owner to confirm this convention.
+  function runningByYear(acc: Account): { year: number; closing: number }[] {
+    const movs = data.transactions.filter(tx => tx.accountId === acc.id);
+    if (!movs.length && acc.openingBalance == null) return [];
+    const movYears = movs.map(tx => new Date(tx.date).getFullYear());
+    const start = acc.openingYear ?? Math.min(...movYears);
+    const end = Math.max(start, ...movYears);
+    if (!isFinite(start) || !isFinite(end)) return [];
+    const rows: { year: number; closing: number }[] = [];
+    let bal = acc.openingBalance ?? 0;
+    for (let y = start; y <= end; y++) {
+      const net = movs
+        .filter(tx => new Date(tx.date).getFullYear() === y)
+        .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
+      bal += net;
+      rows.push({ year: y, closing: bal });
+    }
+    return rows;
+  }
+
   const types: Array<{ v: Account['type'] | 'all'; label: string }> = [
     { v: 'all', label: t('all') },
     { v: 'asset', label: t('accountTypeAsset') },
@@ -204,6 +228,14 @@ export default function ChartOfAccounts() {
                       {acc.openingBalance != null && acc.openingBalance !== 0 && (
                         <div className="text-xs text-gray-500">
                           {lang === 'is' ? 'Opnun' : 'Opening'} {acc.openingYear ?? ''}: <span className="font-mono">{fmtISK(acc.openingBalance)}</span>
+                        </div>
+                      )}
+                      {(['asset','liability','equity'] as Account['type'][]).includes(acc.type) && data.transactions.some(tx => tx.accountId === acc.id) && (
+                        <div className="text-xs text-gray-500 flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                          <span className="text-gray-400">{lang === 'is' ? 'Staða í árslok:' : 'Year-end:'}</span>
+                          {runningByYear(acc).map(r => (
+                            <span key={r.year}>{r.year} <span className="font-mono text-gray-700">{fmtISK(r.closing)}</span></span>
+                          ))}
                         </div>
                       )}
                     </td>
