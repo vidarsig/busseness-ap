@@ -212,7 +212,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               </div>
               {form.vatRate > 0 && (
                 <div className="flex justify-between text-gray-600">
-                  <span>VSK {form.vatRate}%</span>
+                  <span>{cc.vatTerm} {form.vatRate}%</span>
                   <span className="font-mono">{formatCurrency(vatAmount, form.currency)}</span>
                 </div>
               )}
@@ -246,7 +246,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 }
 
 export default function Transactions({ initialFilter, onFilterConsumed }: { initialFilter?: { category?: string; year?: number } | null; onFilterConsumed?: () => void } = {}) {
-  const { data, dispatch, t, lang } = useApp();
+  const { data, dispatch, t, lang, cc } = useApp();
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -365,8 +365,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     { header: lang === 'is' ? 'Flokkur' : 'Category',          key: 'cat',      width: 22 },
     { header: lang === 'is' ? 'Gjaldmiðill' : 'Currency',      key: 'cur',      width: 10 },
     { header: lang === 'is' ? 'Upphæð' : 'Amount',             key: 'amount',   width: 14 },
-    { header: 'VSK%',                                           key: 'vat',      width: 8  },
-    { header: lang === 'is' ? 'VSK (ISK)' : 'VAT (ISK)',       key: 'vatamt',   width: 14 },
+    { header: `${cc.vatTerm}%`,                                 key: 'vat',      width: 8  },
+    { header: `${cc.vatTerm} (ISK)`,                            key: 'vatamt',   width: 14 },
     { header: lang === 'is' ? 'Heild (ISK)' : 'Total (ISK)',   key: 'total',    width: 16 },
     { header: lang === 'is' ? 'Tilvísun' : 'Reference',        key: 'ref',      width: 18 },
   ];
@@ -615,7 +615,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                   <span className="text-xs text-gray-400">{formatDate(tx.date, lang)}</span>
                   <span className="text-xs text-gray-400">·</span>
                   <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{t(tx.category as never)}</span>
-                  {tx.vatRate > 0 && <span className="text-xs text-gray-400">VSK {tx.vatRate}%</span>}
+                  {tx.vatRate > 0 && <span className="text-xs text-gray-400">{cc.vatTerm} {tx.vatRate}%</span>}
                   {tx.currency === 'EUR' && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">EUR</span>}
                 </div>
                 {tx.reference && <p className="text-xs text-gray-400 mt-0.5">{tx.reference}</p>}
@@ -659,7 +659,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 <th className={thCls}>{t('category')}</th>
                 <th className={thCls}>{t('type')}</th>
                 <th className={`${thCls} text-right`}>{t('amountExVat')}</th>
-                <th className={`${thCls} text-right`}>VSK%</th>
+                <th className={`${thCls} text-right`}>{cc.vatTerm}%</th>
                 <th className={`${thCls} text-right`}>{t('iskAmount')}</th>
                 <th className={thCls}></th>
               </tr>
