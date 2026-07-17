@@ -146,7 +146,9 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                {t(id)}
+                {data.settings.country === 'US' && id === 'vat' ? 'Sales Tax'
+                  : data.settings.country === 'US' && id === 'vatreturn' ? 'Sales Tax Return'
+                  : t(id)}
               </button>
             ))}
             {section.labelKey && <div className="mx-3 mt-1 border-t border-gray-100" />}

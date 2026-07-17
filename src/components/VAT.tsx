@@ -8,8 +8,22 @@ import {
 type PeriodType = 'year' | 'quarter' | 'month';
 
 export default function VAT() {
-  const { data, t, fmtISK } = useApp();
+  const { data, t, fmtISK, cc } = useApp();
   const year = data.settings.fiscalYear;
+  // US "Sales Tax" mode: relabel the whole tax screen in plain American English.
+  // Gated to US so the Icelandic (and other) live experience is untouched.
+  const isUS = data.settings.country === 'US';
+  const L = {
+    summary:   isUS ? 'Sales Tax Summary'            : t('vatSummary'),
+    info:      isUS ? cc.vatNumberLabel              : t('vatInfo'),
+    toPay:     isUS ? 'Sales Tax to pay'             : t('toPayRSK'),
+    refund:    isUS ? 'Sales Tax refund'             : t('refundFromRSK'),
+    output:    isUS ? 'Sales Tax collected (on sales)'    : t('outputVAT'),
+    input:     isUS ? 'Sales Tax paid (on purchases)'     : t('inputVAT'),
+    rateCol:   `${cc.vatTerm}%`,
+    vatCol:    isUS ? 'Sales Tax'                    : t('vatAmountCol'),
+    totalCol:  isUS ? 'Total incl. tax'             : t('totalWithVAT'),
+  };
 
   const [periodType, setPeriodType] = useState<PeriodType>('year');
   const [quarter, setQuarter] = useState(1);
@@ -43,10 +57,10 @@ export default function VAT() {
       <table className="w-full">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-left">VSK%</th>
+            <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-left">{L.rateCol}</th>
             <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-right">{t('baseAmount')}</th>
-            <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-right">{t('vatAmountCol')}</th>
-            <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-right">{t('totalWithVAT')}</th>
+            <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-right">{L.vatCol}</th>
+            <th className="px-4 py-2 text-xs font-semibold text-gray-500 text-right">{L.totalCol}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -85,10 +99,10 @@ export default function VAT() {
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-2xl font-bold text-gray-900">{t('vatSummary')}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{L.summary}</h1>
         {data.settings.company.vskNumber && (
           <div className="text-sm text-gray-500">
-            {t('vatInfo')}: <span className="font-semibold text-gray-700">{data.settings.company.vskNumber}</span>
+            {L.info}: <span className="font-semibold text-gray-700">{data.settings.company.vskNumber}</span>
           </div>
         )}
       </div>
@@ -133,26 +147,26 @@ export default function VAT() {
         isOwed ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'
       }`}>
         <div className="text-sm font-medium text-gray-600 mb-1">
-          {isOwed ? t('toPayRSK') : t('refundFromRSK')}
+          {isOwed ? L.toPay : L.refund}
         </div>
         <div className={`text-3xl font-bold ${isOwed ? 'text-orange-600' : 'text-green-600'}`}>
           {fmtISK(Math.abs(vat.netVAT))}
         </div>
         <div className="mt-3 flex gap-6 text-sm text-gray-500">
-          <span>{t('outputVAT')}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalOutput)}</span></span>
-          <span>{t('inputVAT')}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalInput)}</span></span>
+          <span>{L.output}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalOutput)}</span></span>
+          <span>{L.input}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalInput)}</span></span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <SectionTable
-          title={t('outputVAT')}
+          title={L.output}
           rows={vat.outputByRate}
           total={vat.totalOutput}
           color="text-green-700"
         />
         <SectionTable
-          title={t('inputVAT')}
+          title={L.input}
           rows={vat.inputByRate}
           total={vat.totalInput}
           color="text-blue-700"
