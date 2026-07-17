@@ -74,8 +74,9 @@ const blankUser = (): Omit<AppUser, 'id' | 'createdAt'> => ({
 });
 
 export default function Users({ sessionUser }: Props) {
-  const { data, dispatch } = useApp();
+  const { data, dispatch, cc } = useApp();
   const lang = data.settings.language;
+  const isUS = data.settings.country === 'US';
   const t = (is: string, en: string) => lang === 'is' ? is : en;
 
   const users = data.appUsers ?? [];
@@ -391,7 +392,10 @@ export default function Users({ sessionUser }: Props) {
                       <input type="checkbox" checked={canAccessView(view, form.permissions)}
                         onChange={() => toggleScreen(view)}
                         className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300" />
-                      <span className="text-xs text-gray-600 group-hover:text-gray-900">{lang === 'is' ? is : en}</span>
+                      <span className="text-xs text-gray-600 group-hover:text-gray-900">{
+                        isUS && view === 'vat' ? cc.vatTerm
+                        : isUS && view === 'vatreturn' ? `${cc.vatTerm} return`
+                        : (lang === 'is' ? is : en)}</span>
                     </label>
                   ))}
                 </div>
