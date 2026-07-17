@@ -505,7 +505,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
     }));
     const { discount, total } = invoiceTotals(inv);
     if (discount > 0) rows.push({ description: t('Afsláttur', 'Discount'), quantity: '' as unknown as number, unitPrice: '', lineTotal: `−${fmt(discount)}` });
-    rows.push({ description: t('Samtals með vsk.', 'Total incl. VAT'), quantity: '' as unknown as number, unitPrice: '', lineTotal: fmt(total) });
+    rows.push({ description: t('Samtals með vsk.', `Total incl. ${cc.vatTerm}`), quantity: '' as unknown as number, unitPrice: '', lineTotal: fmt(total) });
     const company = data.settings.company.name || '';
     const subject = `${t('Tilboð', 'Offer')} ${inv.number} — ${company}`;
     const body = [
@@ -1219,7 +1219,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
                   <input type="date" className={inp} value={jobForm.job?.endDate ?? ''} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, endDate:e.target.value } }))} />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tilboðsverð (án VSK)','Quoted amount (ex. VAT)')}</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">{t('Tilboðsverð (án VSK)',`Quoted amount (ex. ${cc.vatTerm})`)}</label>
                   <input type="number" className={inp} value={jobForm.job?.quotedAmount ?? 0} onChange={e => setJobForm(f => ({ ...f, job:{ ...f.job, quotedAmount:Number(e.target.value) } }))} />
                 </div>
                 <div className="col-span-2">
