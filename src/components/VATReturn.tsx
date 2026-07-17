@@ -135,7 +135,7 @@ export default function VATReturn() {
 
       {/* Print header */}
       <div className="print-only mb-6">
-        <h2 className="text-xl font-bold">VSK-skýrsla / VAT Return</h2>
+        <h2 className="text-xl font-bold">{vatTerm} {lang === 'is' ? 'skýrsla' : 'return'}</h2>
         <p className="text-sm">{data.settings.company.name} — {data.settings.company.kennitala}</p>
         <p className="text-sm">{year} — {period}. {lang === 'is' ? 'tímabil' : 'period'} ({periodLabel(period)})</p>
       </div>

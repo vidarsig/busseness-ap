@@ -210,6 +210,16 @@ export default function Settings() {
     setForm(f => ({ ...f, [k]: v }));
   }
 
+  // US sales tax: the picked state / typed rate must drive the ACTUAL tax engine.
+  // The app computes tax from `standardRate` (+ `vatRates` for the line dropdowns),
+  // so a US rate has to land there too — otherwise invoices stay at 0%.
+  function applyUsRate(rate: number) {
+    const r = Number.isFinite(rate) ? rate : 0;
+    setTop('salesTaxRate', r);
+    setTop('standardRate', r);
+    setTop('vatRates', r > 0 ? [r, 0] : [0]);
+  }
+
   function setRate(currency: keyof ExchangeRates, value: number) {
     setForm(f => ({ ...f, exchangeRates: { ...f.exchangeRates, [currency]: value } }));
   }
@@ -281,7 +291,7 @@ export default function Settings() {
                 onChange={e => {
                   const st = US_STATES.find(s => s.name === e.target.value);
                   setTop('usState', e.target.value);
-                  if (st) setTop('salesTaxRate', st.rate);
+                  if (st) applyUsRate(st.rate);
                 }}>
                 <option value="">{lang === 'is' ? 'Veldu ríki…' : 'Select state…'}</option>
                 {US_STATES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
@@ -291,7 +301,7 @@ export default function Settings() {
             <div className="mt-3">
               <label className={labelCls}>{lang === 'is' ? 'Söluskattshlutfall (%)' : 'Sales tax rate (%)'}</label>
               <input type="number" className={inputCls} value={form.salesTaxRate}
-                onChange={e => setTop('salesTaxRate', parseFloat(e.target.value) || 0)}
+                onChange={e => applyUsRate(parseFloat(e.target.value) || 0)}
                 min={0} max={30} step="0.01" />
               <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Grunnhlutfall ríkis — bættu við staðbundnu hlutfalli ef á við' : 'State base rate — add your local (city/county) rate if any'}</p>
             </div>
