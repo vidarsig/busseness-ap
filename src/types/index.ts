@@ -97,6 +97,7 @@ export interface Transaction {
   receiptUrl?: string;   // base64 image of the attached receipt/invoice (proof)
   jobId?: string;        // optional: tag this purchase to a Verkbókhald project (shows as a job cost; NOT double-booked)
   accountId?: string;    // optional: book this entry onto a chart-of-accounts key (Bókhaldslyklar / data.accounts)
+  interestAmount?: number; // optional: for a loan payment, the interest portion (a financial expense). Only the principal (amount − interest) reduces the loan balance; interest hits the P&L.
 }
 
 export interface BalanceSheetItem {

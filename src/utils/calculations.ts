@@ -35,7 +35,14 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
   for (let y = start; y <= end; y++) {
     const net = movs
       .filter(tx => new Date(tx.date).getFullYear() === y)
-      .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
+      .reduce((s, tx) => {
+        const gross = getTransactionISK(tx);
+        // A loan payment's interest is a cost, not a reduction of the loan — only
+        // the principal (gross − interest) moves the balance. Money in (borrowing)
+        // increases the balance by the full amount.
+        const interest = tx.interestAmount ? toISK(tx.interestAmount, tx.currency, tx.eurToIskRate) : 0;
+        return s + (tx.type === 'income' ? gross : -(gross - interest));
+      }, 0);
     bal += net;
     rows.push({ year: y, closing: bal });
   }
@@ -142,7 +149,11 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const fagthjonusta = sumCat('expense', 'fagthjonusta');
   const vorur = sumCat('expense', 'vorur');
   const afskriftir = sumCat('expense', 'afskriftir');
-  const fjarmagnsgjold = sumCat('expense', 'fjarmagnsgjold');
+  // Interest portion of loan payments (entered on the payment, whatever category
+  // it's booked under) is a financial expense — recognise it here so profit is
+  // correct even though the payment itself is a balance-sheet/transfer entry.
+  const loanInterest = transactions.reduce((s, t) => s + (t.interestAmount ? toISK(t.interestAmount, t.currency, t.eurToIskRate) : 0), 0);
+  const fjarmagnsgjold = sumCat('expense', 'fjarmagnsgjold') + loanInterest;
   const adrir = sumCat('expense', 'adrir_rekstrargjold');
 
   const totalOperatingExpenses = laun + launatengd + husaleiga + simagjold +

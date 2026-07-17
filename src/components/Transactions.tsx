@@ -166,6 +166,17 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
             </div>
           )}
 
+          {data.accounts.find(a => a.id === form.accountId)?.type === 'liability' && form.type !== 'income' && (
+            <div>
+              <label className={labelCls}>{lang === 'is' ? 'Þar af vextir (valfrjálst)' : 'Of which interest (optional)'}</label>
+              <input type="number" inputMode="decimal" className={inputCls} placeholder="0"
+                value={form.interestAmount ?? ''}
+                onChange={e => set('interestAmount', e.target.value === '' ? undefined : Number(e.target.value))}
+                min={0} />
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Aðeins höfuðstóllinn (upphæð − vextir) lækkar lánið; vextir teljast fjármagnsgjöld.' : 'Only the principal (amount − interest) reduces the loan; interest counts as a financial expense.'}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>{t('currency')}</label>
