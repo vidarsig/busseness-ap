@@ -1,7 +1,8 @@
 ﻿import { useState, useMemo } from 'react';
-import { Printer, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss } from '../utils/calculations';
+import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem } from '../types';
 
 function newId() {
@@ -113,6 +114,72 @@ export default function AnnualAccounts() {
     setBsModal({ open: false });
   }
 
+  // The exact figures shown on screen, flattened into a two-column statement so
+  // the annual accounts can be downloaded as a PDF or attached to an email. Same
+  // numbers as the display — no separate calculation.
+  function statementExport(): { columns: ExportColumn[]; rows: ExportRow[] } {
+    const nm = (i: BalanceSheetItem) => lang === 'is' ? i.name : (i.nameEn || i.name);
+    const R = (label: string, amount: number): ExportRow => ({ label, amount: fmtISK(amount) });
+    const SEC = (label: string): ExportRow => ({ label: label.toUpperCase(), amount: '' });
+    const rows: ExportRow[] = [];
+    rows.push(SEC(t('incomeStatement')));
+    rows.push(SEC(t('revenues')));
+    if (pl.salaTekjur > 0) rows.push(R(t('sala_vara'), pl.salaTekjur));
+    if (pl.thjonustutekjur > 0) rows.push(R(t('sala_thjonustu'), pl.thjonustutekjur));
+    if (pl.adrarTekjur > 0) rows.push(R(t('adrar_tekjur'), pl.adrarTekjur));
+    rows.push(R(t('revenues'), pl.totalRevenue));
+    if (pl.laun + pl.launatengd > 0) rows.push(R(t('wagesExpenses'), -(pl.laun + pl.launatengd)));
+    if (pl.afskriftir > 0) rows.push(R(t('afskriftir'), -pl.afskriftir));
+    const otherOp = pl.husaleiga + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
+    if (otherOp > 0) rows.push(R(t('otherOperating'), -otherOp));
+    rows.push(R(t('operatingExpenses'), -pl.totalOperatingExpenses));
+    rows.push(R(t('operatingProfit'), pl.operatingProfit));
+    if (pl.fjarmagntekjur > 0) rows.push(R(t('fjarmagns_tekjur'), pl.fjarmagntekjur));
+    if (pl.fjarmagnsgjold > 0) rows.push(R(t('fjarmagnsgjold'), -pl.fjarmagnsgjold));
+    rows.push(R(t('profitBeforeTax'), pl.profitBeforeTax));
+    if (pl.incomeTax > 0) rows.push(R(t('incomeTax'), -pl.incomeTax));
+    rows.push(R(t('netResult'), pl.netResult));
+    rows.push(SEC(t('assets')));
+    getSection('fixed_assets').forEach(i => rows.push(R(nm(i), i.amount)));
+    rows.push(R(t('fixedAssets'), totalFixedAssets));
+    getSection('current_assets').forEach(i => rows.push(R(nm(i), i.amount)));
+    rows.push(R(t('currentAssets'), totalCurrentAssets));
+    rows.push(R(t('totalAssets'), totalAssets));
+    rows.push(SEC(t('equityAndLiabilities')));
+    getSection('equity').forEach(i => rows.push(R(nm(i), i.amount)));
+    rows.push(R(lang === 'is' ? 'Hagnaður / tap árs' : 'Net result for year', pl.netResult));
+    rows.push(R(t('totalEquity'), totalEquity));
+    getSection('long_term_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
+    rows.push(R(t('longTermLiabilities'), totalLongTerm));
+    getSection('current_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
+    rows.push(R(t('currentLiabilities'), totalCurrentLiab));
+    rows.push(R(t('equityAndLiabilities'), totalEquityAndLiab));
+    return {
+      columns: [
+        { header: t('description'), key: 'label', width: 120 },
+        { header: `${year} (ISK)`, key: 'amount', width: 45 },
+      ],
+      rows,
+    };
+  }
+
+  const pdfTitle = company.name || t('annualAccounts');
+  const pdfSubtitle = `${t('annualAccounts')} — ${year}${company.kennitala ? ` · ${company.kennitala}` : ''}`;
+  const pdfFile = `arsreikningur_${year}.pdf`;
+
+  function downloadAccounts() {
+    const { columns, rows } = statementExport();
+    exportPDF(pdfTitle, pdfSubtitle, columns, rows, pdfFile);
+  }
+  async function emailAccounts() {
+    const { columns, rows } = statementExport();
+    await sharePDF(pdfTitle, pdfSubtitle, columns, rows, pdfFile, {
+      emailTo: '',
+      subject: `${t('annualAccounts')} ${year} — ${company.name}`,
+      body: `${t('annualAccounts')} ${year}`,
+    });
+  }
+
   const BSRow = ({ label, amount, bold, indent }: { label: string; amount: number; bold?: boolean; indent?: boolean }) => (
     <tr className={bold ? 'border-t border-gray-300 bg-gray-50' : ''}>
       <td className={`px-4 py-1.5 text-sm ${bold ? 'font-bold' : ''} ${indent ? 'pl-8' : ''}`}>{label}</td>
@@ -159,6 +226,22 @@ export default function AnnualAccounts() {
           >
             <Plus className="w-4 h-4" />
             {t('addBalanceSheetItem')}
+          </button>
+          <button
+            onClick={downloadAccounts}
+            title={lang === 'is' ? 'Sækja PDF' : 'Download PDF'}
+            className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">{lang === 'is' ? 'Sækja' : 'Download'}</span>
+          </button>
+          <button
+            onClick={emailAccounts}
+            title={lang === 'is' ? 'Senda í tölvupósti' : 'Send by email'}
+            className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <Send className="w-4 h-4" />
+            <span className="hidden sm:inline">{lang === 'is' ? 'Senda' : 'Send'}</span>
           </button>
           <button
             onClick={() => window.print()}
