@@ -77,7 +77,7 @@ function RuleModal({ initial, onSave, onClose }: {
               </select>
             </div>
             <div>
-              <label className={lbl}>{t('vatRate')}</label>
+              <label className={lbl}>{cc.isUSA ? `${cc.vatTerm} Rate` : t('vatRate')}</label>
               <select className={inp} value={vatRate} onChange={e => setVatRate(parseFloat(e.target.value))}>
                 {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
                   .filter((r, i, arr) => arr.indexOf(r) === i)

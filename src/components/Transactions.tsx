@@ -49,6 +49,10 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   const totalWithVat = form.amount + vatAmount;
   const iskTotal = form.currency === 'ISK' ? totalWithVat : totalWithVat * form.eurToIskRate;
 
+  // US reads "Sales Tax", not "VAT"; other languages keep their own translation.
+  const exVatLabel = cc.isUSA ? `Amount excl. ${cc.vatTerm}` : t('amountExVat');
+  const incVatLabel = cc.isUSA ? `Amount incl. ${cc.vatTerm}` : t('amountIncVat');
+
   const categories = form.type === 'income' ? INCOME_CATEGORIES : form.type === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES;
 
   function handleTypeChange(newType: TransactionType) {
@@ -165,7 +169,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>{t('amountExVat')} ({form.currency})</label>
+              <label className={labelCls}>{exVatLabel} ({form.currency})</label>
               <input type="number" className={inputCls} value={form.amount || ''}
                 onChange={e => set('amount', parseFloat(e.target.value) || 0)}
                 min={0} step={form.currency === 'ISK' ? '1' : '0.01'} required />
@@ -182,7 +186,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
           )}
 
           <div>
-            <label className={labelCls}>{t('vatRate')}</label>
+            <label className={labelCls}>{cc.isUSA ? `${cc.vatTerm} Rate` : t('vatRate')}</label>
             <select className={inputCls} value={form.vatRate}
               onChange={e => set('vatRate', parseFloat(e.target.value))}>
               {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
@@ -207,7 +211,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
           {form.amount > 0 && (
             <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
               <div className="flex justify-between text-gray-600">
-                <span>{t('amountExVat')}</span>
+                <span>{exVatLabel}</span>
                 <span className="font-mono">{formatCurrency(form.amount, form.currency)}</span>
               </div>
               {form.vatRate > 0 && (
@@ -217,7 +221,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                 </div>
               )}
               <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-1.5">
-                <span>{t('amountIncVat')}</span>
+                <span>{incVatLabel}</span>
                 <span className="font-mono">{formatCurrency(totalWithVat, form.currency)}</span>
               </div>
               {form.currency !== 'ISK' && (
@@ -658,7 +662,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 <th className={thCls}>{t('description')}</th>
                 <th className={thCls}>{t('category')}</th>
                 <th className={thCls}>{t('type')}</th>
-                <th className={`${thCls} text-right`}>{t('amountExVat')}</th>
+                <th className={`${thCls} text-right`}>{cc.isUSA ? `Amount excl. ${cc.vatTerm}` : t('amountExVat')}</th>
                 <th className={`${thCls} text-right`}>{cc.vatTerm}%</th>
                 <th className={`${thCls} text-right`}>{t('iskAmount')}</th>
                 <th className={thCls}></th>
