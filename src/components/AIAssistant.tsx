@@ -23,6 +23,29 @@ function extractExcel(content: string): { text: string; excel: ExcelReport | nul
   return { text: content.replace(m[0], '').trim(), excel };
 }
 
+// Pull an AI-generated ```jobboks-remember``` block → the cleaned text plus the
+// facts the AI wants to keep in the long-term Memory.
+function extractMemory(content: string): { text: string; remember: string[] } {
+  const m = content.match(/```jobboks-remember\s*([\s\S]*?)```/);
+  if (!m) return { text: content, remember: [] };
+  let remember: string[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.remember)) remember = p.remember.map((s: unknown) => String(s).trim()).filter(Boolean);
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), remember };
+}
+
+// Append new facts to the Memory text as bullets, skipping ones already there.
+function appendMemory(existing: string, notes: string[]): string {
+  const cur = (existing ?? '').trim();
+  const have = cur.toLowerCase();
+  const additions = notes.filter(n => n && !have.includes(n.toLowerCase()));
+  if (additions.length === 0) return cur;
+  const lines = additions.map(n => `- ${n}`).join('\n');
+  return cur ? `${cur}\n${lines}` : lines;
+}
+
 function renderMarkdown(text: string): string {
   return text
     .replace(/^## (.+)$/gm, '<h3 class="text-base font-bold text-gray-900 mt-4 mb-1">$1</h3>')
@@ -159,6 +182,11 @@ export default function AIAssistant() {
           });
         },
       );
+      // If the AI chose to remember something, append it to the long-term Memory.
+      const { remember } = extractMemory(assistantText);
+      if (remember.length) {
+        dispatch({ type: 'SET_AI_MEMORY', payload: appendMemory(data.aiMemory ?? '', remember) });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('aiError'));
       setMessages(prev => prev.slice(0, -1));
@@ -274,7 +302,8 @@ export default function AIAssistant() {
                     </div>
                   ) : msg.role === 'assistant' ? (
                     (() => {
-                      const { text, excel } = extractExcel(msg.content);
+                      const { text: afterExcel, excel } = extractExcel(msg.content);
+                      const { text, remember } = extractMemory(afterExcel);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -284,6 +313,12 @@ export default function AIAssistant() {
                               <FileSpreadsheet className="w-4 h-4" />
                               {lang === 'is' ? `Sækja Excel (${excel.rows.length} línur)` : `Download Excel (${excel.rows.length} rows)`}
                             </button>
+                          )}
+                          {remember.length > 0 && (
+                            <div className="mt-3 flex items-start gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
+                              <Sparkles className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                              <span>{lang === 'is' ? 'Vistað í minni' : 'Saved to memory'}: {remember.join('; ')}</span>
+                            </div>
                           )}
                         </>
                       );

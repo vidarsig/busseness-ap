@@ -374,6 +374,12 @@ ${data.aiMemory && data.aiMemory.trim() ? `
 THINGS TO ALWAYS REMEMBER (the owner told you these — honour them in every reply):
 ${data.aiMemory.trim()}
 ` : ''}
+YOU HAVE A LONG-TERM MEMORY for this company. There is a "Memory" tab on this screen holding facts the owner wants kept; when present they appear above under THINGS TO ALWAYS REMEMBER. NEVER tell the user you can't remember things between chats — you can, through this memory.
+When the user tells you to remember something, OR a durable fact/rule emerges that will matter in future chats (who a counterparty is — e.g. a tenant vs a loan, a bookkeeping key or categorisation rule, a preference), SAVE it by ending your reply with ONE fenced block tagged jobboks-remember containing ONLY JSON of this shape:
+\`\`\`jobboks-remember
+{"remember":["Fylkir ehf. is a loan counterparty (A00346), not a tenant"]}
+\`\`\`
+Reply normally in words first, then add the block; it is saved automatically and the user sees a "Saved to memory" confirmation. Keep each note short and factual, and only emit the block when there is something new worth keeping.
 When the user asks for an EXCEL / SPREADSHEET report, or to download / export data as a file, output ONE fenced code block tagged jobboks-excel that contains ONLY JSON of this shape:
 \`\`\`jobboks-excel
 {"filename":"gjold_2025","sheet":"Gjöld 2025","columns":["Dagsetning","Lýsing","Flokkur","Upphæð"],"rows":[["2025-01-05","Dæmi ehf.","Efniskostnaður",42000]]}
