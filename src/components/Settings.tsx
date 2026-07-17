@@ -478,7 +478,9 @@ export default function Settings() {
           {/* Payroll rates */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Launaútreikningur' : 'Payroll rates'}</h2>
-            <p className="text-xs text-gray-500 mb-3">{lang === 'is' ? 'Hlutföll samkvæmt íslenskum lögum' : 'Rates per Icelandic law'}</p>
+            <p className="text-xs text-gray-500 mb-3">{cc.code === 'IS'
+              ? (lang === 'is' ? 'Hlutföll samkvæmt íslenskum lögum' : 'Rates per Icelandic law')
+              : (lang === 'is' ? 'Hlutföll fyrir launaútreikning' : 'Rates used for payroll')}</p>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -601,9 +603,13 @@ export default function Settings() {
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
             <h3 className="text-xs font-semibold text-blue-800 mb-1">{lang === 'is' ? 'Um þetta forrit' : 'About this app'}</h3>
             <p className="text-xs text-blue-700 leading-relaxed mb-3">
-              {lang === 'is'
-                ? 'Bókhalds-forrit í samræmi við íslensk lög, þar með lög nr. 3/2006 um ársreikninga. VSK-hlutföll: 24% (almennt) og 11% (fæði, bækur o.fl.). Gögn eru geymd í vafrageymslu (localStorage).'
-                : 'Accounting app compliant with Icelandic law, including Act No. 3/2006 on Annual Accounts. VAT rates: 24% (standard) and 11% (food, books, etc.). Data is stored in browser storage (localStorage).'}
+              {cc.code === 'IS'
+                ? (lang === 'is'
+                    ? 'Bókhalds-forrit í samræmi við íslensk lög, þar með lög nr. 3/2006 um ársreikninga. VSK-hlutföll: 24% (almennt) og 11% (fæði, bækur o.fl.). Gögn eru geymd í vafrageymslu (localStorage).'
+                    : 'Accounting app compliant with Icelandic law, including Act No. 3/2006 on Annual Accounts. VAT rates: 24% (standard) and 11% (food, books, etc.). Data is stored in browser storage (localStorage).')
+                : (lang === 'is'
+                    ? `Einfalt bókhalds- og verkstjórnunarforrit fyrir verktaka. Skatthlutföll (${cc.vatTerm}) eru stillt í Stillingum. Gögn eru geymd í vafrageymslu (localStorage).`
+                    : `Simple accounting & job-management app for contractors. Tax rates (${cc.vatTerm}) are set in Settings. Data is stored in browser storage (localStorage).`)}
             </p>
             <div className="flex flex-wrap gap-3 text-xs">
               <a href="https://jobboks.app/privacy.html" target="_blank" rel="noopener noreferrer"
