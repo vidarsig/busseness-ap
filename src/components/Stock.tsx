@@ -400,7 +400,7 @@ export default function Stock() {
                   <input type="number" min="0" step="0.01" className={inp} value={modal.item.sellPrice ?? 0} onChange={e => setModal(m => ({ ...m, item: { ...m.item!, sellPrice: parseFloat(e.target.value) || 0 } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">VSK %</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{cc.vatTerm} %</label>
                   <select className={sel} value={modal.item.vatRate ?? cc.standardRate} onChange={e => setModal(m => ({ ...m, item: { ...m.item!, vatRate: parseFloat(e.target.value) } }))}>
                     {(cc.vatRates.length ? cc.vatRates : [24, 11, 0]).map(r => <option key={r} value={r}>{r}%</option>)}
                   </select>

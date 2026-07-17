@@ -97,7 +97,7 @@ function RuleModal({ initial, onSave, onClose }: {
 }
 
 export default function AutoRules() {
-  const { data, dispatch, t, lang } = useApp();
+  const { data, dispatch, t, lang, cc } = useApp();
   const [modal, setModal] = useState<{ open: boolean; rule?: CategoryRule }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -198,7 +198,7 @@ export default function AutoRules() {
                 <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">{t('rulePattern')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 hidden sm:table-cell">{t('type')}</th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500">{t('category')}</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 hidden md:table-cell">VSK</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 hidden md:table-cell">{cc.vatTerm}</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500">{t('useCount')}</th>
                 <th className="px-3 py-2.5 w-16"></th>
               </tr>
