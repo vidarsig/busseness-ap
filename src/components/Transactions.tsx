@@ -393,7 +393,9 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   }
 
   function exportCSV() {
-    const header = ['Dagsetning','Lýsing','Tegund','Flokkur','Gjaldmiðill','Upphæð (án VSK)','VSK%','VSK upphæð','Heildarupphæð (ISK)','Tilvísun'];
+    const header = lang === 'is'
+      ? ['Dagsetning','Lýsing','Tegund','Flokkur','Gjaldmiðill',`Upphæð (án ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} upphæð`,'Heildarupphæð (ISK)','Tilvísun']
+      : ['Date','Description','Type','Category','Currency',`Amount (excl. ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} amount`,'Total (ISK)','Reference'];
     const rows = filtered.map(tx => [
       tx.date, tx.description, tx.type, tx.category, tx.currency, tx.amount, tx.vatRate,
       getVATAmountISK(tx).toFixed(0),
