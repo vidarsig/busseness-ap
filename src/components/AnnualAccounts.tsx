@@ -128,8 +128,10 @@ export default function AnnualAccounts() {
 
   // Cash-basis financial position at year-end that actually balances:
   //   Assets (tracked cash + asset keys) = Liabilities (liab keys) + Equity (equity keys + retained earnings).
-  // Cash = every money movement (in +, out −) except those booked onto an asset
-  // key (that key tracks its own balance, so counting it here too would double it).
+  // Cash = every money movement (in +, out −) except (a) entries booked onto an
+  // asset key (that key tracks its own balance, counting it here too would double
+  // it) and (b) DEPRECIATION (afskriftir) — a non-cash expense: it lowers profit
+  // and the fixed-asset book value (book it onto the asset key) but no money moves.
   // Retained earnings = accumulated profit before income tax (a tax accrual isn't a
   // cash movement; actual tax paid is its own transaction). Verified to net to 0
   // when the opening balances balance and entries are complete; any residual is
@@ -137,7 +139,7 @@ export default function AnnualAccounts() {
   const isAssetKey = (id?: string) => !!id && data.accounts.find(a => a.id === id)?.type === 'asset';
   const trackedCash = useMemo(() =>
     data.transactions
-      .filter(tx => new Date(tx.date).getFullYear() <= year && !isAssetKey(tx.accountId))
+      .filter(tx => new Date(tx.date).getFullYear() <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
       .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.transactions, data.accounts, year]);
