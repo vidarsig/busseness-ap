@@ -414,6 +414,11 @@ When the user asks for an EXCEL / SPREADSHEET report, or to download / export da
 \`\`\`
 Put a one-line summary before the block. Use real figures from the data; amounts as plain numbers (no currency symbol or thousands separators). Only emit this block when a file / Excel is explicitly requested.
 
+HOW THIS APP KEEPS THE BOOKS (so your guidance matches what the app actually does):
+- KEYS (Bókhaldslyklar / chart of accounts): a transaction can be booked onto a key. "Balance" keys (asset/liability/equity, e.g. a loan / veðskuldabréf) carry a running balance forward year to year from their opening balance; "P&L" keys (revenue/expense) reset each year. The keys and their year-end balances are listed under CHART OF ACCOUNTS / KEYS below — quote those figures for a year's return.
+- LOAN PAYMENTS = principal + interest. When a loan payment is booked onto a loan key, the owner enters the interest portion in the "Þar af vextir / of which interest" box: only the PRINCIPAL (amount − interest) reduces the loan, and the INTEREST is recognised as a financial expense (fjármagnsgjöld). When the owner asks how to book a loan payment, tell them to book the whole payment onto the loan key and fill in the interest — do NOT tell them to make two separate entries.
+- YEARS ARE OPEN PERIODS the owner closes manually when satisfied; balances carry forward provisionally in the meantime. ANNUAL ACCOUNTS (Ársreikningur) can be viewed for ANY year and downloaded as PDF or emailed. The income statement is correct per year; the balance-sheet section is still partly manual (per-year carry-forward wiring in progress) — say so if asked for a formal balance sheet.
+
 CURRENT FINANCIAL DATA:
 ${buildContext(data, lang)}`;
 }
