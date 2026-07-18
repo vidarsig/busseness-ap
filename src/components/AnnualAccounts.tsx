@@ -1,9 +1,9 @@
-﻿import { useState, useMemo } from 'react';
+﻿import { useState, useMemo, Fragment } from 'react';
 import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, accountBalanceByYear } from '../utils/calculations';
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
-import { BalanceSheetItem } from '../types';
+import { BalanceSheetItem, Account } from '../types';
 
 function newId() {
   return `bs_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -105,6 +105,27 @@ export default function AnnualAccounts() {
   const totalCurrentLiab = getSection('current_liabilities').reduce((s, b) => s + b.amount, 0);
   const totalEquityAndLiab = totalEquity + totalLongTerm + totalCurrentLiab;
 
+  // Carried key balances for the selected year: each balance-sheet key's closing
+  // balance at year-end (opening + booked entries, principal-only for loans),
+  // shown as a per-year informational section. Kept separate from the manual
+  // balance-sheet totals above so a partly-keyed setup can't show a false
+  // "doesn't balance" — full integration needs cash tracking (in progress).
+  const keyClosing = (acc: Account): number => {
+    const rows = accountBalanceByYear(acc, data.transactions);
+    const upto = rows.filter(r => r.year <= year);
+    if (upto.length) return upto[upto.length - 1].closing;
+    return acc.openingYear != null && year >= acc.openingYear ? (acc.openingBalance ?? 0) : 0;
+  };
+  const balanceKeys = useMemo(() => {
+    const rowsFor = (type: Account['type']) => data.accounts
+      .filter(a => a.isActive && a.type === type &&
+        (a.openingBalance != null || data.transactions.some(tx => tx.accountId === a.id)))
+      .map(a => ({ acc: a, closing: keyClosing(a) }));
+    return { asset: rowsFor('asset'), liability: rowsFor('liability'), equity: rowsFor('equity') };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.accounts, data.transactions, year]);
+  const hasKeyBalances = balanceKeys.asset.length + balanceKeys.liability.length + balanceKeys.equity.length > 0;
+
   function handleSaveBs(item: BalanceSheetItem) {
     const exists = bsItems.find(b => b.id === item.id);
     dispatch(exists
@@ -154,6 +175,15 @@ export default function AnnualAccounts() {
     getSection('current_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('currentLiabilities'), totalCurrentLiab));
     rows.push(R(t('equityAndLiabilities'), totalEquityAndLiab));
+    if (hasKeyBalances) {
+      rows.push(SEC(lang === 'is' ? `Staða lykla í árslok ${year}` : `Key balances at year-end ${year}`));
+      ([['asset', t('assets')], ['liability', lang === 'is' ? 'Skuldir' : 'Liabilities'], ['equity', t('equity')]] as [keyof typeof balanceKeys, string][])
+        .forEach(([type, label]) => {
+          if (!balanceKeys[type].length) return;
+          balanceKeys[type].forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+          rows.push(R(`${label} ${lang === 'is' ? 'samtals' : 'total'}`, balanceKeys[type].reduce((s, r) => s + r.closing, 0)));
+        });
+    }
     return {
       columns: [
         { header: t('description'), key: 'label', width: 120 },
@@ -438,6 +468,38 @@ export default function AnnualAccounts() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Carried key balances for the selected year (Bókhaldslyklar) */}
+      {hasKeyBalances && (activeTab === 'balance' || true) && (
+        <div className={`bg-white rounded-xl border border-gray-200 overflow-hidden mb-5 ${activeTab !== 'balance' ? 'hidden print-only' : ''}`}>
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+            <h2 className="font-bold text-gray-900">{lang === 'is' ? `Staða lykla í árslok ${year}` : `Key balances at year-end ${year}`}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Fluttar milli ára úr Bókhaldslyklum (höfuðstóll lána o.fl.).' : 'Carried forward from Bókhaldslyklar (loan principal, etc.).'}</p>
+          </div>
+          <table className="w-full">
+            <tbody className="divide-y divide-gray-50">
+              {([
+                ['asset', t('assets')],
+                ['liability', lang === 'is' ? 'Skuldir' : 'Liabilities'],
+                ['equity', t('equity')],
+              ] as [keyof typeof balanceKeys, string][]).map(([type, label]) =>
+                balanceKeys[type].length > 0 && (
+                  <Fragment key={type}>
+                    <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{label}</td></tr>
+                    {balanceKeys[type].map(({ acc, closing }) => (
+                      <tr key={acc.id}>
+                        <td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td>
+                        <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td>
+                      </tr>
+                    ))}
+                    <BSRow label={`${label} ${lang === 'is' ? 'samtals' : 'total'}`} amount={balanceKeys[type].reduce((s, r) => s + r.closing, 0)} bold />
+                  </Fragment>
+                )
+              )}
+            </tbody>
+          </table>
         </div>
       )}
 
