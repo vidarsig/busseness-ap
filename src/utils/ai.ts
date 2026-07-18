@@ -146,6 +146,7 @@ export async function streamClaude(
   messages: ApiMessage[],
   onChunk: (text: string) => void,
   model = 'claude-sonnet-4-6',
+  webSearch = false,
 ): Promise<void> {
   const res = await fetch(CLAUDE_STREAM_URL, {
     method: 'POST',
@@ -159,6 +160,9 @@ export async function streamClaude(
     body: JSON.stringify({
       model, max_tokens: 2048, stream: true, messages,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      // Live web lookup (tax rules/rates/deadlines) when enabled. max_uses caps
+      // cost per message; the model only searches when it needs current facts.
+      ...(webSearch ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : {}),
     }),
   });
   if (!res.ok) {
@@ -394,6 +398,8 @@ raw rows. Only the most recent individual rows are listed in full; for older
 specific line items, rely on the monthly and counterparty data (and say so if a
 single old row isn't individually listed).
 When the user asks about a specific year, use that year's summary. When comparing years, reference both.
+
+You can SEARCH THE WEB for current facts you don't reliably know — use it ONLY for things like tax rates, VAT/sales-tax rules, filing deadlines and currency rates (especially for ${data.settings.country}). Never put the company's private financial data into a search query. When you use a web result, state the fact plainly and cite the source (e.g. "Heimild: <url>"), and remind the owner to confirm before relying on it — stay by-the-book. Do not search for ordinary questions you can answer from the data above.
 
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).

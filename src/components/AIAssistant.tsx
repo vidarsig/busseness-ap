@@ -199,6 +199,8 @@ export default function AIAssistant() {
             return updated;
           });
         },
+        'claude-sonnet-4-6',
+        true, // allow live web lookup for tax rules/rates/deadlines
       );
       // If the AI chose to remember something, append it to the long-term Memory.
       const { remember } = extractMemory(assistantText);
