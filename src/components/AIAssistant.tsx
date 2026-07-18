@@ -1,12 +1,30 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X, FileSpreadsheet } from 'lucide-react';
+import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
+import { Transaction, TransactionType, Currency } from '../types';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
+
+// A transaction the AI proposes to book (```jobboks-book``` block). The owner
+// must tap "Book" to apply it — the AI proposes, the owner approves.
+interface BookTx {
+  date: string; description: string; type: TransactionType; category: string;
+  amount: number; vatRate?: number; accountNumber?: string; interestAmount?: number;
+}
+function extractBook(content: string): { text: string; book: BookTx[] } {
+  const m = content.match(/```jobboks-book\s*([\s\S]*?)```/);
+  if (!m) return { text: content, book: [] };
+  let book: BookTx[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.transactions)) book = p.transactions;
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), book };
+}
 
 // Pull an AI-generated ```jobboks-excel``` block out of a reply → the cleaned
 // text (without the raw JSON) plus the report to offer as a download.
@@ -21,6 +39,29 @@ function extractExcel(content: string): { text: string; excel: ExcelReport | nul
     }
   } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), excel };
+}
+
+// Pull an AI-generated ```jobboks-remember``` block → the cleaned text plus the
+// facts the AI wants to keep in the long-term Memory.
+function extractMemory(content: string): { text: string; remember: string[] } {
+  const m = content.match(/```jobboks-remember\s*([\s\S]*?)```/);
+  if (!m) return { text: content, remember: [] };
+  let remember: string[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.remember)) remember = p.remember.map((s: unknown) => String(s).trim()).filter(Boolean);
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), remember };
+}
+
+// Append new facts to the Memory text as bullets, skipping ones already there.
+function appendMemory(existing: string, notes: string[]): string {
+  const cur = (existing ?? '').trim();
+  const have = cur.toLowerCase();
+  const additions = notes.filter(n => n && !have.includes(n.toLowerCase()));
+  if (additions.length === 0) return cur;
+  const lines = additions.map(n => `- ${n}`).join('\n');
+  return cur ? `${cur}\n${lines}` : lines;
 }
 
 function renderMarkdown(text: string): string {
@@ -158,7 +199,14 @@ export default function AIAssistant() {
             return updated;
           });
         },
+        'claude-sonnet-4-6',
+        true, // allow live web lookup for tax rules/rates/deadlines
       );
+      // If the AI chose to remember something, append it to the long-term Memory.
+      const { remember } = extractMemory(assistantText);
+      if (remember.length) {
+        dispatch({ type: 'SET_AI_MEMORY', payload: appendMemory(data.aiMemory ?? '', remember) });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('aiError'));
       setMessages(prev => prev.slice(0, -1));
@@ -188,6 +236,33 @@ export default function AIAssistant() {
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  // The owner approved the AI's proposed entries → book them straight into Jobboks.
+  // Then rewrite the message so the block can't be booked twice (persists in aiChat).
+  function approveBook(msgIndex: number, book: BookTx[]) {
+    for (const b of book) {
+      const accountId = b.accountNumber
+        ? data.accounts.find(a => a.number === String(b.accountNumber))?.id
+        : undefined;
+      const tx: Transaction = {
+        id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        date: b.date,
+        description: b.description,
+        category: b.category,
+        type: b.type,
+        amount: Number(b.amount) || 0,
+        currency: (data.settings.defaultCurrency || 'ISK') as Currency,
+        eurToIskRate: 1,
+        vatRate: Number(b.vatRate) || 0,
+        ...(accountId ? { accountId } : {}),
+        ...(b.interestAmount ? { interestAmount: Number(b.interestAmount) } : {}),
+      };
+      dispatch({ type: 'ADD_TRANSACTION', payload: tx });
+    }
+    const done = lang === 'is' ? `✅ Bókað í Jobboks: ${book.length} færsla(r)` : `✅ Booked into Jobboks: ${book.length} entr${book.length === 1 ? 'y' : 'ies'}`;
+    setMessages(prev => prev.map((m, idx) =>
+      idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-book\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
   return (
@@ -274,7 +349,9 @@ export default function AIAssistant() {
                     </div>
                   ) : msg.role === 'assistant' ? (
                     (() => {
-                      const { text, excel } = extractExcel(msg.content);
+                      const { text: afterExcel, excel } = extractExcel(msg.content);
+                      const { text: afterMem, remember } = extractMemory(afterExcel);
+                      const { text, book } = extractBook(afterMem);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -284,6 +361,34 @@ export default function AIAssistant() {
                               <FileSpreadsheet className="w-4 h-4" />
                               {lang === 'is' ? `Sækja Excel (${excel.rows.length} línur)` : `Download Excel (${excel.rows.length} rows)`}
                             </button>
+                          )}
+                          {remember.length > 0 && (
+                            <div className="mt-3 flex items-start gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
+                              <Sparkles className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                              <span>{lang === 'is' ? 'Vistað í minni' : 'Saved to memory'}: {remember.join('; ')}</span>
+                            </div>
+                          )}
+                          {book.length > 0 && (
+                            <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                              <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                {lang === 'is' ? 'Tillaga að bókun — samþykktu til að bóka' : 'Proposed entries — approve to book'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {book.map((b, bi) => (
+                                  <div key={bi} className="px-3 py-1.5 text-xs flex justify-between gap-3">
+                                    <span className="text-gray-700">{b.date} · {b.description} <span className="text-gray-400">({b.category}{b.accountNumber ? ` → ${b.accountNumber}` : ''})</span></span>
+                                    <span className={`font-mono flex-shrink-0 ${b.type === 'income' ? 'text-green-600' : 'text-gray-700'}`}>
+                                      {b.type === 'income' ? '+' : b.type === 'transfer' ? '±' : '−'}{Number(b.amount).toLocaleString('is-IS')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={() => approveBook(i, book)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? `Bóka ${book.length} færslu(r) í Jobboks` : `Book ${book.length} entr${book.length === 1 ? 'y' : 'ies'} into Jobboks`}
+                              </button>
+                            </div>
                           )}
                         </>
                       );

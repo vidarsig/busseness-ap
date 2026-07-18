@@ -14,7 +14,7 @@ export default function Dashboard({ setView, perms }: Props) {
   // Workers (e.g. staff) must not see the company's financial situation.
   const canViewFinancials = !perms || perms.canViewFinancials;
   const canExport = !perms || perms.canExportData;
-  const { data, t, lang, fmtISK } = useApp();
+  const { data, t, lang, fmtISK, cc } = useApp();
   const [backedUp, setBackedUp] = useState(false);
   const [lastBackup, setLastBackup] = useState<string | null>(
     () => localStorage.getItem('jobboks_last_backup'),
@@ -94,7 +94,9 @@ export default function Dashboard({ setView, perms }: Props) {
       border: netProfit >= 0 ? 'border-blue-200' : 'border-red-200',
     },
     {
-      label: vat.netVAT >= 0 ? t('vatOwed') : t('vatRefund'),
+      label: cc.isUSA
+        ? (vat.netVAT >= 0 ? `${cc.vatTerm} owed` : `${cc.vatTerm} refund`)
+        : (vat.netVAT >= 0 ? t('vatOwed') : t('vatRefund')),
       value: fmtISK(Math.abs(vat.netVAT)),
       icon: Receipt,
       color: vat.netVAT >= 0 ? 'text-orange-600' : 'text-green-600',

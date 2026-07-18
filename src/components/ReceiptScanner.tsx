@@ -208,7 +208,7 @@ export default function ReceiptScanner({ onClose }: Props) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">VSK%</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{cc.vatTerm}%</label>
                   <select className={inp} value={form.vatRate ?? 0} onChange={e => setForm(f => ({ ...f, vatRate: parseFloat(e.target.value) }))}>
                     {vatRates.filter((r, i, a) => a.indexOf(r) === i).map(r => <option key={r} value={r}>{r}%</option>)}
                   </select>

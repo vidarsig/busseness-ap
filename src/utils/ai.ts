@@ -1,5 +1,5 @@
 import { AppData } from '../types';
-import { calcProfitLoss, calcVATSummary, filterByYear } from './calculations';
+import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear } from './calculations';
 
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
@@ -146,6 +146,7 @@ export async function streamClaude(
   messages: ApiMessage[],
   onChunk: (text: string) => void,
   model = 'claude-sonnet-4-6',
+  webSearch = false,
 ): Promise<void> {
   const res = await fetch(CLAUDE_STREAM_URL, {
     method: 'POST',
@@ -159,6 +160,9 @@ export async function streamClaude(
     body: JSON.stringify({
       model, max_tokens: 2048, stream: true, messages,
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      // Live web lookup (tax rules/rates/deadlines) when enabled. max_uses caps
+      // cost per message; the model only searches when it needs current facts.
+      ...(webSearch ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : {}),
     }),
   });
   if (!res.ok) {
@@ -310,6 +314,26 @@ export function buildContext(data: AppData, lang: string): string {
     .map(r => `  "${r.pattern}" → ${r.category} (${r.type}, VSK ${r.vatRate}%)`)
     .join('\n');
 
+  // The owner's chart of accounts ("Bókhaldslyklar") — the real keys a
+  // transaction can be booked onto (tx.accountId). Balance-sheet keys carry a
+  // balance forward year to year; revenue/expense keys reset each year.
+  const keysList = (data.accounts ?? [])
+    .filter(a => a.isActive)
+    .slice().sort((a, b) => a.number.localeCompare(b.number))
+    .map(a => {
+      const isBalance = ['asset', 'liability', 'equity'].includes(a.type);
+      const ob = isBalance && a.openingBalance != null && a.openingBalance !== 0
+        ? `, opening ${fmtNum(a.openingBalance)}${a.openingYear ? ` @${a.openingYear}` : ''}` : '';
+      const en = a.nameEn && a.nameEn !== a.name ? ` / ${a.nameEn}` : '';
+      // For balance keys, the closing balance carried into each year (use these
+      // exact figures in a year's return, e.g. the loan still owed at year-end).
+      const byYear = isBalance ? accountBalanceByYear(a, data.transactions) : [];
+      const yearEnd = byYear.length
+        ? `\n      year-end: ${byYear.map(r => `${r.year}=${fmtNum(r.closing)}`).join(', ')}` : '';
+      return `  ${a.number} ${a.name}${en} [${a.type}${isBalance ? ', balance — carries forward' : ', P&L — resets yearly'}${ob}]${yearEnd}`;
+    })
+    .join('\n');
+
   return `COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
 FISCAL YEAR (default): ${data.settings.fiscalYear} | CORPORATE TAX RATE: ${data.settings.corporateTaxRate}%
@@ -329,6 +353,14 @@ CATEGORISATION RULES — how the owner keys purchases/income (pattern found in a
 transaction's description → the key/category it goes on). Use these to answer
 "which key does X go on?" and stay consistent with how the books are kept:
 ${catRules || '  (none set yet — the owner keys transactions manually or via the AI)'}
+
+CHART OF ACCOUNTS / KEYS (Bókhaldslyklar) — the actual keys a transaction can be
+booked onto. "balance" keys (asset/liability/equity, e.g. loans/veðskuldabréf)
+carry their balance forward year to year from the opening figure; "P&L" keys
+(revenue/expense) reset each year. When asked where something should be booked,
+name the exact key from this list; remember per-counterparty booking choices via
+a jobboks-remember block so they stick:
+${keysList || '  (no keys defined yet — see Bókhaldslyklar)'}
 
 COUNTERPARTY INDEX — every party across ALL years (grouped by description, top by
 volume; n=number of transactions, then total in / out, then per-year in/out). Use
@@ -367,6 +399,8 @@ specific line items, rely on the monthly and counterparty data (and say so if a
 single old row isn't individually listed).
 When the user asks about a specific year, use that year's summary. When comparing years, reference both.
 
+You can SEARCH THE WEB to find ESSENTIAL BOOKKEEPING INFORMATION you need to book or verify an entry correctly — this is your own tool for getting a booking right, not a general search for the user. Use it to look up public/registry facts such as: a property's official registration number (fasteignanúmer / property ID), a counterparty's tax code or company ID (kennitala / EIN / VAT number), an official company name or address, a bank/IBAN or invoice reference format, or the applicable tax rate/rule/deadline for ${data.settings.country}. Search ONLY when you actually need such a fact to complete or check a booking. NEVER put the company's private financial data into a query. When you use a web result, state the fact and cite the source (e.g. "Heimild: <url>"), and ask the owner to confirm before it's relied on — stay by-the-book.
+
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
 When asked about specific transactions, reference the data provided.
@@ -374,11 +408,29 @@ ${data.aiMemory && data.aiMemory.trim() ? `
 THINGS TO ALWAYS REMEMBER (the owner told you these — honour them in every reply):
 ${data.aiMemory.trim()}
 ` : ''}
+YOU HAVE A LONG-TERM MEMORY for this company. There is a "Memory" tab on this screen holding facts the owner wants kept; when present they appear above under THINGS TO ALWAYS REMEMBER. NEVER tell the user you can't remember things between chats — you can, through this memory.
+When the user tells you to remember something, OR a durable fact/rule emerges that will matter in future chats (who a counterparty is — e.g. a tenant vs a loan, a bookkeeping key or categorisation rule, a preference), SAVE it by ending your reply with ONE fenced block tagged jobboks-remember containing ONLY JSON of this shape:
+\`\`\`jobboks-remember
+{"remember":["Fylkir ehf. is a loan counterparty (A00346), not a tenant"]}
+\`\`\`
+Reply normally in words first, then add the block; it is saved automatically and the user sees a "Saved to memory" confirmation. Keep each note short and factual, and only emit the block when there is something new worth keeping.
 When the user asks for an EXCEL / SPREADSHEET report, or to download / export data as a file, output ONE fenced code block tagged jobboks-excel that contains ONLY JSON of this shape:
 \`\`\`jobboks-excel
 {"filename":"gjold_2025","sheet":"Gjöld 2025","columns":["Dagsetning","Lýsing","Flokkur","Upphæð"],"rows":[["2025-01-05","Dæmi ehf.","Efniskostnaður",42000]]}
 \`\`\`
 Put a one-line summary before the block. Use real figures from the data; amounts as plain numbers (no currency symbol or thousands separators). Only emit this block when a file / Excel is explicitly requested.
+
+When the owner asks you to BOOK / record / enter / categorise a transaction (or several) INTO the app, output ONE fenced code block tagged jobboks-book containing ONLY JSON of this shape:
+\`\`\`jobboks-book
+{"transactions":[{"date":"2026-07-01","description":"Fylkir ehf. — leiga","type":"income","category":"sala_thjonustu","amount":500000,"vatRate":0,"accountNumber":"","interestAmount":0}]}
+\`\`\`
+Rules: date is YYYY-MM-DD; type is "income" | "expense" | "transfer"; category MUST be one the app already uses (see the transactions, CATEGORISATION RULES and keys above — pick the closest existing one); amount is a plain positive number; vatRate a number; accountNumber is OPTIONAL — the key NUMBER from the chart of accounts to book onto (e.g. "2810" for a loan); interestAmount is OPTIONAL, the interest part of a loan payment. Write a one-line plain-language summary before the block. You are PROPOSING: the owner sees the entries and taps "Book" to apply them into Jobboks — you never need a separate side system. Only emit this block when the owner clearly wants something booked.
+
+HOW THIS APP KEEPS THE BOOKS (so your guidance matches what the app actually does):
+- KEYS (Bókhaldslyklar / chart of accounts): a transaction can be booked onto a key. "Balance" keys (asset/liability/equity, e.g. a loan / veðskuldabréf) carry a running balance forward year to year from their opening balance; "P&L" keys (revenue/expense) reset each year. The keys and their year-end balances are listed under CHART OF ACCOUNTS / KEYS below — quote those figures for a year's return.
+- LOAN PAYMENTS = principal + interest. When a loan payment is booked onto a loan key, the owner enters the interest portion in the "Þar af vextir / of which interest" box: only the PRINCIPAL (amount − interest) reduces the loan, and the INTEREST is recognised as a financial expense (fjármagnsgjöld). When the owner asks how to book a loan payment, tell them to book the whole payment onto the loan key and fill in the interest — do NOT tell them to make two separate entries.
+- DEPRECIATION (afskriftir) is a NON-CASH expense. To depreciate an asset, the owner adds an expense with category "Afskriftir" and books it ONTO the fixed-asset key (e.g. 1200 Varanlegir rekstrarfjármunir): it lowers profit and the asset's book value, but does NOT reduce cash. Advise this when asked about depreciation. There is no automatic depreciation schedule — the owner enters the yearly amount themselves (straight-line = cost ÷ useful life); you may help them work out the amount, but the entry is manual.
+- YEARS ARE OPEN PERIODS the owner closes manually when satisfied; balances carry forward provisionally in the meantime. ANNUAL ACCOUNTS (Ársreikningur) can be viewed for ANY year and downloaded as PDF or emailed. The income statement is correct per year; the balance-sheet section is still partly manual (per-year carry-forward wiring in progress) — say so if asked for a formal balance sheet.
 
 CURRENT FINANCIAL DATA:
 ${buildContext(data, lang)}`;

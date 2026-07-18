@@ -147,9 +147,11 @@ const FAQS = [
 ];
 
 export default function Upgrade() {
-  const { data, dispatch } = useApp();
+  const { data, dispatch, cc } = useApp();
   const lang = data.settings.language;
   const t = (is: string, en: string) => lang === 'is' ? is : en;
+  // Show the jurisdiction tax term (US "Sales Tax") in English marketing copy.
+  const term = (en: string) => en.replace(/\bVAT\b/g, cc.vatTerm);
   const currentPlan = data.settings.plan ?? 'free';
 
   const [annual, setAnnual] = useState(true);
@@ -283,7 +285,7 @@ export default function Upgrade() {
                       ? <Check className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
                       : <X className="w-4 h-4 text-gray-300 flex-shrink-0 mt-0.5" />}
                     <span className={`text-sm leading-snug ${f.included ? 'text-gray-700' : 'text-gray-400'}`}>
-                      {lang === 'is' ? f.textIs : f.text}
+                      {lang === 'is' ? f.textIs : term(f.text)}
                     </span>
                   </div>
                 ))}
@@ -346,7 +348,7 @@ export default function Upgrade() {
           ].map(([labelIs, labelEn, a, b, c], i) => (
             <>
               <div key={`l${i}`} className="text-left text-gray-600 font-medium py-1 border-t border-blue-100">
-                {lang === 'is' ? labelIs : labelEn}
+                {lang === 'is' ? labelIs : term(labelEn as string)}
               </div>
               <div key={`a${i}`} className="py-1 border-t border-blue-100">{a}</div>
               <div key={`b${i}`} className="py-1 border-t border-blue-100 text-gray-400">{b}</div>
@@ -368,7 +370,7 @@ export default function Upgrade() {
         </div>
         <div className="flex items-center gap-1.5">
           <FileText className="w-4 h-4 text-purple-500" />
-          {t('VSK innifalið í verði', 'VAT included')}
+          {t('VSK innifalið í verði', `${cc.vatTerm} included`)}
         </div>
         <div className="flex items-center gap-1.5">
           <Download className="w-4 h-4 text-orange-400" />
@@ -395,7 +397,7 @@ export default function Upgrade() {
               <button onClick={() => setOpenFaq(openFaq === i ? null : i)}
                 className="w-full flex items-center justify-between px-5 py-4 text-left gap-3">
                 <span className="text-sm font-semibold text-gray-900">
-                  {lang === 'is' ? faq.qIs : faq.q}
+                  {lang === 'is' ? faq.qIs : term(faq.q)}
                 </span>
                 {openFaq === i
                   ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -403,7 +405,7 @@ export default function Upgrade() {
               </button>
               {openFaq === i && (
                 <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed border-t border-gray-100 pt-3">
-                  {lang === 'is' ? faq.aIs : faq.a}
+                  {lang === 'is' ? faq.aIs : term(faq.a)}
                 </div>
               )}
             </div>

@@ -392,15 +392,15 @@ export default function Stock() {
                   <input type="number" min="0" step="1" className={inp} value={modal.item.reorderPoint ?? 5} onChange={e => setModal(m => ({ ...m, item: { ...m.item!, reorderPoint: parseFloat(e.target.value) || 0 } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS ? 'Kostnaðarverð (án VSK)' : 'Cost price (excl. VAT)'}</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS ? 'Kostnaðarverð (án VSK)' : `Cost price (excl. ${cc.vatTerm})`}</label>
                   <input type="number" min="0" step="0.01" className={inp} value={modal.item.costPrice ?? 0} onChange={e => setModal(m => ({ ...m, item: { ...m.item!, costPrice: parseFloat(e.target.value) || 0 } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS ? 'Söluverð (án VSK)' : 'Sell price (excl. VAT)'}</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{isIS ? 'Söluverð (án VSK)' : `Sell price (excl. ${cc.vatTerm})`}</label>
                   <input type="number" min="0" step="0.01" className={inp} value={modal.item.sellPrice ?? 0} onChange={e => setModal(m => ({ ...m, item: { ...m.item!, sellPrice: parseFloat(e.target.value) || 0 } }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">VSK %</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{cc.vatTerm} %</label>
                   <select className={sel} value={modal.item.vatRate ?? cc.standardRate} onChange={e => setModal(m => ({ ...m, item: { ...m.item!, vatRate: parseFloat(e.target.value) } }))}>
                     {(cc.vatRates.length ? cc.vatRates : [24, 11, 0]).map(r => <option key={r} value={r}>{r}%</option>)}
                   </select>

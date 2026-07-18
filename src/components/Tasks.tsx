@@ -33,7 +33,7 @@ const LINKED_VIEWS: { value: View | ''; labelIs: string; labelEn: string }[] = [
 function TaskModal({ initial, onSave, onClose }: {
   initial?: Task; onSave: (t: Task) => void; onClose: () => void;
 }) {
-  const { t, lang } = useApp();
+  const { t, lang, cc } = useApp();
   const [title, setTitle] = useState(initial?.title ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [dueDate, setDueDate] = useState(initial?.dueDate ?? '');
@@ -79,7 +79,7 @@ function TaskModal({ initial, onSave, onClose }: {
           <div>
             <label className={lbl}>{t('taskTitle')} *</label>
             <input className={inp} value={title} onChange={e => setTitle(e.target.value)} autoFocus
-              placeholder={lang === 'is' ? 't.d. Skila VSK-skýrslu, Senda reikning...' : 'e.g. Submit VAT return, Send invoice...'} />
+              placeholder={lang === 'is' ? 't.d. Skila VSK-skýrslu, Senda reikning...' : `e.g. Submit ${cc.vatTerm} return, Send invoice...`} />
           </div>
           <div>
             <label className={lbl}>{t('taskNote')}</label>

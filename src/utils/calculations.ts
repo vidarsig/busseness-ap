@@ -1,4 +1,4 @@
-import { Transaction, Currency } from '../types';
+import { Transaction, Currency, Account } from '../types';
 
 export function toISK(amount: number, currency: Currency, rate: number): number {
   return currency === 'ISK' ? amount : amount * rate;
@@ -14,6 +14,39 @@ export function calcAmountIncVAT(amountExVat: number, vatRate: number): number {
 
 export function getTransactionISK(t: Transaction): number {
   return toISK(t.amount, t.currency, t.eurToIskRate);
+}
+
+// Carry-forward: a balance-sheet key's closing balance at the end of each year =
+// opening balance + the entries booked onto it (money in +, money out −), rolled
+// forward so each year's close is the next year's open. By-the-book normal
+// balances: assets/liabilities/equity all move with the cash booked to the key
+// (repayment out → liability down; borrowing in → up). NOTE: 'transfer' entries
+// are treated as money OUT; interest vs principal is not split (owner books the
+// principal portion onto the key). Returns [] for P&L keys / keys with no data.
+export function accountBalanceByYear(account: Account, transactions: Transaction[]): { year: number; closing: number }[] {
+  const movs = transactions.filter(tx => tx.accountId === account.id);
+  if (!movs.length && account.openingBalance == null) return [];
+  const movYears = movs.map(tx => new Date(tx.date).getFullYear());
+  const start = account.openingYear ?? (movYears.length ? Math.min(...movYears) : NaN);
+  const end = movYears.length ? Math.max(start, ...movYears) : start;
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  const rows: { year: number; closing: number }[] = [];
+  let bal = account.openingBalance ?? 0;
+  for (let y = start; y <= end; y++) {
+    const net = movs
+      .filter(tx => new Date(tx.date).getFullYear() === y)
+      .reduce((s, tx) => {
+        const gross = getTransactionISK(tx);
+        // A loan payment's interest is a cost, not a reduction of the loan — only
+        // the principal (gross − interest) moves the balance. Money in (borrowing)
+        // increases the balance by the full amount.
+        const interest = tx.interestAmount ? toISK(tx.interestAmount, tx.currency, tx.eurToIskRate) : 0;
+        return s + (tx.type === 'income' ? gross : -(gross - interest));
+      }, 0);
+    bal += net;
+    rows.push({ year: y, closing: bal });
+  }
+  return rows;
 }
 
 export function getVATAmountISK(t: Transaction): number {
@@ -116,7 +149,11 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const fagthjonusta = sumCat('expense', 'fagthjonusta');
   const vorur = sumCat('expense', 'vorur');
   const afskriftir = sumCat('expense', 'afskriftir');
-  const fjarmagnsgjold = sumCat('expense', 'fjarmagnsgjold');
+  // Interest portion of loan payments (entered on the payment, whatever category
+  // it's booked under) is a financial expense — recognise it here so profit is
+  // correct even though the payment itself is a balance-sheet/transfer entry.
+  const loanInterest = transactions.reduce((s, t) => s + (t.interestAmount ? toISK(t.interestAmount, t.currency, t.eurToIskRate) : 0), 0);
+  const fjarmagnsgjold = sumCat('expense', 'fjarmagnsgjold') + loanInterest;
   const adrir = sumCat('expense', 'adrir_rekstrargjold');
 
   const totalOperatingExpenses = laun + launatengd + husaleiga + simagjold +

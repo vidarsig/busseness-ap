@@ -491,7 +491,7 @@ export default function BankImport() {
                   <th className="px-2 py-2 text-right text-gray-500">{lang === 'is' ? 'Upphæð' : 'Amount'}</th>
                   <th className="px-2 py-2 text-left text-gray-500">{t('type')}</th>
                   <th className="px-2 py-2 text-left text-gray-500">{t('category')}</th>
-                  <th className="px-2 py-2 text-left text-gray-500">VSK%</th>
+                  <th className="px-2 py-2 text-left text-gray-500">{cc.vatTerm}%</th>
                   <th className="px-2 py-2 w-8"></th>
                 </tr>
               </thead>

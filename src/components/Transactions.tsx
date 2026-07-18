@@ -26,6 +26,7 @@ const EMPTY_FORM: Omit<Transaction, 'id'> = {
   reference: '',
   receiptNote: '',
   jobId: '',
+  accountId: '',
 };
 
 function newId() {
@@ -48,6 +49,10 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   const vatAmount = form.amount * (form.vatRate / 100);
   const totalWithVat = form.amount + vatAmount;
   const iskTotal = form.currency === 'ISK' ? totalWithVat : totalWithVat * form.eurToIskRate;
+
+  // US reads "Sales Tax", not "VAT"; other languages keep their own translation.
+  const exVatLabel = cc.isUSA ? `Amount excl. ${cc.vatTerm}` : t('amountExVat');
+  const incVatLabel = cc.isUSA ? `Amount incl. ${cc.vatTerm}` : t('amountIncVat');
 
   const categories = form.type === 'income' ? INCOME_CATEGORIES : form.type === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES;
 
@@ -146,6 +151,32 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
             </div>
           )}
 
+          {data.accounts.filter(a => a.isActive).length > 0 && (
+            <div>
+              <label className={labelCls}>{lang === 'is' ? 'Bókhaldslykill (valfrjálst)' : 'Key / account (optional)'}</label>
+              <select className={inputCls} value={form.accountId ?? ''} onChange={e => set('accountId', e.target.value)}>
+                <option value="">{lang === 'is' ? 'Enginn lykill' : 'No key'}</option>
+                {data.accounts.filter(a => a.isActive)
+                  .sort((a, b) => a.number.localeCompare(b.number))
+                  .map(a => (
+                    <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
+                  ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Bókar færsluna á tiltekinn lykil (t.d. veðskuldabréf, leigutekjur).' : 'Books this entry onto a specific key (e.g. a loan, rent income).'}</p>
+            </div>
+          )}
+
+          {data.accounts.find(a => a.id === form.accountId)?.type === 'liability' && form.type !== 'income' && (
+            <div>
+              <label className={labelCls}>{lang === 'is' ? 'Þar af vextir (valfrjálst)' : 'Of which interest (optional)'}</label>
+              <input type="number" inputMode="decimal" className={inputCls} placeholder="0"
+                value={form.interestAmount ?? ''}
+                onChange={e => set('interestAmount', e.target.value === '' ? undefined : Number(e.target.value))}
+                min={0} />
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Aðeins höfuðstóllinn (upphæð − vextir) lækkar lánið; vextir teljast fjármagnsgjöld.' : 'Only the principal (amount − interest) reduces the loan; interest counts as a financial expense.'}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>{t('currency')}</label>
@@ -165,7 +196,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>{t('amountExVat')} ({form.currency})</label>
+              <label className={labelCls}>{exVatLabel} ({form.currency})</label>
               <input type="number" className={inputCls} value={form.amount || ''}
                 onChange={e => set('amount', parseFloat(e.target.value) || 0)}
                 min={0} step={form.currency === 'ISK' ? '1' : '0.01'} required />
@@ -182,7 +213,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
           )}
 
           <div>
-            <label className={labelCls}>{t('vatRate')}</label>
+            <label className={labelCls}>{cc.isUSA ? `${cc.vatTerm} Rate` : t('vatRate')}</label>
             <select className={inputCls} value={form.vatRate}
               onChange={e => set('vatRate', parseFloat(e.target.value))}>
               {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
@@ -207,17 +238,17 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
           {form.amount > 0 && (
             <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
               <div className="flex justify-between text-gray-600">
-                <span>{t('amountExVat')}</span>
+                <span>{exVatLabel}</span>
                 <span className="font-mono">{formatCurrency(form.amount, form.currency)}</span>
               </div>
               {form.vatRate > 0 && (
                 <div className="flex justify-between text-gray-600">
-                  <span>VSK {form.vatRate}%</span>
+                  <span>{cc.vatTerm} {form.vatRate}%</span>
                   <span className="font-mono">{formatCurrency(vatAmount, form.currency)}</span>
                 </div>
               )}
               <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-200 pt-1.5">
-                <span>{t('amountIncVat')}</span>
+                <span>{incVatLabel}</span>
                 <span className="font-mono">{formatCurrency(totalWithVat, form.currency)}</span>
               </div>
               {form.currency !== 'ISK' && (
@@ -246,7 +277,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 }
 
 export default function Transactions({ initialFilter, onFilterConsumed }: { initialFilter?: { category?: string; year?: number } | null; onFilterConsumed?: () => void } = {}) {
-  const { data, dispatch, t, lang } = useApp();
+  const { data, dispatch, t, lang, cc } = useApp();
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -285,6 +316,9 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
+  const [filterName, setFilterName] = useState('');
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   // When arriving from a drill-down (e.g. clicking a key in Skýrslur), pre-filter
@@ -313,10 +347,17 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         if (dateTo && tx.date > dateTo) return false;
         if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
           !tx.reference?.toLowerCase().includes(search.toLowerCase())) return false;
+        if (filterName) {
+          const q = filterName.toLowerCase();
+          if (!tx.description.toLowerCase().includes(q) && !tx.reference?.toLowerCase().includes(q)) return false;
+        }
+        const min = parseFloat(amountMin), max = parseFloat(amountMax);
+        if (!isNaN(min) && tx.amount < min) return false;
+        if (!isNaN(max) && tx.amount > max) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filterType, filterYear, filterCategory, dateFrom, dateTo, search]);
+  }, [data.transactions, filterType, filterYear, filterCategory, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
 
   // Keys (categories) actually in use, so the filter only lists real ones.
   const usedCategories = useMemo(() =>
@@ -341,7 +382,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // bank import). Reset back to the first page whenever the filters change.
   const PAGE = 150;
   const [visibleCount, setVisibleCount] = useState(PAGE);
-  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, dateFrom, dateTo, search]);
+  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
   const paged = filtered.slice(0, visibleCount);
 
   function handleSave(tx: Transaction) {
@@ -365,8 +406,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     { header: lang === 'is' ? 'Flokkur' : 'Category',          key: 'cat',      width: 22 },
     { header: lang === 'is' ? 'Gjaldmiðill' : 'Currency',      key: 'cur',      width: 10 },
     { header: lang === 'is' ? 'Upphæð' : 'Amount',             key: 'amount',   width: 14 },
-    { header: 'VSK%',                                           key: 'vat',      width: 8  },
-    { header: lang === 'is' ? 'VSK (ISK)' : 'VAT (ISK)',       key: 'vatamt',   width: 14 },
+    { header: `${cc.vatTerm}%`,                                 key: 'vat',      width: 8  },
+    { header: `${cc.vatTerm} (ISK)`,                            key: 'vatamt',   width: 14 },
     { header: lang === 'is' ? 'Heild (ISK)' : 'Total (ISK)',   key: 'total',    width: 16 },
     { header: lang === 'is' ? 'Tilvísun' : 'Reference',        key: 'ref',      width: 18 },
   ];
@@ -389,7 +430,9 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   }
 
   function exportCSV() {
-    const header = ['Dagsetning','Lýsing','Tegund','Flokkur','Gjaldmiðill','Upphæð (án VSK)','VSK%','VSK upphæð','Heildarupphæð (ISK)','Tilvísun'];
+    const header = lang === 'is'
+      ? ['Dagsetning','Lýsing','Tegund','Flokkur','Gjaldmiðill',`Upphæð (án ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} upphæð`,'Heildarupphæð (ISK)','Tilvísun']
+      : ['Date','Description','Type','Category','Currency',`Amount (excl. ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} amount`,'Total (ISK)','Reference'];
     const rows = filtered.map(tx => [
       tx.date, tx.description, tx.type, tx.category, tx.currency, tx.amount, tx.vatRate,
       getVATAmountISK(tx).toFixed(0),
@@ -497,7 +540,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <button
             onClick={() => setShowFilters(f => !f)}
             className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
-              showFilters || filterType !== 'all' || filterYear !== 'all' || dateFrom || dateTo
+              showFilters || filterType !== 'all' || filterYear !== 'all' || filterCategory !== 'all' || dateFrom || dateTo || filterName || amountMin || amountMax
                 ? 'bg-blue-50 border-blue-300 text-blue-700'
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
@@ -547,6 +590,26 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               {(dateFrom || dateTo) && (
                 <button onClick={() => { setDateFrom(''); setDateTo(''); }}
                   title={lang === 'is' ? 'Hreinsa dagsetningar' : 'Clear dates'}
+                  className="text-gray-400 hover:text-gray-600 p-1"><X className="w-4 h-4" /></button>
+              )}
+            </div>
+            <input type="text" value={filterName} onChange={e => setFilterName(e.target.value)}
+              placeholder={lang === 'is' ? 'Nafn' : 'Name'}
+              title={lang === 'is' ? 'Nafn viðskiptaaðila' : 'Counterparty name'}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <div className="flex items-center gap-1.5">
+              <input type="number" inputMode="decimal" value={amountMin} onChange={e => setAmountMin(e.target.value)}
+                placeholder={lang === 'is' ? 'Lágm. upphæð' : 'Min amount'}
+                title={lang === 'is' ? 'Lágmarksupphæð' : 'Minimum amount'}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <span className="text-gray-400 text-sm">–</span>
+              <input type="number" inputMode="decimal" value={amountMax} onChange={e => setAmountMax(e.target.value)}
+                placeholder={lang === 'is' ? 'Hám. upphæð' : 'Max amount'}
+                title={lang === 'is' ? 'Hámarksupphæð' : 'Maximum amount'}
+                className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              {(amountMin || amountMax) && (
+                <button onClick={() => { setAmountMin(''); setAmountMax(''); }}
+                  title={lang === 'is' ? 'Hreinsa upphæð' : 'Clear amount'}
                   className="text-gray-400 hover:text-gray-600 p-1"><X className="w-4 h-4" /></button>
               )}
             </div>
@@ -615,7 +678,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                   <span className="text-xs text-gray-400">{formatDate(tx.date, lang)}</span>
                   <span className="text-xs text-gray-400">·</span>
                   <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{t(tx.category as never)}</span>
-                  {tx.vatRate > 0 && <span className="text-xs text-gray-400">VSK {tx.vatRate}%</span>}
+                  {tx.accountId && (() => { const acc = data.accounts.find(a => a.id === tx.accountId); return acc ? <span className="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</span> : null; })()}
+                  {tx.vatRate > 0 && <span className="text-xs text-gray-400">{cc.vatTerm} {tx.vatRate}%</span>}
                   {tx.currency === 'EUR' && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">EUR</span>}
                 </div>
                 {tx.reference && <p className="text-xs text-gray-400 mt-0.5">{tx.reference}</p>}
@@ -658,8 +722,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 <th className={thCls}>{t('description')}</th>
                 <th className={thCls}>{t('category')}</th>
                 <th className={thCls}>{t('type')}</th>
-                <th className={`${thCls} text-right`}>{t('amountExVat')}</th>
-                <th className={`${thCls} text-right`}>VSK%</th>
+                <th className={`${thCls} text-right`}>{cc.isUSA ? `Amount excl. ${cc.vatTerm}` : t('amountExVat')}</th>
+                <th className={`${thCls} text-right`}>{cc.vatTerm}%</th>
                 <th className={`${thCls} text-right`}>{t('iskAmount')}</th>
                 <th className={thCls}></th>
               </tr>

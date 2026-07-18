@@ -71,13 +71,13 @@ function RecurringModal({ initial, onSave, onClose }: {
               </select>
             </div>
             <div>
-              <label className={lbl}>{t('amountExVat')} ({form.currency})</label>
+              <label className={lbl}>{cc.isUSA ? `Amount excl. ${cc.vatTerm}` : t('amountExVat')} ({form.currency})</label>
               <input type="number" className={inp} value={form.amount || ''} onChange={e => set('amount', parseFloat(e.target.value)||0)} min={0} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={lbl}>{t('vatRate')}</label>
+              <label className={lbl}>{cc.isUSA ? `${cc.vatTerm} Rate` : t('vatRate')}</label>
               <select className={inp} value={form.vatRate} onChange={e => set('vatRate', parseFloat(e.target.value))}>
                 {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
                   .filter((r, i, arr) => arr.indexOf(r) === i)
