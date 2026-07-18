@@ -25,7 +25,10 @@ function EmployeeModal({ initial, onSave, onClose }: {
   const [kennitala, setKennitala] = useState(initial?.kennitala ?? '');
   const [monthlySalary, setMonthlySalary] = useState(initial?.monthlySalary ?? 0);
   const [hourlyRate, setHourlyRate] = useState(initial?.hourlyRate ?? 0);
-  const [allowancePct, setAllowancePct] = useState(initial?.personalAllowancePct ?? 100);
+  // Persónuafsláttur only applies once the employer registers the employee's tax
+  // card (skattkort). Default 0 → no card registered yet = full withholding, the
+  // legally safe side; the employer sets the % from the card when the worker starts.
+  const [allowancePct, setAllowancePct] = useState(initial?.personalAllowancePct ?? 0);
   const [payFrequency, setPayFrequency] = useState<'monthly' | 'weekly'>(initial?.payFrequency ?? 'monthly');
   const [active, setActive] = useState(initial?.active ?? true);
   const [notes, setNotes] = useState(initial?.notes ?? '');
@@ -72,9 +75,9 @@ function EmployeeModal({ initial, onSave, onClose }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={lbl}>{lang === 'is' ? 'Persónuafsláttur (%)' : 'Personal tax credit (%)'}</label>
+              <label className={lbl}>{lang === 'is' ? 'Skattkort — persónuafsláttur (%)' : 'Tax card — personal credit (%)'}</label>
               <input type="number" className={inp} value={allowancePct} onChange={e => setAllowancePct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))} min={0} max={100} step={1} />
-              <p className="text-[11px] text-gray-400 mt-1">{lang === 'is' ? 'Hlutfall nýtt hjá þér (oft 100%)' : 'Share used here (often 100%)'}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{lang === 'is' ? 'Skráðu skattkort starfsmanns: 100% fullt, 0% ef ekkert skattkort (t.d. nýtt á lífeyri).' : "Register the employee's tax card: 100% full, 0% if none (e.g. used on a pension)."}</p>
             </div>
             <div>
               <label className={lbl}>{lang === 'is' ? 'Greiðslutíðni' : 'Pay frequency'}</label>
