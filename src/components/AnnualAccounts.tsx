@@ -1,7 +1,7 @@
-﻿import { useState, useMemo, Fragment } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss, accountBalanceByYear } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, accountBalanceByYear, getTransactionISK } from '../utils/calculations';
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem, Account } from '../types';
 
@@ -126,6 +126,33 @@ export default function AnnualAccounts() {
   }, [data.accounts, data.transactions, year]);
   const hasKeyBalances = balanceKeys.asset.length + balanceKeys.liability.length + balanceKeys.equity.length > 0;
 
+  // Cash-basis financial position at year-end that actually balances:
+  //   Assets (tracked cash + asset keys) = Liabilities (liab keys) + Equity (equity keys + retained earnings).
+  // Cash = every money movement (in +, out −) except those booked onto an asset
+  // key (that key tracks its own balance, so counting it here too would double it).
+  // Retained earnings = accumulated profit before income tax (a tax accrual isn't a
+  // cash movement; actual tax paid is its own transaction). Verified to net to 0
+  // when the opening balances balance and entries are complete; any residual is
+  // shown honestly so the owner can complete opening balances / fix an entry.
+  const isAssetKey = (id?: string) => !!id && data.accounts.find(a => a.id === id)?.type === 'asset';
+  const trackedCash = useMemo(() =>
+    data.transactions
+      .filter(tx => new Date(tx.date).getFullYear() <= year && !isAssetKey(tx.accountId))
+      .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data.transactions, data.accounts, year]);
+  const retainedEarnings = useMemo(() => {
+    const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
+    return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate).profitBeforeTax, 0);
+  }, [data.transactions, year, data.settings.corporateTaxRate]);
+  const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
+  const posAssets = trackedCash + posAssetKeys;
+  const posLiab = balanceKeys.liability.reduce((s, r) => s + r.closing, 0);
+  const posEquityKeys = balanceKeys.equity.reduce((s, r) => s + r.closing, 0);
+  const posEquity = posEquityKeys + retainedEarnings;
+  const posDiff = posAssets - posLiab - posEquity;
+  const hasPosition = hasKeyBalances || Math.abs(trackedCash) > 0.5 || Math.abs(retainedEarnings) > 0.5;
+
   function handleSaveBs(item: BalanceSheetItem) {
     const exists = bsItems.find(b => b.id === item.id);
     dispatch(exists
@@ -175,14 +202,18 @@ export default function AnnualAccounts() {
     getSection('current_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('currentLiabilities'), totalCurrentLiab));
     rows.push(R(t('equityAndLiabilities'), totalEquityAndLiab));
-    if (hasKeyBalances) {
-      rows.push(SEC(lang === 'is' ? `Staða lykla í árslok ${year}` : `Key balances at year-end ${year}`));
-      ([['asset', t('assets')], ['liability', lang === 'is' ? 'Skuldir' : 'Liabilities'], ['equity', t('equity')]] as [keyof typeof balanceKeys, string][])
-        .forEach(([type, label]) => {
-          if (!balanceKeys[type].length) return;
-          balanceKeys[type].forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
-          rows.push(R(`${label} ${lang === 'is' ? 'samtals' : 'total'}`, balanceKeys[type].reduce((s, r) => s + r.closing, 0)));
-        });
+    if (hasPosition) {
+      rows.push(SEC(lang === 'is' ? `Fjárhagsstaða í árslok ${year}` : `Financial position at year-end ${year}`));
+      rows.push(R(lang === 'is' ? 'Handbært fé (reiknað)' : 'Cash (calculated)', trackedCash));
+      balanceKeys.asset.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+      rows.push(R(t('totalAssets'), posAssets));
+      balanceKeys.liability.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+      rows.push(R(lang === 'is' ? 'Skuldir samtals' : 'Total liabilities', posLiab));
+      balanceKeys.equity.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+      rows.push(R(lang === 'is' ? 'Uppsafnaður hagnaður (fyrir skatt)' : 'Accumulated profit (before tax)', retainedEarnings));
+      rows.push(R(t('totalEquity'), posEquity));
+      rows.push(R(lang === 'is' ? 'Skuldir og eigið fé' : 'Liabilities and equity', posLiab + posEquity));
+      if (Math.abs(posDiff) > 1) rows.push(R(lang === 'is' ? 'Mismunur (vantar opnunarstöður)' : 'Difference (opening balances incomplete)', posDiff));
     }
     return {
       columns: [
@@ -471,35 +502,48 @@ export default function AnnualAccounts() {
         </div>
       )}
 
-      {/* Carried key balances for the selected year (Bókhaldslyklar) */}
-      {hasKeyBalances && (activeTab === 'balance' || true) && (
+      {/* Per-year financial position from the keys + cash + retained earnings */}
+      {hasPosition && (activeTab === 'balance' || true) && (
         <div className={`bg-white rounded-xl border border-gray-200 overflow-hidden mb-5 ${activeTab !== 'balance' ? 'hidden print-only' : ''}`}>
           <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h2 className="font-bold text-gray-900">{lang === 'is' ? `Staða lykla í árslok ${year}` : `Key balances at year-end ${year}`}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Fluttar milli ára úr Bókhaldslyklum (höfuðstóll lána o.fl.).' : 'Carried forward from Bókhaldslyklar (loan principal, etc.).'}</p>
+            <h2 className="font-bold text-gray-900">{lang === 'is' ? `Fjárhagsstaða í árslok ${year}` : `Financial position at year-end ${year}`}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Reiknuð úr Bókhaldslyklum, handbæru fé og uppsöfnuðum hagnaði — flyst milli ára.' : 'From your keys, cash and accumulated profit — carried year to year.'}</p>
           </div>
           <table className="w-full">
             <tbody className="divide-y divide-gray-50">
-              {([
-                ['asset', t('assets')],
-                ['liability', lang === 'is' ? 'Skuldir' : 'Liabilities'],
-                ['equity', t('equity')],
-              ] as [keyof typeof balanceKeys, string][]).map(([type, label]) =>
-                balanceKeys[type].length > 0 && (
-                  <Fragment key={type}>
-                    <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{label}</td></tr>
-                    {balanceKeys[type].map(({ acc, closing }) => (
-                      <tr key={acc.id}>
-                        <td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td>
-                        <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td>
-                      </tr>
-                    ))}
-                    <BSRow label={`${label} ${lang === 'is' ? 'samtals' : 'total'}`} amount={balanceKeys[type].reduce((s, r) => s + r.closing, 0)} bold />
-                  </Fragment>
-                )
-              )}
+              <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('assets')}</td></tr>
+              <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Handbært fé (reiknað)' : 'Cash (calculated)'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(trackedCash)}</td></tr>
+              {balanceKeys.asset.map(({ acc, closing }) => (
+                <tr key={acc.id}><td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td></tr>
+              ))}
+              <BSRow label={t('totalAssets')} amount={posAssets} bold />
+
+              <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{lang === 'is' ? 'Skuldir' : 'Liabilities'}</td></tr>
+              {balanceKeys.liability.map(({ acc, closing }) => (
+                <tr key={acc.id}><td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td></tr>
+              ))}
+              <BSRow label={lang === 'is' ? 'Skuldir samtals' : 'Total liabilities'} amount={posLiab} bold />
+
+              <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('equity')}</td></tr>
+              {balanceKeys.equity.map(({ acc, closing }) => (
+                <tr key={acc.id}><td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td></tr>
+              ))}
+              <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Uppsafnaður hagnaður (fyrir skatt)' : 'Accumulated profit (before tax)'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(retainedEarnings)}</td></tr>
+              <BSRow label={t('totalEquity')} amount={posEquity} bold />
+              <BSRow label={lang === 'is' ? 'Skuldir og eigið fé' : 'Liabilities and equity'} amount={posLiab + posEquity} bold />
             </tbody>
           </table>
+          {Math.abs(posDiff) > 1 ? (
+            <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-xs text-yellow-800">
+              {lang === 'is'
+                ? `Mismunur ${fmtISK(posDiff)} — opnunarstöður vantar eða færsla er óflokkuð. Skráðu opnunarstöðu (t.d. eigið fé eða handbært fé á móti lánum) svo staðan jafnist.`
+                : `Off by ${fmtISK(posDiff)} — opening balances are incomplete or an entry is unclassified. Add the opening balance (e.g. equity or cash matching the loans) so it balances.`}
+            </div>
+          ) : (
+            <div className="px-4 py-2 bg-green-50 border-t border-green-200 text-xs text-green-700">
+              {lang === 'is' ? '✓ Efnahagur jafnast' : '✓ Balances'}
+            </div>
+          )}
         </div>
       )}
 
