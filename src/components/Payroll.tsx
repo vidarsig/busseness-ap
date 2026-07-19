@@ -355,6 +355,11 @@ export default function Payroll() {
   const [filterMonth, setFilterMonth] = useState(thisMonth());
 
   const employees = data.employees ?? [];
+  // Payroll is only correct where an engine exists — Iceland, US, Canada. For any
+  // other country we hide it rather than run the wrong (Icelandic) math. This is
+  // the launch gate: add a country's engine, or payroll stays off there.
+  const payrollCountry = data.settings.country;
+  const payrollSupported = payrollCountry === 'IS' || isIntlPayroll(payrollCountry);
 
   function handleSaveEmployee(emp: Employee) {
     dispatch(employees.find(e => e.id === emp.id)
@@ -442,12 +447,35 @@ export default function Payroll() {
 
   const fmt = (n: number) => fmtCur(n);
 
+  if (!payrollSupported) {
+    return (
+      <div>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">{t('payroll')}</h1>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center max-w-lg">
+          <UserCog className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-gray-800 mb-1">
+            {lang === 'is' ? 'Launakerfi er ekki tilbúið fyrir þetta land enn' : 'Payroll isn’t available for your country yet'}
+          </p>
+          <p className="text-xs text-gray-600">
+            {lang === 'is'
+              ? 'Launaútreikningur er í boði fyrir Ísland, Bandaríkin og Kanada. Bókhald, reikningar og skattar virka áfram fyrir öll lönd.'
+              : 'Payroll is built for Iceland, the US and Canada. Bookkeeping, invoicing and taxes keep working for every country.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const payrollSubtitle = payrollCountry === 'US' ? 'Payroll with US tax rules (FICA, federal & state)'
+    : payrollCountry === 'CA' ? 'Payroll with Canadian tax rules (CPP, EI, federal & provincial)'
+    : (lang === 'is' ? 'Launaútreikningur með íslenskum skattareglum' : 'Payroll with Icelandic tax rules');
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('payroll')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Launaútreikningur með íslenskum skattareglum' : 'Payroll with Icelandic tax rules'}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{payrollSubtitle}</p>
         </div>
         <div className="flex gap-2">
           {tab === 'runs' && filtered.length > 0 && (<>
