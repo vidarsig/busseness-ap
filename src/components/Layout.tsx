@@ -125,6 +125,8 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
         {sections.map((section, si) => {
           const items = section.items.filter(item =>
             (item.id !== 'users' || supabaseConfigured) &&
+            // Payroll only where an engine exists (Iceland, US, Canada).
+            (item.id !== 'payroll' || data.settings.country === 'IS' || data.settings.country === 'US' || data.settings.country === 'CA') &&
             canAccessView(item.id, perms ?? null),
           );
           if (items.length === 0) return null;

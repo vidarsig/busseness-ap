@@ -217,7 +217,9 @@ export interface Employee {
   kennitala?: string;
   monthlySalary: number; // agreed gross monthly salary
   hourlyRate: number;    // agreed gross hourly rate
-  personalAllowancePct?: number;        // % of persónuafsláttur to apply (default 100)
+  personalAllowancePct?: number;        // IS: % of persónuafsláttur to apply (from the tax card; 0 = none)
+  incomeTaxPct?: number;                // US/CA: employee's federal income-tax withholding % (from W-4 / TD1)
+  secondaryTaxPct?: number;             // US: state income-tax % · CA: provincial income-tax %
   payFrequency?: 'monthly' | 'weekly';  // pay period — weekly prorates the allowance (default monthly)
   active: boolean;
   notes?: string;

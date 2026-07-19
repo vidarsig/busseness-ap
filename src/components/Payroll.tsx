@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, X, Users, Download, FileText, FileSpreadsheet, Us
 import { useApp } from '../contexts/AppContext';
 import { PayrollEntry, Employee } from '../types';
 import { exportPDF, exportExcel } from '../utils/exports';
+import { isIntlPayroll, calcIntlPayroll } from '../utils/payrollIntl';
 import { isPayrollLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 
@@ -20,7 +21,9 @@ function newEmpId() { return `emp_${Date.now()}_${Math.random().toString(36).sli
 function EmployeeModal({ initial, onSave, onClose }: {
   initial?: Employee; onSave: (e: Employee) => void; onClose: () => void;
 }) {
-  const { t, lang } = useApp();
+  const { t, lang, data } = useApp();
+  const country = data.settings.country;
+  const intl = isIntlPayroll(country); // US / Canada use FICA / CPP-EI, not persónuafsláttur
   const [name, setName] = useState(initial?.name ?? '');
   const [kennitala, setKennitala] = useState(initial?.kennitala ?? '');
   const [monthlySalary, setMonthlySalary] = useState(initial?.monthlySalary ?? 0);
@@ -29,6 +32,9 @@ function EmployeeModal({ initial, onSave, onClose }: {
   // card (skattkort). Default 0 → no card registered yet = full withholding, the
   // legally safe side; the employer sets the % from the card when the worker starts.
   const [allowancePct, setAllowancePct] = useState(initial?.personalAllowancePct ?? 0);
+  // US/CA: the employee's income-tax withholding % from their W-4 / TD1.
+  const [incomeTaxPct, setIncomeTaxPct] = useState(initial?.incomeTaxPct ?? 0);
+  const [secondaryTaxPct, setSecondaryTaxPct] = useState(initial?.secondaryTaxPct ?? 0);
   const [payFrequency, setPayFrequency] = useState<'monthly' | 'weekly'>(initial?.payFrequency ?? 'monthly');
   const [active, setActive] = useState(initial?.active ?? true);
   const [notes, setNotes] = useState(initial?.notes ?? '');
@@ -40,7 +46,8 @@ function EmployeeModal({ initial, onSave, onClose }: {
   function handleSave() {
     onSave({
       id: initial?.id ?? newEmpId(), name, kennitala: kennitala || undefined,
-      monthlySalary, hourlyRate, personalAllowancePct: allowancePct, payFrequency,
+      monthlySalary, hourlyRate, personalAllowancePct: allowancePct,
+      incomeTaxPct, secondaryTaxPct, payFrequency,
       active, notes: notes || undefined,
     });
   }
@@ -73,20 +80,35 @@ function EmployeeModal({ initial, onSave, onClose }: {
               <input type="number" className={inp} value={hourlyRate || ''} onChange={e => setHourlyRate(parseInt(e.target.value) || 0)} min={0} step={50} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>{lang === 'is' ? 'Skattkort — persónuafsláttur (%)' : 'Tax card — personal credit (%)'}</label>
-              <input type="number" className={inp} value={allowancePct} onChange={e => setAllowancePct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))} min={0} max={100} step={1} />
-              <p className="text-[11px] text-gray-400 mt-1">{lang === 'is' ? 'Skráðu skattkort starfsmanns: 100% fullt, 0% ef ekkert skattkort (t.d. nýtt á lífeyri).' : "Register the employee's tax card: 100% full, 0% if none (e.g. used on a pension)."}</p>
+          {intl ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>{country === 'CA' ? 'Federal tax %' : 'Federal income tax %'}</label>
+                <input type="number" className={inp} value={incomeTaxPct} onChange={e => setIncomeTaxPct(Math.max(0, Math.min(60, parseFloat(e.target.value) || 0)))} min={0} max={60} step="0.5" />
+                <p className="text-[11px] text-gray-400 mt-1">{country === 'CA' ? "From the worker's TD1 / paystub." : "From the worker's W-4 / paystub."}</p>
+              </div>
+              <div>
+                <label className={lbl}>{country === 'CA' ? 'Provincial tax %' : 'State income tax %'}</label>
+                <input type="number" className={inp} value={secondaryTaxPct} onChange={e => setSecondaryTaxPct(Math.max(0, Math.min(30, parseFloat(e.target.value) || 0)))} min={0} max={30} step="0.5" />
+                <p className="text-[11px] text-gray-400 mt-1">{country === 'CA' ? 'Provincial rate (0 if none).' : 'State rate (0 if the state has no income tax).'}</p>
+              </div>
             </div>
-            <div>
-              <label className={lbl}>{lang === 'is' ? 'Greiðslutíðni' : 'Pay frequency'}</label>
-              <select className={inp} value={payFrequency} onChange={e => setPayFrequency(e.target.value as 'monthly' | 'weekly')}>
-                <option value="monthly">{lang === 'is' ? 'Mánaðarlega' : 'Monthly'}</option>
-                <option value="weekly">{lang === 'is' ? 'Vikulega' : 'Weekly'}</option>
-              </select>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>{lang === 'is' ? 'Skattkort — persónuafsláttur (%)' : 'Tax card — personal credit (%)'}</label>
+                <input type="number" className={inp} value={allowancePct} onChange={e => setAllowancePct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))} min={0} max={100} step={1} />
+                <p className="text-[11px] text-gray-400 mt-1">{lang === 'is' ? 'Skráðu skattkort starfsmanns: 100% fullt, 0% ef ekkert skattkort (t.d. nýtt á lífeyri).' : "Register the employee's tax card: 100% full, 0% if none (e.g. used on a pension)."}</p>
+              </div>
+              <div>
+                <label className={lbl}>{lang === 'is' ? 'Greiðslutíðni' : 'Pay frequency'}</label>
+                <select className={inp} value={payFrequency} onChange={e => setPayFrequency(e.target.value as 'monthly' | 'weekly')}>
+                  <option value="monthly">{lang === 'is' ? 'Mánaðarlega' : 'Monthly'}</option>
+                  <option value="weekly">{lang === 'is' ? 'Vikulega' : 'Weekly'}</option>
+                </select>
+              </div>
             </div>
-          </div>
+          )}
           <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="w-4 h-4" />
             {lang === 'is' ? 'Virkur starfsmaður' : 'Active employee'}
@@ -161,11 +183,40 @@ function PayrollModal({ initial, onSave, onClose }: {
   const taxWithheld = overrideTax !== null ? overrideTax : calc.taxWithheld;
   const netWage = gross - calc.employeePension - taxWithheld;
 
+  // US / Canada use a completely different statutory model (FICA / CPP-EI +
+  // per-employee income-tax %). Computed here; Iceland keeps calc above.
+  const country = s.country;
+  const intl = isIntlPayroll(country);
+  // Wages already paid to this employee earlier THIS year — for the annual caps
+  // (SS / CPP / EI). Only prior months of the same employee, excluding this slip.
+  const ytdWages = useMemo(() => {
+    if (!intl || !employeeId) return 0;
+    const year = month.slice(0, 4);
+    return data.payrollEntries
+      .filter(p => p.employeeId === employeeId && p.id !== initial?.id && p.month.slice(0, 4) === year && p.month < month)
+      .reduce((sum, p) => sum + p.grossWage, 0);
+  }, [intl, employeeId, month, data.payrollEntries, initial?.id]);
+  const intlRes = useMemo(
+    () => intl ? calcIntlPayroll(country, gross, selectedEmp?.incomeTaxPct ?? 0, selectedEmp?.secondaryTaxPct ?? 0, ytdWages) : null,
+    [intl, country, gross, selectedEmp, ytdWages]);
+  const isIncomeTaxLine = (k: string) => k === 'federal' || k === 'secondary';
+
   const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const lbl = 'block text-xs font-medium text-gray-600 mb-1';
 
   function handleSave() {
-    const entry: PayrollEntry = {
+    const entry: PayrollEntry = intlRes ? {
+      // US/CA: statutory (SS+Medicare / CPP+EI) → employeePension; income tax → taxWithheld;
+      // employer statutory → employerPension. Totals reconcile; breakdown recomputes on edit.
+      id: initial?.id ?? newId(), month, employeeId: employeeId || undefined,
+      employeeName: name, employeeKennitala: kennitala || undefined,
+      grossWage: gross,
+      employeePension: intlRes.employee.filter(l => !isIncomeTaxLine(l.key)).reduce((a, l) => a + l.amount, 0),
+      taxWithheld: intlRes.employee.filter(l => isIncomeTaxLine(l.key)).reduce((a, l) => a + l.amount, 0),
+      employerPension: intlRes.employer.reduce((a, l) => a + l.amount, 0),
+      socialInsurance: 0,
+      netWage: intlRes.net, notes: notes || undefined,
+    } : {
       id: initial?.id ?? newId(), month, employeeId: employeeId || undefined,
       employeeName: name, employeeKennitala: kennitala || undefined,
       grossWage: gross, employeePension: calc.employeePension, taxWithheld,
@@ -230,6 +281,28 @@ function PayrollModal({ initial, onSave, onClose }: {
           {gross > 0 && (
             <div className="bg-gray-50 rounded-xl p-4 space-y-0.5">
               <p className="text-xs font-bold text-gray-700 mb-2">{lang === 'is' ? 'Útreikningur' : 'Calculation'}</p>
+              {intlRes ? (
+                <>
+                  {row(lang === 'is' ? 'Brúttólaun' : 'Gross wage', gross)}
+                  {intlRes.employee.map(l => row(`${l.label} (${l.rate}%)`, -l.amount, 'text-red-600'))}
+                  <div className="flex justify-between text-sm font-bold pt-1.5">
+                    <span className="text-gray-700">{lang === 'is' ? 'Nettólaun' : 'Net pay'}</span>
+                    <span className="font-mono text-green-700">{fmt(intlRes.net)}</span>
+                  </div>
+                  <div className="border-t border-gray-200 mt-2 pt-2 space-y-0.5">
+                    <p className="text-xs font-semibold text-gray-500 mb-1">{lang === 'is' ? 'Kostnaður atvinnurekanda' : 'Employer costs'}</p>
+                    {intlRes.employer.map(l => row(`${l.label} (${l.rate}%)`, l.amount, 'text-red-600'))}
+                    <div className="flex justify-between text-xs font-bold pt-1">
+                      <span>{lang === 'is' ? 'Heildarkostnaður' : 'Total employer cost'}</span>
+                      <span className="font-mono">{fmt(intlRes.employerTotal)}</span>
+                    </div>
+                  </div>
+                  {!selectedEmp && (
+                    <p className="text-[11px] text-amber-600 mt-1">{country === 'CA' ? 'Pick an employee to apply their federal/provincial tax %.' : 'Pick an employee to apply their federal/state tax %.'}</p>
+                  )}
+                </>
+              ) : (
+                <>
               {row(lang === 'is' ? 'Brúttólaun' : 'Gross wage', gross)}
               {row(lang === 'is' ? `Lífeyrir starfsmanns (${s.employeePensionRate}%)` : `Employee pension (${s.employeePensionRate}%)`, -calc.employeePension, 'text-red-600')}
               <div className="flex justify-between text-xs py-1 border-b border-gray-50 items-center">
@@ -260,6 +333,8 @@ function PayrollModal({ initial, onSave, onClose }: {
                   <span className="font-mono">{fmt(gross + calc.employerPension + calc.socialInsurance)}</span>
                 </div>
               </div>
+                </>
+              )}
             </div>
           )}
 
@@ -289,6 +364,11 @@ export default function Payroll() {
   const [filterMonth, setFilterMonth] = useState(thisMonth());
 
   const employees = data.employees ?? [];
+  // Payroll is only correct where an engine exists — Iceland, US, Canada. For any
+  // other country we hide it rather than run the wrong (Icelandic) math. This is
+  // the launch gate: add a country's engine, or payroll stays off there.
+  const payrollCountry = data.settings.country;
+  const payrollSupported = payrollCountry === 'IS' || isIntlPayroll(payrollCountry);
 
   function handleSaveEmployee(emp: Employee) {
     dispatch(employees.find(e => e.id === emp.id)
@@ -376,12 +456,35 @@ export default function Payroll() {
 
   const fmt = (n: number) => fmtCur(n);
 
+  if (!payrollSupported) {
+    return (
+      <div>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">{t('payroll')}</h1>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center max-w-lg">
+          <UserCog className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-gray-800 mb-1">
+            {lang === 'is' ? 'Launakerfi er ekki tilbúið fyrir þetta land enn' : 'Payroll isn’t available for your country yet'}
+          </p>
+          <p className="text-xs text-gray-600">
+            {lang === 'is'
+              ? 'Launaútreikningur er í boði fyrir Ísland, Bandaríkin og Kanada. Bókhald, reikningar og skattar virka áfram fyrir öll lönd.'
+              : 'Payroll is built for Iceland, the US and Canada. Bookkeeping, invoicing and taxes keep working for every country.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const payrollSubtitle = payrollCountry === 'US' ? 'Payroll with US tax rules (FICA, federal & state)'
+    : payrollCountry === 'CA' ? 'Payroll with Canadian tax rules (CPP, EI, federal & provincial)'
+    : (lang === 'is' ? 'Launaútreikningur með íslenskum skattareglum' : 'Payroll with Icelandic tax rules');
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('payroll')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Launaútreikningur með íslenskum skattareglum' : 'Payroll with Icelandic tax rules'}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{payrollSubtitle}</p>
         </div>
         <div className="flex gap-2">
           {tab === 'runs' && filtered.length > 0 && (<>
