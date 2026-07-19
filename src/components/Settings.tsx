@@ -386,10 +386,15 @@ export default function Settings() {
               <div>
                 <label className={labelCls}>{t('defaultCurrency')}</label>
                 <select className={inputCls} value={form.defaultCurrency} onChange={e => setTop('defaultCurrency', e.target.value as Currency)}>
-                  <option value="ISK">ISK — Íslenskar krónur</option>
+                  <option value="ISK">ISK — {lang === 'is' ? 'Íslenskar krónur' : 'Icelandic króna'}</option>
                   <option value="EUR">EUR — Euro</option>
                   <option value="USD">USD — US Dollar</option>
                   <option value="GBP">GBP — British Pound</option>
+                  <option value="CAD">CAD — Canadian Dollar</option>
+                  <option value="AUD">AUD — Australian Dollar</option>
+                  <option value="NZD">NZD — New Zealand Dollar</option>
+                  <option value="NOK">NOK — Norwegian Krone</option>
+                  <option value="SEK">SEK — Swedish Krona</option>
                   <option value="DKK">DKK — Danish Krone</option>
                 </select>
               </div>
