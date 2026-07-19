@@ -187,9 +187,18 @@ function PayrollModal({ initial, onSave, onClose }: {
   // per-employee income-tax %). Computed here; Iceland keeps calc above.
   const country = s.country;
   const intl = isIntlPayroll(country);
+  // Wages already paid to this employee earlier THIS year — for the annual caps
+  // (SS / CPP / EI). Only prior months of the same employee, excluding this slip.
+  const ytdWages = useMemo(() => {
+    if (!intl || !employeeId) return 0;
+    const year = month.slice(0, 4);
+    return data.payrollEntries
+      .filter(p => p.employeeId === employeeId && p.id !== initial?.id && p.month.slice(0, 4) === year && p.month < month)
+      .reduce((sum, p) => sum + p.grossWage, 0);
+  }, [intl, employeeId, month, data.payrollEntries, initial?.id]);
   const intlRes = useMemo(
-    () => intl ? calcIntlPayroll(country, gross, selectedEmp?.incomeTaxPct ?? 0, selectedEmp?.secondaryTaxPct ?? 0) : null,
-    [intl, country, gross, selectedEmp]);
+    () => intl ? calcIntlPayroll(country, gross, selectedEmp?.incomeTaxPct ?? 0, selectedEmp?.secondaryTaxPct ?? 0, ytdWages) : null,
+    [intl, country, gross, selectedEmp, ytdWages]);
   const isIncomeTaxLine = (k: string) => k === 'federal' || k === 'secondary';
 
   const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
