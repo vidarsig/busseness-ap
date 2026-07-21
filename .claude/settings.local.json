@@ -58,7 +58,14 @@
       "WebFetch(domain:www.landsbankinn.is)",
       "Bash(ls src/components/)",
       "Bash(ls src/pages/)",
-      "Bash(ls src/)"
+      "Bash(ls src/)",
+      "Bash(curl -s https://jobboks.app/)",
+      "Bash(curl -s https://jobboks.app/assets/index-CZ5tNY8_.js)",
+      "Bash(grep -o \"registerSW[^\\\\\"']\\\\{0,40\\\\}\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://jobboks.app/sw.js)",
+      "Bash(npx tsx *)",
+      "Bash(sed \"s|'../../../../Claude bussines app/.claude/worktrees/update-box-missing-96fc34/src/utils/ai'|'./src/utils/ai'|\" \"C:\\\\Users\\\\vidar\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-vidar-Claude-bussines-app--claude-worktrees-update-box-missing-96fc34\\\\396df51b-58c7-424f-8add-a269981bd658\\\\scratchpad\\\\reftest.ts\")",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }
