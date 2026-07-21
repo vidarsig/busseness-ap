@@ -74,7 +74,21 @@ function parseAmount(raw: string): number {
   if (!s) return 0;
   const lastDot = s.lastIndexOf('.');
   const lastComma = s.lastIndexOf(',');
-  const decSep = lastDot > lastComma ? '.' : (lastComma > -1 ? ',' : '');
+  let decSep = lastDot > lastComma ? '.' : (lastComma > -1 ? ',' : '');
+
+  // Only ONE kind of separator, used once, with exactly three digits after it —
+  // "20.000" / "1,500". That is a THOUSANDS separator, not a decimal point:
+  // Icelandic krónur are whole numbers written 20.000 = twenty thousand.
+  // Reading it as a decimal turned every such row into 20 kr. instead of 20,000.
+  if (decSep && (lastDot === -1 || lastComma === -1)) {
+    const sepCount = s.split(decSep).length - 1;
+    const afterSep = s.length - s.lastIndexOf(decSep) - 1;
+    if (sepCount > 1 || afterSep === 3) {
+      s = s.split(decSep).join('');
+      decSep = '';
+    }
+  }
+
   if (decSep) {
     const thouSep = decSep === '.' ? ',' : '.';
     s = s.split(thouSep).join('');                   // strip thousands separators
@@ -95,7 +109,66 @@ function dataAfterHeader(rows: string[][]): string[][] {
   return rows.slice(start).filter(r => r.length >= 2 && String(r[0] ?? '').trim());
 }
 
-function parseBank(rows: string[][], format: BankFormat): ParsedRow[] {
+// Read the column HEADINGS rather than trusting a fixed column order.
+//
+// Banks ship several different exports under the same name — Arion's netbank
+// "AccountTransactions" file does not have the same layout as its classic
+// statement, and some exports split money-in and money-out into two columns
+// instead of one signed column. Guessing by position silently mis-reads those:
+// if the assumed amount column is really the running balance ("Staða") every row
+// looks positive and the whole file imports as INCOME. So: match on names, and
+// only fall back to fixed positions when no header is recognisable.
+const HEADINGS = {
+  date: ['dagsetning', 'date', 'bókunardagur', 'bokunardagur', 'vinnsludagur', 'transaction date'],
+  amount: ['upphæð', 'upphaed', 'amount', 'fjárhæð', 'fjarhaed', 'færsluupphæð'],
+  debit: ['debet', 'debit', 'úttekt', 'uttekt', 'gjöld', 'gjold', 'út', 'withdrawal', 'money out'],
+  credit: ['kredit', 'credit', 'innborgun', 'innlegg', 'inn', 'deposit', 'money in'],
+  description: ['skýring', 'skyring', 'texti', 'lýsing', 'lysing', 'description', 'text', 'nafn', 'details'],
+  reference: ['tilvísun', 'tilvisun', 'seðilnúmer', 'sedilnumer', 'reference', 'ref'],
+};
+
+const norm = (s: unknown) => String(s ?? '').toLowerCase().replace(/['"]/g, '').trim();
+
+export function findHeaderMap(rows: string[][]): ImportColumnMap | null {
+  // The header is whichever of the first rows names a date column.
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const cells = (rows[i] ?? []).map(norm);
+    // Exact match, or a substring match only for names long enough to be safe —
+    // "inn" as a substring would happily match "Innstæða" (the BALANCE column)
+    // and hand us the running balance as if it were money in.
+    const find = (names: string[]) => {
+      const idx = cells.findIndex(c => c && names.some(n => c === n || (n.length >= 6 && c.includes(n))));
+      return idx >= 0 ? idx : null;
+    };
+    const date = find(HEADINGS.date);
+    if (date == null) continue;
+
+    const amount = find(HEADINGS.amount);
+    const debit = find(HEADINGS.debit);
+    const credit = find(HEADINGS.credit);
+    // Need a usable money column: one signed amount, or a debit/credit pair.
+    if (amount == null && debit == null && credit == null) continue;
+
+    const description = find(HEADINGS.description);
+    return {
+      headerRows: i + 1,
+      date,
+      description: description ?? date + 1,
+      // Prefer the split pair when present — it carries the direction reliably.
+      amount: debit != null || credit != null ? null : amount,
+      debit,
+      credit,
+      reference: find(HEADINGS.reference),
+    };
+  }
+  return null;
+}
+
+export function parseBank(rows: string[][], format: BankFormat): ParsedRow[] {
+  // Whatever the user picked, trust real headings over assumed positions.
+  const byHeader = findHeaderMap(rows);
+  if (byHeader) return parseWithMap(rows, byHeader);
+
   const dataRows = dataAfterHeader(rows);
   switch (format) {
     case 'arion':
