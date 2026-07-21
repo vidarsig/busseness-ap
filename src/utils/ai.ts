@@ -338,13 +338,19 @@ export function buildContext(data: AppData, lang: string, year?: number): string
 
   const txRows: string[] = [];
   let txChars = 0;
+  // Key NUMBER per transaction, not the internal id — the number is what the AI
+  // is shown in the chart of accounts and what it writes back in a fix.
+  const keyNumById = new Map((data.accounts ?? []).map(a => [a.id, a.number]));
   for (let i = 0; i < pool.length; i++) {
     const tx = pool[i];
     if (txRows.length >= MAX_TX) break;
     // The leading #n is the row's REF — how the AI points at this exact
     // transaction in a jobboks-fix block. It is the 1-based position in txPool(),
     // which the app rebuilds identically when applying a fix.
-    const row = `  #${i + 1} | ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description}`;
+    // The trailing field is the KEY the row is booked on ("-" = none), so the AI
+    // can see a wrong or missing key instead of only the keys that exist.
+    const key = (tx.accountId && keyNumById.get(tx.accountId)) || '-';
+    const row = `  #${i + 1} | ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description} | ${key}`;
     if (txChars + row.length > CHAR_BUDGET) break;
     txRows.push(row);
     txChars += row.length + 1;
@@ -442,6 +448,7 @@ ${openInvoices.map(i => {
   }).join('\n') || '  None'}
 
 ${txLabel}:
+  ref | date | type | category | amount | description | key   ("-" in the key column means the entry is NOT booked on any key yet)
 ${txRows.join('\n')}`;
 }
 
@@ -506,8 +513,9 @@ Rules: date is YYYY-MM-DD; type is "income" | "expense" | "transfer"; category M
 
 When the owner asks you to FIX / correct / change / re-categorise a transaction that is ALREADY in the books, you CAN do it — output ONE fenced code block tagged jobboks-fix containing ONLY JSON of this shape:
 \`\`\`jobboks-fix
-{"fixes":[{"ref":12,"was":{"date":"2026-07-01","amount":42000},"set":{"category":"efniskostnadur"}}]}
+{"fixes":[{"ref":12,"was":{"date":"2026-07-01","amount":42000},"set":{"accountNumber":"1200"}}]}
 \`\`\`
+PUTTING THE RIGHT KEY ON AN ENTRY IS THE MAIN USE OF THIS BLOCK. The LAST column of every transaction row is the key it is booked on, and "-" means no key at all. So you can SEE which entries are on the wrong key or on none, and correct them with "accountNumber" — the key NUMBER from the chart of accounts above. When the owner asks about keys ("er þetta á réttum lykli?", "settu réttan lykil", "fix my keys"), go through the rows yourself, say which ones look wrong and why, and propose the corrections in ONE block — do not make the owner name each entry.
 Rules: "ref" is the #NUMBER shown at the START of the transaction row in the TRANSACTIONS list above — that is how you point at one exact row, so ALWAYS read the ref off the row you mean. "was" repeats that row's CURRENT date and amount; the app checks them before changing anything and refuses if they no longer match, so never invent them. "set" contains ONLY the fields that should CHANGE — any of date, description, category, type, amount, vatRate, accountNumber, interestAmount; leave out everything that stays the same. The owner sees a "before → after" list and taps "Laga"/"Fix" to apply. You are PROPOSING, exactly like jobboks-book — nothing changes until the owner taps.
 You CANNOT delete a transaction: deleting leaves a hole in the books. If a transaction should not exist at all, say so plainly and tell the owner to delete it themselves in the Transactions screen. Never claim you are unable to correct or re-categorise an existing transaction — you are able, via this block.
 
