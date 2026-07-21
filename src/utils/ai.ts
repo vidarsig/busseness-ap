@@ -279,7 +279,13 @@ function counterpartyIndex(data: AppData): string {
   }).join('\n') || '  (none)';
 }
 
-export function buildContext(data: AppData, lang: string): string {
+// `year` = the year the owner is working on. When set, the AI is given EVERY
+// transaction of that year instead of a newest-first sweep across all history.
+// This matters: the all-years sweep fills from the newest backwards until it hits
+// the character budget, so the rows it drops are the OLDEST — which is precisely
+// the year someone closing old books is looking at. The AI then had year totals
+// but not the lines behind them, and sounded fully informed while missing them.
+export function buildContext(data: AppData, lang: string, year?: number): string {
   // Every year that actually has transactions, newest first — so the AI can
   // analyse and compare any year (e.g. 2024 vs 2025), not just the fiscal year.
   const years = [...new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))]
@@ -302,20 +308,37 @@ export function buildContext(data: AppData, lang: string): string {
   // AND an approximate character budget. Newest-first, so the most recent rows
   // always make it in; older ones stay covered by the summaries above.
   const MAX_TX = data.settings.aiMaxTransactions ?? 12000;
-  const CHAR_BUDGET = 600_000; // ≈180k tokens, safe margin under the 200k window
-  const sorted = [...data.transactions].sort((a, b) => b.date.localeCompare(a.date));
+  // Leave headroom under the ~200k-token window for the rest of this prompt AND
+  // for anything the owner attaches to the chat (a bank statement can be 60k
+  // chars on its own). The old 600k budget filled the window by itself.
+  const CHAR_BUDGET = 450_000;
+
+  // Working on one year: give every row of that year, oldest first, the way a
+  // ledger reads. Otherwise fall back to the newest-first sweep across all years.
+  const pool = year != null
+    ? data.transactions
+        .filter(tx => new Date(tx.date).getFullYear() === year)
+        .sort((a, b) => a.date.localeCompare(b.date))
+    : [...data.transactions].sort((a, b) => b.date.localeCompare(a.date));
+
   const txRows: string[] = [];
   let txChars = 0;
-  for (const tx of sorted) {
+  for (const tx of pool) {
     if (txRows.length >= MAX_TX) break;
     const row = `  ${tx.date} | ${tx.type} | ${tx.category} | ${fmtNum(tx.amount)} | ${tx.description}`;
     if (txChars + row.length > CHAR_BUDGET) break;
     txRows.push(row);
     txChars += row.length + 1;
   }
-  const txLabel = data.transactions.length > txRows.length
-    ? `TRANSACTIONS (most recent ${txRows.length} of ${data.transactions.length} — older years are covered by the summaries above)`
-    : `TRANSACTIONS (all ${txRows.length})`;
+  const dropped = pool.length - txRows.length;
+  const txLabel = year != null
+    ? (dropped > 0
+        // Should not happen for a normal year, but never let it look complete.
+        ? `TRANSACTIONS — YEAR ${year} (${txRows.length} of ${pool.length}; ${dropped} did NOT fit. This year is INCOMPLETE — say so, do not draw conclusions from it)`
+        : `TRANSACTIONS — YEAR ${year} (all ${txRows.length} — this is EVERY transaction of ${year})`)
+    : (dropped > 0
+        ? `TRANSACTIONS (most recent ${txRows.length} of ${data.transactions.length} — the ${dropped} OLDEST rows are NOT here, only their summaries above. If asked about individual rows in an older year, say you need that year selected)`
+        : `TRANSACTIONS (all ${txRows.length})`);
 
   // How the owner keys purchases/income — so the AI knows which category things go on.
   const catRules = (data.categoryRules ?? [])
@@ -343,7 +366,14 @@ export function buildContext(data: AppData, lang: string): string {
     })
     .join('\n');
 
-  return `COMPANY: ${data.settings.company.name || 'Unknown'}
+  return `${year != null ? `>>> WORKING YEAR: ${year} <<<
+The owner is working on ${year} and nothing else. Answer about ${year} unless they
+name another year. Every transaction of ${year} is listed below — if something is
+not in that list, it is not in the books for ${year}, so say so plainly instead of
+guessing at it. For OTHER years you have the summaries only, not the individual
+rows: if asked for a specific old row, say the owner needs to switch to that year.
+
+` : ''}COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
 FISCAL YEAR (default): ${data.settings.fiscalYear} | CORPORATE TAX RATE: ${data.settings.corporateTaxRate}%
 LANGUAGE: ${lang === 'is' ? 'Icelandic' : 'English'}
@@ -387,7 +417,7 @@ ${txLabel}:
 ${txRows.join('\n')}`;
 }
 
-export function buildChatSystem(data: AppData, lang: string): string {
+export function buildChatSystem(data: AppData, lang: string, year?: number): string {
   return `You are an AI bookkeeping assistant for ${data.settings.company.name || 'this company'}.
 You have access to their financial data and can help with:
 - Questions about income, expenses, cash flow, and trends
@@ -409,6 +439,17 @@ single old row isn't individually listed).
 When the user asks about a specific year, use that year's summary. When comparing years, reference both.
 
 You can SEARCH THE WEB to find ESSENTIAL BOOKKEEPING INFORMATION you need to book or verify an entry correctly — this is your own tool for getting a booking right, not a general search for the user. Use it to look up public/registry facts such as: a property's official registration number (fasteignanúmer / property ID), a counterparty's tax code or company ID (kennitala / EIN / VAT number), an official company name or address, a bank/IBAN or invoice reference format, or the applicable tax rate/rule/deadline for ${data.settings.country}. Search ONLY when you actually need such a fact to complete or check a booking. NEVER put the company's private financial data into a query. When you use a web result, state the fact and cite the source (e.g. "Heimild: <url>"), and ask the owner to confirm before it's relied on — stay by-the-book.
+
+NEVER INVENT DATA. This is a bookkeeping system — a plausible-sounding wrong figure
+is worse than no answer. If a transaction, row or file is not actually in front of
+you, say so plainly ("ég sé ekki þessa færslu" / "I can't see that") and say what
+you would need. Do not reconstruct rows from memory, do not guess at what a
+truncated file contained, and do not present a total you have not actually added up.
+If the owner disagrees with you, do NOT simply switch to their answer to be
+agreeable: either show the figures that support your position, or say honestly that
+you cannot tell from the data you have. Flattery here costs them money.
+Never propose DELETING or altering entries unless you can point to the exact rows
+and explain why — and remember saved/issued invoices are locked.
 
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
@@ -446,7 +487,7 @@ ${data.settings.country === 'IS' ? `- PAYROLL (Laun), ICELAND, uses these compan
 : `- PAYROLL: the built-in Laun calculator is not localised for ${data.settings.country} (it supports Iceland, US and Canada). Do NOT compute wages with the Icelandic formula. If asked about payroll, look up the correct local rules (web search, cite the source), keep it to guidance, and say the app's payroll calculator isn't localised for their country yet.`}
 
 CURRENT FINANCIAL DATA:
-${buildContext(data, lang)}`;
+${buildContext(data, lang, year)}`;
 }
 
 export async function categorizeBatch(

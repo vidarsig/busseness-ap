@@ -78,6 +78,13 @@ export default function AIAssistant() {
   const { data, t, lang, dispatch } = useApp();
   const [tab, setTab] = useState<'chat' | 'insights' | 'memory'>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>(() => data.aiChat ?? []);
+
+  // The year the AI is working on. One year at a time: it then gets EVERY row of
+  // that year rather than a newest-first sweep that quietly drops the oldest.
+  const yearsWithData = [...new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))]
+    .sort((a, b) => b - a);
+  const [aiYear, setAiYear] = useState<number | null>(() =>
+    yearsWithData.includes(data.settings.fiscalYear) ? data.settings.fiscalYear : yearsWithData[0] ?? null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -208,7 +215,7 @@ export default function AIAssistant() {
 
     try {
       await streamClaude(
-        buildChatSystem(data, lang),
+        buildChatSystem(data, lang, aiYear ?? undefined),
         allMessages,
         chunk => {
           assistantText += chunk;
@@ -291,6 +298,19 @@ export default function AIAssistant() {
         <div className="flex items-center gap-3">
           <Bot className="w-6 h-6 text-blue-600" />
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('ai')}</h1>
+          {/* Which year the AI is looking at — always visible, so it is never a
+              mystery whether an answer covers the year being worked on. */}
+          {yearsWithData.length > 0 && (
+            <select
+              value={aiYear ?? 'all'}
+              onChange={e => setAiYear(e.target.value === 'all' ? null : Number(e.target.value))}
+              className="text-sm font-semibold bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-2 py-1"
+              title={lang === 'is' ? 'Árið sem gervigreindin vinnur með' : 'The year the AI is working on'}
+            >
+              {yearsWithData.map(y => <option key={y} value={y}>{y}</option>)}
+              <option value="all">{lang === 'is' ? 'Öll ár (yfirlit)' : 'All years (summary)'}</option>
+            </select>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
