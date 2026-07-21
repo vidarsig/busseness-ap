@@ -4,7 +4,16 @@ import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear } fr
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
 
-export interface ChatMessage { role: 'user' | 'assistant'; content: string; }
+// `content` is what the user sees in the thread (their words plus a 📎 chip per
+// file). `api` is what the model actually gets — the same message with the real
+// file data attached. Keeping it on the message means an uploaded bank statement
+// stays readable for the WHOLE conversation, not just the turn it was sent on.
+// It is stripped before the chat is saved, so big files never bloat the synced blob.
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  api?: string | ContentBlock[];
+}
 
 // A single message sent to the model may carry rich content blocks — text plus
 // images (photos of documents) and PDFs — not just a plain string.

@@ -2,11 +2,11 @@
 //  - images (photos of documents)      -> vision block (resized JPEG)
 //  - PDFs (statements, loan letters)    -> document block
 //  - spreadsheets / CSV / text          -> parsed to text (see fileText.ts)
-import { fileToText } from './fileText';
+import { fileToText, YearSlice } from './fileText';
 import { prepareImage } from './image';
 
 export type Attachment =
-  | { kind: 'text'; name: string; text: string; truncated: boolean }
+  | { kind: 'text'; name: string; text: string; truncated: boolean; years?: YearSlice[]; year?: string }
   | { kind: 'image'; name: string; dataUrl: string; base64: string; mediaType: string }
   | { kind: 'pdf'; name: string; base64: string };
 

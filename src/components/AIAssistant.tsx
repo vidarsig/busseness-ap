@@ -141,7 +141,12 @@ export default function AIAssistant() {
   // recent 100 messages so the blob can't grow without bound.
   useEffect(() => {
     if (loading) return;
-    dispatch({ type: 'SET_AI_CHAT', payload: messages.slice(-100) });
+    // Drop `api` (raw spreadsheet text, base64 photos) — those stay in memory for
+    // this session only. Saving them would grow the synced blob by megabytes.
+    dispatch({
+      type: 'SET_AI_CHAT',
+      payload: messages.slice(-100).map(({ role, content }) => ({ role, content })),
+    });
   }, [messages, loading, dispatch]);
 
   async function sendMessage() {
@@ -156,8 +161,18 @@ export default function AIAssistant() {
 
     const textFiles = attachments.filter((a): a is Extract<Attachment, { kind: 'text' }> => a.kind === 'text');
     const mediaFiles = attachments.filter(a => a.kind !== 'text');
+    // If the user picked a year for a big file, send that year's rows — a whole
+    // year beats a random slice of seven. Always tell the AI when data is missing.
     const filesText = textFiles
-      .map(a => `Attached file "${a.name}" (a table, e.g. a loan payment schedule):\n"""\n${a.text}\n"""`)
+      .map(a => {
+        const slice = a.year ? a.years?.find(y => y.year === a.year) : undefined;
+        const body = slice ? slice.text : a.text;
+        const label = slice ? `"${a.name}" — year ${slice.year} only` : `"${a.name}"`;
+        const warn = (slice ? slice.tooBig : a.truncated)
+          ? '\nWARNING: this file was too big and part of it was NOT sent. Say so plainly. Never invent, guess at, or summarise rows you cannot see.'
+          : '';
+        return `Attached file ${label} (a table, e.g. a bank statement or payment schedule):${warn}\n"""\n${body}\n"""`;
+      })
       .join('\n\n');
 
     let apiContent: string | ContentBlock[];
@@ -174,15 +189,19 @@ export default function AIAssistant() {
       apiContent = (filesText ? filesText + '\n\nUse the file(s) above to answer.\n\n' : '') + input.trim();
     }
 
-    const userMsg: ChatMessage = { role: 'user', content: shown };
-    const apiUserMsg: ApiMessage = { role: 'user', content: apiContent };
+    const userMsg: ChatMessage = { role: 'user', content: shown, api: apiContent };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setAttachments([]);
     setError('');
     setLoading(true);
 
-    const allMessages: ApiMessage[] = [...messages, apiUserMsg];
+    // Send every earlier turn with its files still attached — otherwise a bank
+    // statement uploaded three messages ago is invisible and the AI starts guessing.
+    const allMessages: ApiMessage[] = [...messages, userMsg].map(m => ({
+      role: m.role,
+      content: m.api ?? m.content,
+    }));
     let assistantText = '';
 
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
@@ -414,11 +433,39 @@ export default function AIAssistant() {
             {(attachments.length > 0 || attaching) && (
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 {attachments.map((a, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 max-w-full">
-                    <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate max-w-[160px]">{a.name}</span>
-                    {a.kind === 'text' && a.truncated && <span className="text-blue-400">{lang === 'is' ? '(stytt)' : '(shortened)'}</span>}
-                    <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-700 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  <div key={idx} className="flex flex-col gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 max-w-full">
+                    <div className="flex items-center gap-2">
+                      <Paperclip className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate max-w-[160px]">{a.name}</span>
+                      {a.kind === 'text' && a.year && <span className="font-medium">· {a.year}</span>}
+                      {a.kind === 'text' && a.truncated && !a.year && (
+                        <span className="text-blue-400">{lang === 'is' ? '(of stórt)' : '(too big)'}</span>
+                      )}
+                      <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-700 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {/* Big statement covering many years — one tap picks the year to work on. */}
+                    {a.kind === 'text' && a.years && a.years.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-blue-500">
+                          {lang === 'is' ? 'Of stórt — veldu ár:' : 'Too big — pick a year:'}
+                        </span>
+                        {a.years.map(y => (
+                          <button
+                            key={y.year}
+                            onClick={() => setAttachments(prev => prev.map((p, i) =>
+                              i === idx && p.kind === 'text'
+                                ? { ...p, year: p.year === y.year ? undefined : y.year }
+                                : p))}
+                            className={`px-2 py-1 rounded-md border ${a.year === y.year
+                              ? 'bg-blue-600 border-blue-600 text-white'
+                              : 'bg-white border-blue-200 text-blue-700 hover:border-blue-400'}`}
+                            title={`${y.rows} ${lang === 'is' ? 'færslur' : 'rows'}`}
+                          >
+                            {y.year}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
                 {attaching && (
