@@ -65,7 +65,17 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://jobboks.app/sw.js)",
       "Bash(npx tsx *)",
       "Bash(sed \"s|'../../../../Claude bussines app/.claude/worktrees/update-box-missing-96fc34/src/utils/ai'|'./src/utils/ai'|\" \"C:\\\\Users\\\\vidar\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-vidar-Claude-bussines-app--claude-worktrees-update-box-missing-96fc34\\\\396df51b-58c7-424f-8add-a269981bd658\\\\scratchpad\\\\reftest.ts\")",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(gh pr create --title 'AI can fix booked entries — and put the right key on them' --body ' *)",
+      "Bash(git fetch *)",
+      "Bash(curl -s \"https://jobboks.app/?cb=$\\(date +%s\\)\" -H \"Cache-Control: no-cache\")",
+      "Bash(curl -sI \"https://jobboks.app/\")",
+      "Bash(curl -s \"https://jobboks.app/?cb=$\\(date +%s\\)\")",
+      "Bash(curl -s -o /dev/null -w \"ebea30cf: %{http_code}\\\\n\" \"https://jobboks.app/workbox-ebea30cf.js\")",
+      "Bash(curl -s -o /dev/null -w \"21a21f74\\(gamalt\\): %{http_code}\\\\n\" \"https://jobboks.app/workbox-21a21f74.js\")",
+      "Bash(git checkout *)",
+      "Bash(sed -n '/function findCandidates/,/^}/p' src/components/ReceiptMatcher.tsx)",
+      "Bash(sed -n '/function classify/,/^}/p' src/components/ReceiptMatcher.tsx)"
     ]
   }
 }

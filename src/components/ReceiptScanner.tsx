@@ -4,10 +4,14 @@ import { useApp } from '../contexts/AppContext';
 import { Transaction, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../types';
 import { scanReceipt, ScannedReceipt } from '../utils/ai';
 import { todayISO } from '../utils/formatters';
+import { daysApart, findReceiptCandidates, LIKELY_SAME_PAYMENT_DAYS } from '../utils/receiptMatch';
 
 function newId() { return `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`; }
 
-function resizeImage(file: File, maxWidth = 1200): Promise<{ base64: string; mediaType: string }> {
+// Also returns the whole data URL, not just the base64 payload: attaching the
+// photo to an existing transaction needs something storable, and the preview's
+// blob: URL dies with the page.
+function resizeImage(file: File, maxWidth = 1200): Promise<{ base64: string; mediaType: string; dataUrl: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -20,7 +24,7 @@ function resizeImage(file: File, maxWidth = 1200): Promise<{ base64: string; med
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      resolve({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' });
+      resolve({ base64: dataUrl.split(',')[1], mediaType: 'image/jpeg', dataUrl });
     };
     img.onerror = reject;
     img.src = url;
@@ -39,6 +43,13 @@ export default function ReceiptScanner({ onClose }: Props) {
   const [result, setResult] = useState<ScannedReceipt | null>(null);
   const [form, setForm] = useState<Partial<Transaction>>({});
   const [saved, setSaved] = useState(false);
+  // The scanned photo, storable — used when attaching to an existing entry.
+  const [dataUrl, setDataUrl] = useState('');
+  // Which existing entry the owner picked as "same payment", and whether they
+  // waved the warning away to book a genuinely separate one.
+  const [dupChoice, setDupChoice] = useState('');
+  const [dupDismissed, setDupDismissed] = useState(false);
+  const [attached, setAttached] = useState(false);
 
   const allCategories = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES] as string[];
   const vatRates = cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates;
@@ -47,11 +58,15 @@ export default function ReceiptScanner({ onClose }: Props) {
     setError('');
     setResult(null);
     setSaved(false);
+    setDupChoice('');
+    setDupDismissed(false);
+    setAttached(false);
     const objectUrl = URL.createObjectURL(file);
     setPreview(objectUrl);
     setScanning(true);
     try {
-      const { base64, mediaType } = await resizeImage(file);
+      const { base64, mediaType, dataUrl: url } = await resizeImage(file);
+      setDataUrl(url);
       const scanned = await scanReceipt(base64, mediaType, allCategories, vatRates, lang);
       setResult(scanned);
       setForm({
@@ -76,9 +91,31 @@ export default function ReceiptScanner({ onClose }: Props) {
     if (file) handleImage(file);
   }
 
+  // Entries that could be this same payment. Matched on amount + nearby date,
+  // never on description: the bank writes the terminal name and the receipt
+  // lists the goods, so the same purchase reads as two unrelated lines. Without
+  // this the scanner booked a second copy of an already-imported payment every
+  // time, which is exactly how the books ended up double-counted.
+  const dupes = form.amount && form.type !== 'income'
+    ? findReceiptCandidates(data.transactions, { amount: Number(form.amount), date: form.date ?? '' })
+        .filter(t => daysApart(t.date, form.date ?? '') <= LIKELY_SAME_PAYMENT_DAYS)
+    : [];
+  const dupTarget = dupes.find(t => t.id === dupChoice) ?? dupes[0];
+  const showDupWarning = dupes.length > 0 && !dupDismissed;
+
+  // "Same payment" → keep the entry that is already in the books and hang the
+  // photo on it. Nothing is created, so the totals don't move.
+  function attachToExisting() {
+    if (!dupTarget) return;
+    dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...dupTarget, receiptUrl: dataUrl } });
+    setAttached(true);
+    setSaved(true);
+    setTimeout(onClose, 1400);
+  }
+
   function saveTransaction() {
     if (!form.description || !form.amount) return;
-    dispatch({ type: 'ADD_TRANSACTION', payload: form as Transaction });
+    dispatch({ type: 'ADD_TRANSACTION', payload: { ...form, receiptUrl: dataUrl } as Transaction });
     setSaved(true);
     setTimeout(onClose, 1200);
   }
@@ -88,6 +125,10 @@ export default function ReceiptScanner({ onClose }: Props) {
     setResult(null);
     setError('');
     setSaved(false);
+    setDupChoice('');
+    setDupDismissed(false);
+    setAttached(false);
+    setDataUrl('');
     setForm({});
     if (fileRef.current) fileRef.current.value = '';
     if (cameraRef.current) cameraRef.current.value = '';
@@ -176,8 +217,52 @@ export default function ReceiptScanner({ onClose }: Props) {
             </div>
           )}
 
+          {/* Already in the books? Ask before booking a second copy. */}
+          {result && !scanning && !saved && showDupWarning && dupTarget && (
+            <div className="border-2 border-amber-300 bg-amber-50 rounded-xl p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-amber-900">
+                  <div className="font-semibold">
+                    {lang === 'is' ? 'Þessi greiðsla er líklega þegar í bókunum' : 'This payment is probably already in the books'}
+                  </div>
+                  <div className="mt-1">
+                    {lang === 'is' ? 'Þú átt þegar færslu upp á ' : 'You already have an entry of '}
+                    <strong>{Number(dupTarget.amount).toLocaleString('is-IS')}</strong>
+                    {lang === 'is' ? ' frá ' : ' from '}<strong>{dupTarget.date}</strong> — {dupTarget.description}
+                  </div>
+                </div>
+              </div>
+
+              {/* More than one entry matches: let the owner say which. */}
+              {dupes.length > 1 && (
+                <select className={inp} value={dupTarget.id} onChange={e => setDupChoice(e.target.value)}>
+                  {dupes.map(t => (
+                    <option key={t.id} value={t.id}>{t.date} · {t.description}</option>
+                  ))}
+                </select>
+              )}
+
+              <div className="space-y-2">
+                <button onClick={attachToExisting}
+                  className="w-full bg-amber-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-amber-700">
+                  {lang === 'is' ? 'Já — hengdu myndina á þessa færslu' : 'Yes — attach the photo to that entry'}
+                </button>
+                <button onClick={() => setDupDismissed(true)}
+                  className="w-full border border-amber-300 text-amber-800 py-2.5 rounded-xl text-sm">
+                  {lang === 'is' ? 'Nei — þetta er önnur greiðsla' : 'No — this is a separate payment'}
+                </button>
+              </div>
+              <p className="text-xs text-amber-700">
+                {lang === 'is'
+                  ? 'Að hengja myndina á breytir engum upphæðum. Að búa til nýja færslu tvítelur greiðsluna.'
+                  : 'Attaching the photo changes no amounts. Creating a new entry double-counts the payment.'}
+              </p>
+            </div>
+          )}
+
           {/* Extracted form */}
-          {result && !scanning && !saved && (
+          {result && !scanning && !saved && !showDupWarning && (
             <div className="space-y-3">
               <p className="text-xs font-bold text-gray-500 uppercase">
                 {lang === 'is' ? 'Niðurstöður — breyttu ef þörf er á' : 'Extracted data — edit if needed'}
@@ -244,7 +329,9 @@ export default function ReceiptScanner({ onClose }: Props) {
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-4">
               <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
               <span className="text-sm font-medium text-green-700">
-                {lang === 'is' ? 'Færsla vistuð!' : 'Transaction saved!'}
+                {attached
+                  ? (lang === 'is' ? 'Mynd hengd á færsluna — engin ný færsla búin til.' : 'Photo attached to the existing entry — nothing new created.')
+                  : (lang === 'is' ? 'Færsla vistuð!' : 'Transaction saved!')}
               </span>
             </div>
           )}
