@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights } from '../utils/ai';
+import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights, txPool } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
@@ -24,6 +24,27 @@ function extractBook(content: string): { text: string; book: BookTx[] } {
     if (Array.isArray(p?.transactions)) book = p.transactions;
   } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), book };
+}
+
+// A correction the AI proposes to an EXISTING transaction (```jobboks-fix```).
+// `ref` is the row's 1-based position in txPool() — the #n the AI was shown.
+// `was` is that row's date/amount as the AI saw it: checked before anything
+// changes, so a stale ref (books edited mid-chat) can't rewrite the wrong row.
+// `set` holds only the fields that change.
+interface FixTx {
+  ref: number;
+  was?: { date?: string; amount?: number };
+  set: Partial<Pick<Transaction, 'date' | 'description' | 'category' | 'type' | 'amount' | 'vatRate' | 'interestAmount'>> & { accountNumber?: string };
+}
+function extractFix(content: string): { text: string; fixes: FixTx[] } {
+  const m = content.match(/```jobboks-fix\s*([\s\S]*?)```/);
+  if (!m) return { text: content, fixes: [] };
+  let fixes: FixTx[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.fixes)) fixes = p.fixes.filter((f: FixTx) => f && Number.isFinite(Number(f.ref)) && f.set);
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), fixes };
 }
 
 // Pull an AI-generated ```jobboks-excel``` block out of a reply → the cleaned
@@ -291,6 +312,55 @@ export default function AIAssistant() {
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-book\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // Point a proposed fix back at the real transaction. Returns null when the ref
+  // no longer lines up — the books can change mid-chat (a Book, an import, an
+  // edit in the Transactions screen), which shifts every row's position. Checking
+  // the AI's remembered date/amount means a stale ref is refused, never applied
+  // to whatever row happens to sit at that number now.
+  function resolveFix(f: FixTx): Transaction | null {
+    const tx = txPool(data.transactions, aiYear ?? undefined)[Number(f.ref) - 1];
+    if (!tx) return null;
+    if (f.was?.date && f.was.date !== tx.date) return null;
+    if (f.was?.amount != null && Math.round(Number(f.was.amount)) !== Math.round(tx.amount)) return null;
+    return tx;
+  }
+
+  // The owner approved the AI's proposed corrections → write them into the books.
+  // Every fix is resolved against the SAME pre-fix snapshot, so one fix changing a
+  // date can't shift the row another fix in the batch points at.
+  function applyFix(msgIndex: number, fixes: FixTx[]) {
+    let applied = 0;
+    let skipped = 0;
+    for (const f of fixes) {
+      const tx = resolveFix(f);
+      if (!tx) { skipped++; continue; }
+      const s = f.set;
+      const accountId = s.accountNumber
+        ? data.accounts.find(a => a.number === String(s.accountNumber))?.id
+        : undefined;
+      dispatch({
+        type: 'UPDATE_TRANSACTION',
+        payload: {
+          ...tx,
+          ...(s.date ? { date: s.date } : {}),
+          ...(s.description ? { description: s.description } : {}),
+          ...(s.category ? { category: s.category } : {}),
+          ...(s.type ? { type: s.type } : {}),
+          ...(s.amount != null ? { amount: Number(s.amount) || 0 } : {}),
+          ...(s.vatRate != null ? { vatRate: Number(s.vatRate) || 0 } : {}),
+          ...(s.interestAmount != null ? { interestAmount: Number(s.interestAmount) || 0 } : {}),
+          ...(accountId ? { accountId } : {}),
+        },
+      });
+      applied++;
+    }
+    const done = lang === 'is'
+      ? `✅ Lagað í Jobboks: ${applied} færsla(r)${skipped ? ` — ${skipped} sleppt, fannst ekki lengur` : ''}`
+      : `✅ Fixed in Jobboks: ${applied} entr${applied === 1 ? 'y' : 'ies'}${skipped ? ` — ${skipped} skipped, no longer matched` : ''}`;
+    setMessages(prev => prev.map((m, idx) =>
+      idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-4rem)]">
       {/* Header */}
@@ -390,7 +460,8 @@ export default function AIAssistant() {
                     (() => {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
                       const { text: afterMem, remember } = extractMemory(afterExcel);
-                      const { text, book } = extractBook(afterMem);
+                      const { text: afterBook, book } = extractBook(afterMem);
+                      const { text, fixes } = extractFix(afterBook);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -429,6 +500,48 @@ export default function AIAssistant() {
                               </button>
                             </div>
                           )}
+                          {fixes.length > 0 && (() => {
+                            // Show the real CURRENT row next to what it becomes, so the
+                            // owner approves a change they can actually see. A fix whose
+                            // ref no longer resolves is shown greyed out and is skipped.
+                            const rows = fixes.map(f => ({ f, tx: resolveFix(f) }));
+                            const ok = rows.filter(r => r.tx).length;
+                            return (
+                              <div className="mt-3 border border-amber-200 rounded-lg overflow-hidden">
+                                <div className="bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                                  {lang === 'is' ? 'Tillaga að leiðréttingu — samþykktu til að laga' : 'Proposed corrections — approve to fix'}
+                                </div>
+                                <div className="divide-y divide-gray-100">
+                                  {rows.map(({ f, tx }, fi) => (
+                                    <div key={fi} className="px-3 py-1.5 text-xs">
+                                      {tx ? (
+                                        <>
+                                          <div className="text-gray-500 line-through">
+                                            {tx.date} · {tx.description} · {tx.category} · {tx.amount.toLocaleString('is-IS')}
+                                          </div>
+                                          <div className="text-gray-900 font-medium">
+                                            {f.set.date ?? tx.date} · {f.set.description ?? tx.description} · {f.set.category ?? tx.category} · {(f.set.amount ?? tx.amount).toLocaleString('is-IS')}
+                                            {f.set.accountNumber ? <span className="text-gray-400"> → {f.set.accountNumber}</span> : null}
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div className="text-gray-400">
+                                          {lang === 'is'
+                                            ? `Færsla #${f.ref} fannst ekki lengur — sleppt. Spurðu aftur svo AI-ið sjái nýju stöðuna.`
+                                            : `Entry #${f.ref} no longer matches — skipped. Ask again so the AI sees the current books.`}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                <button onClick={() => applyFix(i, fixes)} disabled={ok === 0}
+                                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
+                                  <CheckCircle className="w-4 h-4" />
+                                  {lang === 'is' ? `Laga ${ok} færslu(r) í Jobboks` : `Fix ${ok} entr${ok === 1 ? 'y' : 'ies'} in Jobboks`}
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </>
                       );
                     })()
