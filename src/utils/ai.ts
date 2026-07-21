@@ -228,9 +228,10 @@ ${Object.entries(catBreakdown).map(([c, a]) => `  ${c}: ${fmtNum(a)}`).join('\n'
 
 // Month-by-month totals for every year with data (Jan→Dec), so the AI can look
 // at any single month or spot seasonal patterns — not just whole-year figures.
-function monthlyBreakdown(data: AppData): string {
+function monthlyBreakdown(data: AppData, year?: number): string {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const years = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a);
+  const years = year != null ? [year]
+    : [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a);
   const lines: string[] = [];
   for (const y of years) {
     const inc = new Array(12).fill(0), exp = new Array(12).fill(0);
@@ -253,10 +254,13 @@ function monthlyBreakdown(data: AppData): string {
 // per-year in/out totals. This is what lets the AI answer "how much from/to X
 // over time", "find payments to a specific person/supplier", and compare years,
 // without needing every raw row. Bounded to the biggest parties by volume.
-function counterpartyIndex(data: AppData): string {
+function counterpartyIndex(data: AppData, year?: number): string {
   interface Party { inc: number; exp: number; count: number; years: Map<number, { inc: number; exp: number }>; }
   const map = new Map<string, Party>();
-  for (const tx of data.transactions) {
+  const source = year != null
+    ? data.transactions.filter(tx => new Date(tx.date).getFullYear() === year)
+    : data.transactions;
+  for (const tx of source) {
     const key = (tx.description || '(no description)').trim() || '(no description)';
     let e = map.get(key);
     if (!e) { e = { inc: 0, exp: 0, count: 0, years: new Map() }; map.set(key, e); }
@@ -291,7 +295,10 @@ export function buildContext(data: AppData, lang: string, year?: number): string
   const years = [...new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))]
     .sort((a, b) => b - a);
 
-  const perYear = years
+  // Working on one year: summarise ONLY that year. Leaving every year's totals in
+  // meant a question like "find the Húsasmiðjan expenses" was answered from all
+  // years at once, ignoring the year being worked on.
+  const perYear = (year != null ? [year] : years)
     .map(y => yearSummary(data, y))
     .filter(Boolean)
     .join('\n\n') || '  No transactions recorded yet.';
@@ -380,13 +387,17 @@ LANGUAGE: ${lang === 'is' ? 'Icelandic' : 'English'}
 YEARS WITH DATA: ${years.join(', ') || 'none'}
 
 These per-year totals are calculated by the same engine as the Reports and Annual
-Accounts screens, so they reconcile exactly. Use them when asked about any year.
+Accounts screens, so they reconcile exactly.${year != null
+  ? ` EVERYTHING BELOW IS ${year} ONLY. Every figure, party
+and month you can see is ${year}. You have NO figures for any other year — if the
+owner asks about one, say they need to switch the year rather than answering.`
+  : ' Use them when asked about any year.'}
 
 FULL-YEAR FINANCIAL SUMMARIES:
 ${perYear}
 
-MONTHLY BREAKDOWN — every year, Jan→Dec (income +, expense -):
-${monthlyBreakdown(data)}
+MONTHLY BREAKDOWN — ${year != null ? `${year} only` : 'every year'}, Jan→Dec (income +, expense -):
+${monthlyBreakdown(data, year)}
 
 CATEGORISATION RULES — how the owner keys purchases/income (pattern found in a
 transaction's description → the key/category it goes on). Use these to answer
@@ -401,11 +412,16 @@ name the exact key from this list; remember per-counterparty booking choices via
 a jobboks-remember block so they stick:
 ${keysList || '  (no keys defined yet — see Bókhaldslyklar)'}
 
-COUNTERPARTY INDEX — every party across ALL years (grouped by description, top by
+COUNTERPARTY INDEX — ${year != null
+  ? `every party in ${year} ONLY (grouped by description; n=number of transactions,
+then total in / out). These are ${year} figures. If the owner asks about a party,
+answer for ${year}. Other years are NOT here — if they want another year, tell them
+to switch the year, and do NOT quote figures for it from memory`
+  : `every party across ALL years (grouped by description, top by
 volume; n=number of transactions, then total in / out, then per-year in/out). Use
 this to find or total payments to/from any tenant, supplier or person over time,
-and to compare years — it covers every year, not just recent ones:
-${counterpartyIndex(data)}
+and to compare years — it covers every year, not just recent ones`}:
+${counterpartyIndex(data, year)}
 
 OPEN INVOICES (${openInvoices.length}):
 ${openInvoices.map(i => {
