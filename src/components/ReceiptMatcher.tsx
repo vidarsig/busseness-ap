@@ -4,6 +4,7 @@ import { useApp } from '../contexts/AppContext';
 import { Transaction, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../types';
 import { scanReceipt, ScannedReceipt } from '../utils/ai';
 import { prepareImage } from '../utils/image';
+import { daysApart, findReceiptCandidates, LIKELY_SAME_PAYMENT_DAYS } from '../utils/receiptMatch';
 
 type ItemStatus = 'scanning' | 'matched' | 'review' | 'nomatch' | 'error' | 'attached';
 
@@ -17,26 +18,10 @@ interface MatchItem {
   selectedId: string; // '' = skip / no match
 }
 
-const DAY = 86400000;
-
-function daysApart(a: string, b: string): number {
-  const ta = new Date(a).getTime(), tb = new Date(b).getTime();
-  if (isNaN(ta) || isNaN(tb)) return Infinity;
-  return Math.abs(ta - tb) / DAY;
-}
-
-/** Find expense transactions whose amount equals the receipt total, closest date first. */
-function findCandidates(txs: Transaction[], receipt: ScannedReceipt, excludeIds: Set<string>): Transaction[] {
-  const target = Math.round(receipt.amount);
-  return txs
-    .filter(t => t.type === 'expense' && !t.receiptUrl && !excludeIds.has(t.id) && Math.round(t.amount) === target)
-    .sort((a, b) => daysApart(a.date, receipt.date) - daysApart(b.date, receipt.date));
-}
-
 function classify(cands: Transaction[], receipt: ScannedReceipt): ItemStatus {
   if (cands.length === 0) return 'nomatch';
   // Confident only when there's a single amount match and the date is close.
-  if (cands.length === 1 && daysApart(cands[0].date, receipt.date) <= 10) return 'matched';
+  if (cands.length === 1 && daysApart(cands[0].date, receipt.date) <= LIKELY_SAME_PAYMENT_DAYS) return 'matched';
   return 'review';
 }
 
@@ -84,7 +69,7 @@ export default function ReceiptMatcher({ onClose }: Props) {
       try {
         const { dataUrl, base64, mediaType } = await prepareImage(images[k]);
         const receipt = await scanReceipt(base64, mediaType, allCategories, vatRates, lang);
-        const cands = findCandidates(data.transactions, receipt, used);
+        const cands = findReceiptCandidates(data.transactions, receipt, used);
         const status = classify(cands, receipt);
         const selectedId = status === 'nomatch' ? '' : cands[0].id;
         if (selectedId) used.add(selectedId);
