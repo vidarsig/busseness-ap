@@ -63,26 +63,44 @@ function extractExcel(content: string): { text: string; excel: ExcelReport | nul
 }
 
 // Pull an AI-generated ```jobboks-remember``` block → the cleaned text plus the
-// facts the AI wants to keep in the long-term Memory.
-function extractMemory(content: string): { text: string; remember: string[] } {
+// facts the AI wants to keep (`remember`) and stale ones it wants dropped
+// (`forget`). Forgetting is what lets a corrected fact REPLACE an old one instead
+// of piling up beside it — memory that can only grow accumulates contradictions.
+function extractMemory(content: string): { text: string; remember: string[]; forget: string[] } {
   const m = content.match(/```jobboks-remember\s*([\s\S]*?)```/);
-  if (!m) return { text: content, remember: [] };
+  if (!m) return { text: content, remember: [], forget: [] };
   let remember: string[] = [];
+  let forget: string[] = [];
   try {
     const p = JSON.parse(m[1].trim());
     if (Array.isArray(p?.remember)) remember = p.remember.map((s: unknown) => String(s).trim()).filter(Boolean);
+    if (Array.isArray(p?.forget)) forget = p.forget.map((s: unknown) => String(s).trim()).filter(Boolean);
   } catch { /* ignore malformed block */ }
-  return { text: content.replace(m[0], '').trim(), remember };
+  return { text: content.replace(m[0], '').trim(), remember, forget };
 }
 
-// Append new facts to the Memory text as bullets, skipping ones already there.
-function appendMemory(existing: string, notes: string[]): string {
-  const cur = (existing ?? '').trim();
+// Apply a remember/forget update to the Memory text: first drop any bullet that
+// contains a `forget` phrase (case-insensitive), then append new facts, skipping
+// ones already present. Returns the new text and which lines were removed (for
+// the confirmation shown to the owner).
+function updateMemory(existing: string, notes: string[], forget: string[]): { text: string; removed: string[] } {
+  const removed: string[] = [];
+  let lines = (existing ?? '').split('\n');
+  if (forget.length) {
+    const phrases = forget.map(f => f.toLowerCase());
+    lines = lines.filter(line => {
+      const hit = line.trim() && phrases.some(p => p && line.toLowerCase().includes(p));
+      if (hit) removed.push(line.replace(/^-\s*/, '').trim());
+      return !hit;
+    });
+  }
+  const cur = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   const have = cur.toLowerCase();
   const additions = notes.filter(n => n && !have.includes(n.toLowerCase()));
-  if (additions.length === 0) return cur;
-  const lines = additions.map(n => `- ${n}`).join('\n');
-  return cur ? `${cur}\n${lines}` : lines;
+  const text = additions.length
+    ? (cur ? `${cur}\n${additions.map(n => `- ${n}`).join('\n')}` : additions.map(n => `- ${n}`).join('\n'))
+    : cur;
+  return { text, removed };
 }
 
 function renderMarkdown(text: string): string {
@@ -249,10 +267,10 @@ export default function AIAssistant() {
         'claude-sonnet-4-6',
         true, // allow live web lookup for tax rules/rates/deadlines
       );
-      // If the AI chose to remember something, append it to the long-term Memory.
-      const { remember } = extractMemory(assistantText);
-      if (remember.length) {
-        dispatch({ type: 'SET_AI_MEMORY', payload: appendMemory(data.aiMemory ?? '', remember) });
+      // If the AI chose to remember or correct something, update the long-term Memory.
+      const { remember, forget } = extractMemory(assistantText);
+      if (remember.length || forget.length) {
+        dispatch({ type: 'SET_AI_MEMORY', payload: updateMemory(data.aiMemory ?? '', remember, forget).text });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : t('aiError'));
@@ -471,7 +489,7 @@ export default function AIAssistant() {
                   ) : msg.role === 'assistant' ? (
                     (() => {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
-                      const { text: afterMem, remember } = extractMemory(afterExcel);
+                      const { text: afterMem, remember, forget } = extractMemory(afterExcel);
                       const { text: afterBook, book } = extractBook(afterMem);
                       const { text, fixes } = extractFix(afterBook);
                       return (
@@ -484,10 +502,14 @@ export default function AIAssistant() {
                               {lang === 'is' ? `Sækja Excel (${excel.rows.length} línur)` : `Download Excel (${excel.rows.length} rows)`}
                             </button>
                           )}
-                          {remember.length > 0 && (
+                          {(remember.length > 0 || forget.length > 0) && (
                             <div className="mt-3 flex items-start gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
                               <Sparkles className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                              <span>{lang === 'is' ? 'Vistað í minni' : 'Saved to memory'}: {remember.join('; ')}</span>
+                              <span>
+                                {remember.length > 0 && <>{lang === 'is' ? 'Vistað í minni' : 'Saved to memory'}: {remember.join('; ')}</>}
+                                {remember.length > 0 && forget.length > 0 && ' · '}
+                                {forget.length > 0 && <>{lang === 'is' ? 'Leiðrétt (fjarlægt)' : 'Corrected (removed)'}: {forget.join('; ')}</>}
+                              </span>
                             </div>
                           )}
                           {book.length > 0 && (

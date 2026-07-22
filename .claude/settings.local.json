@@ -75,7 +75,9 @@
       "Bash(curl -s -o /dev/null -w \"21a21f74\\(gamalt\\): %{http_code}\\\\n\" \"https://jobboks.app/workbox-21a21f74.js\")",
       "Bash(git checkout *)",
       "Bash(sed -n '/function findCandidates/,/^}/p' src/components/ReceiptMatcher.tsx)",
-      "Bash(sed -n '/function classify/,/^}/p' src/components/ReceiptMatcher.tsx)"
+      "Bash(sed -n '/function classify/,/^}/p' src/components/ReceiptMatcher.tsx)",
+      "Bash(curl -s -o /dev/null -w \"claude-stream: %{http_code}\\\\n\" -X POST https://jobboks.app/api/claude-stream -H \"content-type: application/json\" -d '{}')",
+      "Bash(curl -s -o /dev/null -w \"claude: %{http_code}\\\\n\" -X POST https://jobboks.app/api/claude -H \"content-type: application/json\" -d '{}')"
     ]
   }
 }
