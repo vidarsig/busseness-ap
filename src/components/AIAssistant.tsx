@@ -77,10 +77,16 @@ function parseFixBody(body: string): { fixes: FixTx[]; matches: MatchFix[] } {
   // `shared` is a top-level "set" (the single-match shape {"match":{...},"set":{...}}
   // puts it there); a per-item "set" inside a matches[] entry overrides it.
   const toMatch = (m: unknown, shared: unknown): MatchFix | null => {
-    const o = (m ?? {}) as MatchFix;
-    const set = (o.set && typeof o.set === 'object') ? o.set : (shared as FixTx['set']);
-    return typeof o.desc === 'string' && o.desc.trim() && set && typeof set === 'object'
-      ? { desc: o.desc, contains: o.contains, type: o.type, year: o.year != null ? Number(o.year) : undefined, date: typeof o.date === 'string' ? o.date : undefined, set }
+    const raw = (m ?? {}) as MatchFix & { match?: MatchFix };
+    // Accept BOTH shapes the model uses: flat {desc,…,set} and nested
+    // {match:{desc,…},set}. It sometimes wraps the criteria in an inner "match"
+    // object — before this that parsed to nothing and the block was rejected.
+    const crit = (raw.match && typeof raw.match === 'object') ? raw.match : raw;
+    const set = (raw.set && typeof raw.set === 'object') ? raw.set
+      : (crit.set && typeof crit.set === 'object') ? crit.set
+      : (shared as FixTx['set']);
+    return typeof crit.desc === 'string' && crit.desc.trim() && set && typeof set === 'object'
+      ? { desc: crit.desc, contains: crit.contains, type: crit.type, year: crit.year != null ? Number(crit.year) : undefined, date: typeof crit.date === 'string' ? crit.date : undefined, set }
       : null;
   };
   try {
