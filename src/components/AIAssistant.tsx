@@ -112,13 +112,37 @@ function parseFixBody(body: string): { fixes: FixTx[]; matches: MatchFix[] } {
   }
   return { fixes: [], matches: [] };
 }
-function extractFix(content: string): { text: string; fixes: FixTx[]; matches: MatchFix[] } {
-  // Match to the closing fence, OR to end-of-string when the block was
-  // truncated (a big batch can overflow the model before the closing ```).
-  const m = content.match(/```jobboks-fix\s*([\s\S]*?)(?:```|$)/);
-  if (!m) return { text: content, fixes: [], matches: [] };
-  const { fixes, matches } = parseFixBody(m[1].trim());
-  return { text: content.replace(m[0], '').trim(), fixes, matches };
+function extractFix(content: string): { text: string; fixes: FixTx[]; matches: MatchFix[]; badBlock: boolean } {
+  const fixes: FixTx[] = [];
+  const matches: MatchFix[] = [];
+  const strip: string[] = [];
+  let badBlock = false;
+  // Tolerant on purpose. The model sometimes tags the block ```json (or leaves it
+  // untagged), or splits it into SEVERAL blocks — before this, any of those meant
+  // the block silently vanished with NO button and NO error ("engin block"). We
+  // now accept: the correctly-tagged block, any other fenced block whose JSON is
+  // clearly fix-shaped, and multiple blocks — merging them all. A ```jobboks-fix
+  // block that parses to nothing sets badBlock so the UI reports it instead of
+  // showing nothing.
+  const fenceRe = /```([a-zA-Z0-9_-]*)[^\S\r\n]*\r?\n?([\s\S]*?)(?:```|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = fenceRe.exec(content)) !== null) {
+    const tagged = m[1] === 'jobboks-fix';
+    const body = m[2].trim();
+    if (!tagged && !/["'](fixes|refs|match|matches)["']\s*:/.test(body)) continue;
+    const parsed = parseFixBody(body);
+    if (parsed.fixes.length || parsed.matches.length) {
+      fixes.push(...parsed.fixes);
+      matches.push(...parsed.matches);
+      strip.push(m[0]);
+    } else if (tagged) {
+      badBlock = true;
+      strip.push(m[0]);
+    }
+  }
+  let text = content;
+  for (const s of strip) text = text.replace(s, '');
+  return { text: text.trim(), fixes, matches, badBlock };
 }
 
 // Pull an AI-generated ```jobboks-excel``` block out of a reply → the cleaned
@@ -492,18 +516,32 @@ export default function AIAssistant() {
     });
   }
 
+  // Why a key on a fix/match set can't be used — MISSING (not in the chart) or
+  // DUPLICATE (two keys share the number, so the app can't tell which to book on;
+  // exactly the 6100 "Raforka og hiti" vs "Eldsneytis kaup" collision). Returns a
+  // plain-language reason, or null when the key is fine. Reported instead of
+  // silently booking onto the wrong key.
+  function keyProblem(accountNumber?: string): string | null {
+    if (!accountNumber) return null;
+    const hits = data.accounts.filter(a => a.number === String(accountNumber));
+    if (hits.length === 0) return lang === 'is'
+      ? `Lykill ${accountNumber} er ekki til í lyklaskránni — búðu hann til fyrst.`
+      : `Key ${accountNumber} is not in the chart of accounts — create it first.`;
+    if (hits.length > 1) return lang === 'is'
+      ? `Fleiri en einn lykill hefur númerið ${accountNumber} (${hits.map(a => a.name).join(', ')}) — appið veit ekki á hvorn á að bóka. Gefðu öðrum þeirra nýtt númer fyrst.`
+      : `More than one key has number ${accountNumber} (${hits.map(a => a.name).join(', ')}) — the app can't tell which. Renumber one of them first.`;
+    return null;
+  }
+
   // The owner approved an all-years match fix → write the change onto every
   // matching row. A fix naming a key that isn't in the chart is refused whole
   // (the key IS the change), so we never report "fixed" while leaving rows wrong.
   function applyMatch(msgIndex: number, matches: MatchFix[]) {
     let applied = 0;
-    const missingKey = matches.find(mf => mf.set.accountNumber && !data.accounts.some(a => a.number === String(mf.set.accountNumber)));
-    if (missingKey) {
-      const why = lang === 'is'
-        ? `⚠️ Lykill ${missingKey.set.accountNumber} er ekki til í lyklaskránni — ekkert lagað. Búðu hann til fyrst.`
-        : `⚠️ Key ${missingKey.set.accountNumber} is not in the chart of accounts — nothing changed. Create it first.`;
+    const problem = matches.map(mf => keyProblem(mf.set.accountNumber)).find(Boolean);
+    if (problem) {
       setMessages(prev => prev.map((m, idx) =>
-        idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n${why}`) } : m));
+        idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n⚠️ ${problem}`) } : m));
       return;
     }
     for (const mf of matches) {
@@ -634,10 +672,18 @@ export default function AIAssistant() {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
                       const { text: afterMem, remember, forget } = extractMemory(afterExcel);
                       const { text: afterBook, book } = extractBook(afterMem);
-                      const { text, fixes, matches } = extractFix(afterBook);
+                      const { text, fixes, matches, badBlock } = extractFix(afterBook);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
+                          {badBlock && (
+                            <div className="mt-3 flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                              <span className="flex-shrink-0">⚠️</span>
+                              <span>{lang === 'is'
+                                ? 'AI-ið reyndi að laga færslur en leiðréttingin var ógild (t.d. rangt snið eða engin færsla fannst). Ekkert var breytt. Reyndu að umorða beiðnina, eða láttu mig vita.'
+                                : 'The AI tried to fix entries but the correction was invalid (bad format, or nothing matched). Nothing was changed. Try rewording the request, or let me know.'}</span>
+                            </div>
+                          )}
                           {excel && (
                             <button onClick={() => exportExcelTable(excel.filename, excel.sheet, excel.columns, excel.rows)}
                               className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700">
@@ -732,7 +778,7 @@ export default function AIAssistant() {
                               return { mf, txs, perYear: [...perYear.entries()].sort((a, b) => a[0] - b[0]) };
                             });
                             const total = groups.reduce((n, g) => n + g.txs.length, 0);
-                            const keyMissing = matches.find(mf => mf.set.accountNumber && !data.accounts.some(a => a.number === String(mf.set.accountNumber)));
+                            const keyIssue = matches.map(mf => keyProblem(mf.set.accountNumber)).find(Boolean);
                             return (
                               <div className="mt-3 border border-amber-200 rounded-lg overflow-hidden">
                                 <div className="bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
@@ -759,12 +805,8 @@ export default function AIAssistant() {
                                     );
                                   })}
                                 </div>
-                                {keyMissing ? (
-                                  <div className="px-3 py-2 text-xs text-red-600 bg-red-50">
-                                    {lang === 'is'
-                                      ? `Lykill ${keyMissing.set.accountNumber} er ekki til — búðu hann til fyrst.`
-                                      : `Key ${keyMissing.set.accountNumber} does not exist — create it first.`}
-                                  </div>
+                                {keyIssue ? (
+                                  <div className="px-3 py-2 text-xs text-red-600 bg-red-50">⚠️ {keyIssue}</div>
                                 ) : (
                                   <button onClick={() => applyMatch(i, matches)} disabled={total === 0}
                                     className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
