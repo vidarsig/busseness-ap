@@ -124,6 +124,15 @@ export default function AIAssistant() {
     .sort((a, b) => b - a);
   const [aiYear, setAiYear] = useState<number | null>(() =>
     yearsWithData.includes(data.settings.fiscalYear) ? data.settings.fiscalYear : yearsWithData[0] ?? null);
+  // Follow the app's working year: when the owner switches the fiscal year in the
+  // main app, the AI re-scopes to it too, so it always sees the year being worked
+  // on (not a stale year it defaulted to). Without this the AI screen kept its own
+  // year and read the wrong rows — e.g. still on 2026 while the owner worked in 2020.
+  // The owner can still override for the session via the year dropdown below.
+  useEffect(() => {
+    if (yearsWithData.includes(data.settings.fiscalYear)) setAiYear(data.settings.fiscalYear);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.settings.fiscalYear]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
