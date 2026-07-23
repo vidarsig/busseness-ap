@@ -36,15 +36,88 @@ interface FixTx {
   was?: { date?: string; amount?: number };
   set: Partial<Pick<Transaction, 'date' | 'description' | 'category' | 'type' | 'amount' | 'vatRate' | 'interestAmount'>> & { accountNumber?: string };
 }
-function extractFix(content: string): { text: string; fixes: FixTx[] } {
-  const m = content.match(/```jobboks-fix\s*([\s\S]*?)```/);
-  if (!m) return { text: content, fixes: [] };
-  let fixes: FixTx[] = [];
+// A correction the AI proposes by DESCRIPTION MATCH instead of by row ref. This
+// is what makes "fix every X across ALL years" work: the AI only knows the
+// counterparty NAME (it can't hold every year's rows, and refs are year-scoped),
+// so it says "match this name → this change" and the APP finds every matching
+// row across the whole dataset itself. No year switching, nothing dropped.
+interface MatchFix {
+  desc: string;                 // description to match (exact by default)
+  contains?: boolean;           // true = substring match instead of exact
+  type?: Transaction['type'];   // optional: only rows of this type
+  year?: number;                // optional: only this year (else all years)
+  set: FixTx['set'];
+}
+// Expand a SHARED-set fix block into individual FixTx. `refs` all get the same
+// `set`; `amts` (optional, parallel to refs) keeps the stale-ref amount guard.
+function sharedFixes(set: unknown, refs: unknown, amts?: unknown): FixTx[] {
+  const rs = Array.isArray(refs) ? refs : [];
+  const as = Array.isArray(amts) ? amts : [];
+  return rs
+    .map((r, i): FixTx => ({
+      ref: Number(r),
+      set: set as FixTx['set'],
+      was: as[i] != null ? { amount: Number(as[i]) } : undefined,
+    }))
+    .filter(f => Number.isFinite(f.ref) && f.set && typeof f.set === 'object');
+}
+// Parse a ```jobboks-fix``` JSON body. Shapes accepted:
+//   verbose:  {"fixes":[{"ref":12,"was":{...},"set":{...}}, ...]}
+//   compact:  {"set":{...shared...},"refs":[12,13,...],"amts":[42000,...]}
+//   match:    {"match":{"desc":"...","type"?,"year"?,"contains"?},"set":{...}}
+//             (or {"matches":[ ...same... ]})
+// The compact shape exists because the verbose one repeats date+amount on EVERY
+// row, so a large batch (all → the same key) overflows the model's output token
+// limit and the block is cut off before its closing fence. Compact shares one
+// `set` across every ref, so ~60 rows fit where ~15 verbose ones did. The match
+// shape goes further: it needs NO refs at all, so it reclassifies every matching
+// row across ALL years even though the AI can only ever see one year's rows.
+function parseFixBody(body: string): { fixes: FixTx[]; matches: MatchFix[] } {
+  // `shared` is a top-level "set" (the single-match shape {"match":{...},"set":{...}}
+  // puts it there); a per-item "set" inside a matches[] entry overrides it.
+  const toMatch = (m: unknown, shared: unknown): MatchFix | null => {
+    const o = (m ?? {}) as MatchFix;
+    const set = (o.set && typeof o.set === 'object') ? o.set : (shared as FixTx['set']);
+    return typeof o.desc === 'string' && o.desc.trim() && set && typeof set === 'object'
+      ? { desc: o.desc, contains: o.contains, type: o.type, year: o.year != null ? Number(o.year) : undefined, set }
+      : null;
+  };
   try {
-    const p = JSON.parse(m[1].trim());
-    if (Array.isArray(p?.fixes)) fixes = p.fixes.filter((f: FixTx) => f && Number.isFinite(Number(f.ref)) && f.set);
-  } catch { /* ignore malformed block */ }
-  return { text: content.replace(m[0], '').trim(), fixes };
+    const p = JSON.parse(body);
+    if (p?.match || Array.isArray(p?.matches)) {
+      const raw = Array.isArray(p.matches) ? p.matches : [p.match];
+      return { fixes: [], matches: raw.map((m: unknown) => toMatch(m, p.set)).filter(Boolean) as MatchFix[] };
+    }
+    if (Array.isArray(p?.fixes)) return { fixes: p.fixes.filter((f: FixTx) => f && Number.isFinite(Number(f.ref)) && f.set), matches: [] };
+    if (p?.set && Array.isArray(p?.refs)) return { fixes: sharedFixes(p.set, p.refs, p.amts), matches: [] };
+    return { fixes: [], matches: [] };
+  } catch { /* fall through and salvage a truncated block */ }
+  // Salvage: the JSON did not parse — almost always because the block was
+  // truncated mid-array. Recover the rows that DID arrive so the owner still
+  // gets a Laga banner instead of nothing. Only the compact shape is salvaged
+  // (its `set` is flat and comes first); a truncated compact block is the case
+  // that can still overflow at extreme scale.
+  const setM = body.match(/"set"\s*:\s*(\{[^{}]*\})/);
+  if (setM) {
+    try {
+      const set = JSON.parse(setM[1]);
+      const nums = (key: string): number[] => {
+        const a = body.match(new RegExp(`"${key}"\\s*:\\s*\\[([0-9.,\\s]*)`));
+        return a ? a[1].split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n)) : [];
+      };
+      const refs = nums('refs');
+      if (refs.length) return { fixes: sharedFixes(set, refs, nums('amts')), matches: [] };
+    } catch { /* ignore — nothing safely recoverable */ }
+  }
+  return { fixes: [], matches: [] };
+}
+function extractFix(content: string): { text: string; fixes: FixTx[]; matches: MatchFix[] } {
+  // Match to the closing fence, OR to end-of-string when the block was
+  // truncated (a big batch can overflow the model before the closing ```).
+  const m = content.match(/```jobboks-fix\s*([\s\S]*?)(?:```|$)/);
+  if (!m) return { text: content, fixes: [], matches: [] };
+  const { fixes, matches } = parseFixBody(m[1].trim());
+  return { text: content.replace(m[0], '').trim(), fixes, matches };
 }
 
 // Pull an AI-generated ```jobboks-excel``` block out of a reply → the cleaned
@@ -400,6 +473,65 @@ export default function AIAssistant() {
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // Every transaction a description-match fix would hit — searched across the
+  // WHOLE dataset (every year), not the year-scoped txPool. This is why a match
+  // fix reclassifies all years at once: the app matches by name, so a row the AI
+  // never saw is still caught. Exact (trimmed, case-insensitive) by default;
+  // `contains` allows a substring; `type`/`year` narrow it further.
+  function matchTxs(mf: MatchFix): Transaction[] {
+    const needle = mf.desc.trim().toLowerCase();
+    if (!needle) return [];
+    return data.transactions.filter(tx => {
+      const d = (tx.description || '').trim().toLowerCase();
+      if (mf.contains ? !d.includes(needle) : d !== needle) return false;
+      if (mf.type && tx.type !== mf.type) return false;
+      if (mf.year != null && new Date(tx.date).getFullYear() !== mf.year) return false;
+      return true;
+    });
+  }
+
+  // The owner approved an all-years match fix → write the change onto every
+  // matching row. A fix naming a key that isn't in the chart is refused whole
+  // (the key IS the change), so we never report "fixed" while leaving rows wrong.
+  function applyMatch(msgIndex: number, matches: MatchFix[]) {
+    let applied = 0;
+    const missingKey = matches.find(mf => mf.set.accountNumber && !data.accounts.some(a => a.number === String(mf.set.accountNumber)));
+    if (missingKey) {
+      const why = lang === 'is'
+        ? `⚠️ Lykill ${missingKey.set.accountNumber} er ekki til í lyklaskránni — ekkert lagað. Búðu hann til fyrst.`
+        : `⚠️ Key ${missingKey.set.accountNumber} is not in the chart of accounts — nothing changed. Create it first.`;
+      setMessages(prev => prev.map((m, idx) =>
+        idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n${why}`) } : m));
+      return;
+    }
+    for (const mf of matches) {
+      const s = mf.set;
+      const accountId = s.accountNumber ? data.accounts.find(a => a.number === String(s.accountNumber))?.id : undefined;
+      for (const tx of matchTxs(mf)) {
+        dispatch({
+          type: 'UPDATE_TRANSACTION',
+          payload: {
+            ...tx,
+            ...(s.date ? { date: s.date } : {}),
+            ...(s.description ? { description: s.description } : {}),
+            ...(s.category ? { category: s.category } : {}),
+            ...(s.type ? { type: s.type } : {}),
+            ...(s.amount != null ? { amount: Number(s.amount) || 0 } : {}),
+            ...(s.vatRate != null ? { vatRate: Number(s.vatRate) || 0 } : {}),
+            ...(s.interestAmount != null ? { interestAmount: Number(s.interestAmount) || 0 } : {}),
+            ...(accountId ? { accountId } : {}),
+          },
+        });
+        applied++;
+      }
+    }
+    const done = lang === 'is'
+      ? `✅ Lagað í Jobboks (öll ár): ${applied} færsla(r)`
+      : `✅ Fixed in Jobboks (all years): ${applied} entr${applied === 1 ? 'y' : 'ies'}`;
+    setMessages(prev => prev.map((m, idx) =>
+      idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-4rem)]">
       {/* Header */}
@@ -500,7 +632,7 @@ export default function AIAssistant() {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
                       const { text: afterMem, remember, forget } = extractMemory(afterExcel);
                       const { text: afterBook, book } = extractBook(afterMem);
-                      const { text, fixes } = extractFix(afterBook);
+                      const { text, fixes, matches } = extractFix(afterBook);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -584,6 +716,60 @@ export default function AIAssistant() {
                                   <CheckCircle className="w-4 h-4" />
                                   {lang === 'is' ? `Laga ${ok} færslu(r) í Jobboks` : `Fix ${ok} entr${ok === 1 ? 'y' : 'ies'} in Jobboks`}
                                 </button>
+                              </div>
+                            );
+                          })()}
+                          {matches.length > 0 && (() => {
+                            // All-years match fix: the APP counts every matching row across
+                            // all years and shows the owner exactly what will change (name →
+                            // key, total, per-year breakdown) before anything is written.
+                            const groups = matches.map(mf => {
+                              const txs = matchTxs(mf);
+                              const perYear = new Map<number, number>();
+                              for (const tx of txs) { const y = new Date(tx.date).getFullYear(); perYear.set(y, (perYear.get(y) ?? 0) + 1); }
+                              return { mf, txs, perYear: [...perYear.entries()].sort((a, b) => a[0] - b[0]) };
+                            });
+                            const total = groups.reduce((n, g) => n + g.txs.length, 0);
+                            const keyMissing = matches.find(mf => mf.set.accountNumber && !data.accounts.some(a => a.number === String(mf.set.accountNumber)));
+                            return (
+                              <div className="mt-3 border border-amber-200 rounded-lg overflow-hidden">
+                                <div className="bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                                  {lang === 'is' ? 'Leiðrétting — ÖLL ÁR í einu' : 'Correction — ALL YEARS at once'}
+                                </div>
+                                <div className="divide-y divide-gray-100">
+                                  {groups.map((g, gi) => {
+                                    const s = g.mf.set;
+                                    const change = [
+                                      s.type ? (lang === 'is' ? `tegund → ${s.type}` : `type → ${s.type}`) : null,
+                                      s.accountNumber ? (lang === 'is' ? `lykill → ${s.accountNumber}` : `key → ${s.accountNumber}`) : null,
+                                      s.category ? (lang === 'is' ? `flokkur → ${s.category}` : `category → ${s.category}`) : null,
+                                    ].filter(Boolean).join(', ');
+                                    return (
+                                      <div key={gi} className="px-3 py-1.5 text-xs">
+                                        <div className="text-gray-900 font-medium">
+                                          "{g.mf.desc}"{g.mf.type ? ` (${g.mf.type})` : ''} → {change || '—'}
+                                        </div>
+                                        <div className="text-gray-500 mt-0.5">
+                                          {g.txs.length} {lang === 'is' ? 'færslur' : 'entries'}
+                                          {g.perYear.length > 0 && <> · {g.perYear.map(([y, n]) => `${y}:${n}`).join('  ')}</>}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {keyMissing ? (
+                                  <div className="px-3 py-2 text-xs text-red-600 bg-red-50">
+                                    {lang === 'is'
+                                      ? `Lykill ${keyMissing.set.accountNumber} er ekki til — búðu hann til fyrst.`
+                                      : `Key ${keyMissing.set.accountNumber} does not exist — create it first.`}
+                                  </div>
+                                ) : (
+                                  <button onClick={() => applyMatch(i, matches)} disabled={total === 0}
+                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
+                                    <CheckCircle className="w-4 h-4" />
+                                    {lang === 'is' ? `Laga ${total} færslu(r) — öll ár` : `Fix ${total} entr${total === 1 ? 'y' : 'ies'} — all years`}
+                                  </button>
+                                )}
                               </div>
                             );
                           })()}
