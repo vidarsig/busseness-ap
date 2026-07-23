@@ -551,7 +551,6 @@ export default function AIAssistant() {
   // matching row. A fix naming a key that isn't in the chart is refused whole
   // (the key IS the change), so we never report "fixed" while leaving rows wrong.
   function applyMatch(msgIndex: number, matches: MatchFix[]) {
-    let applied = 0;
     const problem = matches.map(mf => keyProblem(mf.set.accountNumber)).find(Boolean);
     if (problem) {
       setMessages(prev => prev.map((m, idx) =>
