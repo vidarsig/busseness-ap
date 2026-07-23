@@ -14,6 +14,10 @@ import { isTransactionLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import { exportPDF, exportExcel } from '../utils/exports';
 
+// Case- and accent-insensitive fold (matches the AI match helper), so the name
+// filter finds "Krónan"/"Vörður" when you type "kronan"/"vordur".
+const foldAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
+
 // How a row reads at a glance in a long list. Money IN — income, or a loan RECEIVED
 // ('lan_mottekid' transfer) — is green +. Money OUT — expense, or a loan repayment
 // ('lan_afborgun' transfer) — is red −. A neutral transfer whose direction the app
@@ -364,8 +368,9 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
           !tx.reference?.toLowerCase().includes(search.toLowerCase())) return false;
         if (filterName) {
-          const q = filterName.toLowerCase();
-          if (!tx.description.toLowerCase().includes(q) && !tx.reference?.toLowerCase().includes(q)) return false;
+          // Accent-insensitive so "kronan" finds "Krónan", "vordur" finds "Vörður".
+          const q = foldAccents(filterName);
+          if (!foldAccents(tx.description).includes(q) && !foldAccents(tx.reference ?? '').includes(q)) return false;
         }
         const min = parseFloat(amountMin), max = parseFloat(amountMax);
         if (!isNaN(min) && tx.amount < min) return false;

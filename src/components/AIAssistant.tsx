@@ -49,6 +49,10 @@ interface MatchFix {
   date?: string;                // optional: only this exact date (YYYY-MM-DD)
   set: FixTx['set'];
 }
+// Case- and accent-insensitive fold, so a match term like "kronan"/"vordur"
+// catches the accented "Krónan"/"Vörður" the bank export mixes in. NFD splits an
+// accented letter into base + combining mark; we strip the marks and lowercase.
+const foldAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
 // Expand a SHARED-set fix block into individual FixTx. `refs` all get the same
 // `set`; `amts` (optional, parallel to refs) keeps the stale-ref amount guard.
 function sharedFixes(set: unknown, refs: unknown, amts?: unknown): FixTx[] {
@@ -509,13 +513,15 @@ export default function AIAssistant() {
   // Every transaction a description-match fix would hit — searched across the
   // WHOLE dataset (every year), not the year-scoped txPool. This is why a match
   // fix reclassifies all years at once: the app matches by name, so a row the AI
-  // never saw is still caught. Exact (trimmed, case-insensitive) by default;
-  // `contains` allows a substring; `type`/`year` narrow it further.
+  // never saw is still caught. Exact (trimmed) by default; `contains` allows a
+  // substring; `type`/`year`/`date` narrow it further. Matching is BOTH case- AND
+  // accent-insensitive (fold diacritics), so "kronan"/"vordur" catch the accented
+  // "Krónan"/"Vörður" spellings that card terminals and bank exports mix.
   function matchTxs(mf: MatchFix): Transaction[] {
-    const needle = mf.desc.trim().toLowerCase();
+    const needle = foldAccents(mf.desc.trim());
     if (!needle) return [];
     return data.transactions.filter(tx => {
-      const d = (tx.description || '').trim().toLowerCase();
+      const d = foldAccents((tx.description || '').trim());
       if (mf.contains ? !d.includes(needle) : d !== needle) return false;
       if (mf.type && tx.type !== mf.type) return false;
       if (mf.year != null && new Date(tx.date).getFullYear() !== mf.year) return false;
