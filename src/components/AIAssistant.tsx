@@ -558,27 +558,30 @@ export default function AIAssistant() {
         idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-fix\s*[\s\S]*?```/, `\n⚠️ ${problem}`) } : m));
       return;
     }
+    // Merge changes per transaction, keyed by id — a row can be caught by several
+    // match entries (overlapping terms), but must be updated and COUNTED once, not
+    // once per term (that inflated the "N færslur" tally, e.g. 58 reported as 760).
+    const changes = new Map<string, Transaction>();
     for (const mf of matches) {
       const s = mf.set;
       const accountId = s.accountNumber ? data.accounts.find(a => a.number === String(s.accountNumber))?.id : undefined;
       for (const tx of matchTxs(mf)) {
-        dispatch({
-          type: 'UPDATE_TRANSACTION',
-          payload: {
-            ...tx,
-            ...(s.date ? { date: s.date } : {}),
-            ...(s.description ? { description: s.description } : {}),
-            ...(s.category ? { category: s.category } : {}),
-            ...(s.type ? { type: s.type } : {}),
-            ...(s.amount != null ? { amount: Number(s.amount) || 0 } : {}),
-            ...(s.vatRate != null ? { vatRate: Number(s.vatRate) || 0 } : {}),
-            ...(s.interestAmount != null ? { interestAmount: Number(s.interestAmount) || 0 } : {}),
-            ...(accountId ? { accountId } : {}),
-          },
+        const base = changes.get(tx.id) ?? tx;
+        changes.set(tx.id, {
+          ...base,
+          ...(s.date ? { date: s.date } : {}),
+          ...(s.description ? { description: s.description } : {}),
+          ...(s.category ? { category: s.category } : {}),
+          ...(s.type ? { type: s.type } : {}),
+          ...(s.amount != null ? { amount: Number(s.amount) || 0 } : {}),
+          ...(s.vatRate != null ? { vatRate: Number(s.vatRate) || 0 } : {}),
+          ...(s.interestAmount != null ? { interestAmount: Number(s.interestAmount) || 0 } : {}),
+          ...(accountId ? { accountId } : {}),
         });
-        applied++;
       }
     }
+    for (const tx of changes.values()) dispatch({ type: 'UPDATE_TRANSACTION', payload: tx });
+    const applied = changes.size;
     const done = lang === 'is'
       ? `✅ Lagað í Jobboks (öll ár): ${applied} færsla(r)`
       : `✅ Fixed in Jobboks (all years): ${applied} entr${applied === 1 ? 'y' : 'ies'}`;
@@ -791,7 +794,9 @@ export default function AIAssistant() {
                               for (const tx of txs) { const y = new Date(tx.date).getFullYear(); perYear.set(y, (perYear.get(y) ?? 0) + 1); }
                               return { mf, txs, perYear: [...perYear.entries()].sort((a, b) => a[0] - b[0]) };
                             });
-                            const total = groups.reduce((n, g) => n + g.txs.length, 0);
+                            // DISTINCT rows across all groups — a row caught by
+                            // several terms counts once, matching what apply does.
+                            const total = new Set(groups.flatMap(g => g.txs.map(t => t.id))).size;
                             const keyIssue = matches.map(mf => keyProblem(mf.set.accountNumber)).find(Boolean);
                             return (
                               <div className="mt-3 border border-amber-200 rounded-lg overflow-hidden">
