@@ -338,6 +338,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [bulkKey, setBulkKey] = useState(''); // accountId to bulk-assign onto all filtered rows
 
   // When arriving from a drill-down (e.g. clicking a key in Skýrslur), pre-filter
   // to that key and year and open the filter panel so it's obvious what's shown.
@@ -397,6 +398,23 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     }
     return { income, expense, transfer, net: income - expense, count: filtered.length };
   }, [filtered]);
+
+  // Book the SAME key onto every currently-filtered row in one go — the fast way
+  // to clear the long tail (filter "Enginn lykill" → dump into a catch-all key).
+  // Confirms with the exact count first; only the accountId changes, so it's fully
+  // reversible (re-filter and reassign). Guarded to a filtered subset so it can't
+  // silently key the entire history.
+  function bulkAssignKey() {
+    const acc = data.accounts.find(a => a.id === bulkKey);
+    if (!acc) return;
+    const label = `${acc.number} — ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`;
+    const msg = lang === 'is'
+      ? `Setja lykil "${label}" á allar ${filtered.length} færslur sem hér sjást? Þú getur breytt aftur síðar.`
+      : `Set key "${label}" on all ${filtered.length} shown transactions? You can change it again later.`;
+    if (!window.confirm(msg)) return;
+    for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, accountId: bulkKey } });
+    setBulkKey('');
+  }
 
   // Render only a page at a time — a full history can be thousands of rows, and
   // drawing them all at once freezes the screen (especially right after a big
@@ -687,6 +705,27 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           {summary.income > 0 && summary.expense > 0 && (
             <span className="ml-auto font-semibold text-gray-800">{lang === 'is' ? 'Nettó' : 'Net'}: {formatISK(summary.net, lang)}</span>
           )}
+        </div>
+      )}
+
+      {/* Bulk-assign a key to every filtered row — only when a filter narrows the
+          list, so you can't accidentally re-key the whole history. */}
+      {filtered.length > 0 && filtered.length < data.transactions.length && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-amber-800 font-medium">
+            {lang === 'is' ? `Setja lykil á allar ${filtered.length} færslur:` : `Set key on all ${filtered.length} rows:`}
+          </span>
+          <select value={bulkKey} onChange={e => setBulkKey(e.target.value)}
+            className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="">{lang === 'is' ? 'Veldu lykil…' : 'Choose key…'}</option>
+            {[...data.accounts].sort((a, b) => a.number.localeCompare(b.number)).map(a => (
+              <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
+            ))}
+          </select>
+          <button onClick={bulkAssignKey} disabled={!bulkKey}
+            className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
+            {lang === 'is' ? 'Setja á allar' : 'Apply to all'}
+          </button>
         </div>
       )}
 
