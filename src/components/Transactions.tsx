@@ -326,6 +326,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all');
   const [filterYear, setFilterYear] = useState<number | 'all'>('all');
   const [filterCategory, setFilterCategory] = useState<string | 'all'>('all');
+  const [filterKey, setFilterKey] = useState<string>('all'); // accountId, 'all', or 'none'
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
@@ -356,6 +357,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         if (filterType !== 'all' && tx.type !== filterType) return false;
         if (filterYear !== 'all' && new Date(tx.date).getFullYear() !== filterYear) return false;
         if (filterCategory !== 'all' && tx.category !== filterCategory) return false;
+        if (filterKey === 'none') { if (tx.accountId && data.accounts.some(a => a.id === tx.accountId)) return false; }
+        else if (filterKey !== 'all' && tx.accountId !== filterKey) return false;
         if (dateFrom && tx.date < dateFrom) return false;
         if (dateTo && tx.date > dateTo) return false;
         if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
@@ -370,7 +373,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filterType, filterYear, filterCategory, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
+  }, [data.transactions, filterType, filterYear, filterCategory, filterKey, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
 
   // Keys (categories) actually in use, so the filter only lists real ones.
   const usedCategories = useMemo(() =>
@@ -395,7 +398,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // bank import). Reset back to the first page whenever the filters change.
   const PAGE = 150;
   const [visibleCount, setVisibleCount] = useState(PAGE);
-  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
+  useEffect(() => { setVisibleCount(PAGE); }, [filterType, filterYear, filterCategory, filterKey, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
   const paged = filtered.slice(0, visibleCount);
 
   function handleSave(tx: Transaction) {
@@ -553,7 +556,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <button
             onClick={() => setShowFilters(f => !f)}
             className={`flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
-              showFilters || filterType !== 'all' || filterYear !== 'all' || filterCategory !== 'all' || dateFrom || dateTo || filterName || amountMin || amountMax
+              showFilters || filterType !== 'all' || filterYear !== 'all' || filterCategory !== 'all' || filterKey !== 'all' || dateFrom || dateTo || filterName || amountMin || amountMax
                 ? 'bg-blue-50 border-blue-300 text-blue-700'
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
@@ -587,10 +590,22 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={filterCategory}
               onChange={e => setFilterCategory(e.target.value)}
-              title={lang === 'is' ? 'Lykill / flokkur' : 'Key / category'}
+              title={lang === 'is' ? 'Flokkur' : 'Category'}
+            >
+              <option value="all">{lang === 'is' ? 'Allir flokkar' : 'All categories'}</option>
+              {usedCategories.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
+            </select>
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filterKey}
+              onChange={e => setFilterKey(e.target.value)}
+              title={lang === 'is' ? 'Bókhaldslykill' : 'Key / account'}
             >
               <option value="all">{lang === 'is' ? 'Allir lyklar' : 'All keys'}</option>
-              {usedCategories.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
+              <option value="none">{lang === 'is' ? 'Enginn lykill' : 'No key'}</option>
+              {[...data.accounts].sort((a, b) => a.number.localeCompare(b.number)).map(a => (
+                <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
+              ))}
             </select>
             <div className="flex items-center gap-1.5">
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
@@ -653,7 +668,11 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       {filtered.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <span className="font-semibold text-gray-800">
-            {filterCategory !== 'all' ? t(filterCategory as never) : (lang === 'is' ? 'Allar færslur' : 'All transactions')}
+            {filterKey !== 'all'
+              ? (filterKey === 'none'
+                  ? (lang === 'is' ? 'Enginn lykill' : 'No key')
+                  : (() => { const a = data.accounts.find(x => x.id === filterKey); return a ? `${a.number} — ${lang === 'is' ? a.name : (a.nameEn || a.name)}` : (lang === 'is' ? 'Lykill' : 'Key'); })())
+              : filterCategory !== 'all' ? t(filterCategory as never) : (lang === 'is' ? 'Allar færslur' : 'All transactions')}
           </span>
           <span className="text-gray-400">·</span>
           <span className="text-gray-600">{summary.count} {lang === 'is' ? 'færslur' : 'transactions'}</span>
