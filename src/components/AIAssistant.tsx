@@ -136,8 +136,10 @@ function extractFix(content: string): { text: string; fixes: FixTx[]; matches: M
       matches.push(...parsed.matches);
       strip.push(m[0]);
     } else if (tagged) {
+      // A jobboks-fix block that parsed to nothing: flag it AND leave it visible
+      // (don't strip) so the owner can see/share exactly what the AI wrote — the
+      // only way to tell why it didn't parse.
       badBlock = true;
-      strip.push(m[0]);
     }
   }
   let text = content;
@@ -680,8 +682,8 @@ export default function AIAssistant() {
                             <div className="mt-3 flex items-start gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
                               <span className="flex-shrink-0">⚠️</span>
                               <span>{lang === 'is'
-                                ? 'AI-ið reyndi að laga færslur en leiðréttingin var ógild (t.d. rangt snið eða engin færsla fannst). Ekkert var breytt. Reyndu að umorða beiðnina, eða láttu mig vita.'
-                                : 'The AI tried to fix entries but the correction was invalid (bad format, or nothing matched). Nothing was changed. Try rewording the request, or let me know.'}</span>
+                                ? 'AI-ið reyndi að laga færslur en snið leiðréttingarinnar var ógilt — ekkert var breytt. Kóðablokkin sem það bjó til sést hér fyrir ofan; afritaðu hana og sendu mér svo ég sjái hvað fór úrskeiðis.'
+                                : 'The AI tried to fix entries but the correction was in an invalid format — nothing changed. The block it produced is shown above; copy it and send it to me so I can see what went wrong.'}</span>
                             </div>
                           )}
                           {excel && (
