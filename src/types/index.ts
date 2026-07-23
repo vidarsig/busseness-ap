@@ -480,11 +480,14 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 // Categories for 'transfer' transactions — things that are NOT profit/loss.
-// 'lan_afborgun' = loan / debt repayments (principal + interest paid out to a
-// lender). Kept here, not under expenses, so paying down a loan never reduces
-// profit. Finer sub-types (owner draw / asset) are a later stage.
+// 'lan_afborgun' = loan / debt repayments (principal + interest paid OUT to a
+// lender) → reduces the loan/liability key. 'lan_mottekid' = a loan RECEIVED
+// (money IN from a lender) → INCREASES the liability key, without being counted
+// as revenue or VAT turnover (it's borrowing, not income). Both kept here, not
+// under income/expenses, so borrowing and repaying never touch profit.
 export const TRANSFER_CATEGORIES = [
   'lan_afborgun',
+  'lan_mottekid',
   'ekki_rekstur',
 ] as const;
 

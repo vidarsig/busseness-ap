@@ -20,9 +20,11 @@ export function getTransactionISK(t: Transaction): number {
 // opening balance + the entries booked onto it (money in +, money out −), rolled
 // forward so each year's close is the next year's open. By-the-book normal
 // balances: assets/liabilities/equity all move with the cash booked to the key
-// (repayment out → liability down; borrowing in → up). NOTE: 'transfer' entries
-// are treated as money OUT; interest vs principal is not split (owner books the
-// principal portion onto the key). Returns [] for P&L keys / keys with no data.
+// (repayment out → liability down; borrowing in → up). Direction: an 'income'
+// entry OR a 'lan_mottekid' transfer (a loan RECEIVED) adds to the key; every
+// other entry (expense, or a 'transfer' paid out) subtracts. Interest vs
+// principal is not split for money out except via interestAmount (owner books
+// the principal portion onto the key). Returns [] for P&L keys / no-data keys.
 export function accountBalanceByYear(account: Account, transactions: Transaction[]): { year: number; closing: number }[] {
   const movs = transactions.filter(tx => tx.accountId === account.id);
   if (!movs.length && account.openingBalance == null) return [];
@@ -38,10 +40,13 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
       .reduce((s, tx) => {
         const gross = getTransactionISK(tx);
         // A loan payment's interest is a cost, not a reduction of the loan — only
-        // the principal (gross − interest) moves the balance. Money in (borrowing)
-        // increases the balance by the full amount.
+        // the principal (gross − interest) moves the balance. Money in (income, or
+        // a loan RECEIVED via 'lan_mottekid') increases the balance by the full
+        // amount — so a borrowed loan booked through the bank raises the liability
+        // instead of being wrongly subtracted like a payment.
         const interest = tx.interestAmount ? toISK(tx.interestAmount, tx.currency, tx.eurToIskRate) : 0;
-        return s + (tx.type === 'income' ? gross : -(gross - interest));
+        const moneyIn = tx.type === 'income' || tx.category === 'lan_mottekid';
+        return s + (moneyIn ? gross : -(gross - interest));
       }, 0);
     bal += net;
     rows.push({ year: y, closing: bal });

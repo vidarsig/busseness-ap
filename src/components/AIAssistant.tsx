@@ -46,6 +46,7 @@ interface MatchFix {
   contains?: boolean;           // true = substring match instead of exact
   type?: Transaction['type'];   // optional: only rows of this type
   year?: number;                // optional: only this year (else all years)
+  date?: string;                // optional: only this exact date (YYYY-MM-DD)
   set: FixTx['set'];
 }
 // Expand a SHARED-set fix block into individual FixTx. `refs` all get the same
@@ -79,7 +80,7 @@ function parseFixBody(body: string): { fixes: FixTx[]; matches: MatchFix[] } {
     const o = (m ?? {}) as MatchFix;
     const set = (o.set && typeof o.set === 'object') ? o.set : (shared as FixTx['set']);
     return typeof o.desc === 'string' && o.desc.trim() && set && typeof set === 'object'
-      ? { desc: o.desc, contains: o.contains, type: o.type, year: o.year != null ? Number(o.year) : undefined, set }
+      ? { desc: o.desc, contains: o.contains, type: o.type, year: o.year != null ? Number(o.year) : undefined, date: typeof o.date === 'string' ? o.date : undefined, set }
       : null;
   };
   try {
@@ -486,6 +487,7 @@ export default function AIAssistant() {
       if (mf.contains ? !d.includes(needle) : d !== needle) return false;
       if (mf.type && tx.type !== mf.type) return false;
       if (mf.year != null && new Date(tx.date).getFullYear() !== mf.year) return false;
+      if (mf.date && tx.date !== mf.date) return false;
       return true;
     });
   }
