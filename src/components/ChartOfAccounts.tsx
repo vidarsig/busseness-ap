@@ -120,6 +120,18 @@ export default function ChartOfAccounts() {
     [data.accounts, filterType, search]);
 
   function handleSave(acc: Account) {
+    const num = acc.number.trim();
+    // Block a duplicate key NUMBER at the source. Two keys sharing a number means
+    // the app can't tell which to book on (the 6100 "Raforka og hiti" vs
+    // "Eldsneytis kaup" collision), so bookings can land on the wrong key. Reject
+    // and keep the editor open rather than create the clash.
+    const clash = data.accounts.find(a => a.id !== acc.id && a.number.trim() === num);
+    if (clash) {
+      alert(lang === 'is'
+        ? `Lykill númer ${num} er þegar til: "${clash.name}". Tveir lyklar mega ekki hafa sama númer — veldu annað númer.`
+        : `Key number ${num} is already used by "${clash.name}". Two keys can't share a number — pick a different one.`);
+      return;
+    }
     dispatch(data.accounts.find(a => a.id === acc.id)
       ? { type: 'UPDATE_ACCOUNT', payload: acc }
       : { type: 'ADD_ACCOUNT', payload: acc });
