@@ -14,6 +14,19 @@ import { isTransactionLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import { exportPDF, exportExcel } from '../utils/exports';
 
+// How a row reads at a glance in a long list. Money IN — income, or a loan RECEIVED
+// ('lan_mottekid' transfer) — is green +. Money OUT — expense, or a loan repayment
+// ('lan_afborgun' transfer) — is red −. A neutral transfer whose direction the app
+// can't know ('ekki_rekstur') stays gray ±. Same in/out rule the balance math uses,
+// so the colour and the running balance always agree.
+function flowStyle(tx: Transaction): { sign: string; text: string; dot: string; chip: string } {
+  if (tx.type === 'income' || tx.category === 'lan_mottekid')
+    return { sign: '+', text: 'text-green-600', dot: 'bg-green-400', chip: 'bg-green-100 text-green-700' };
+  if (tx.type === 'expense' || tx.category === 'lan_afborgun')
+    return { sign: '-', text: 'text-red-600', dot: 'bg-red-400', chip: 'bg-red-100 text-red-700' };
+  return { sign: '±', text: 'text-gray-500', dot: 'bg-gray-300', chip: 'bg-gray-100 text-gray-600' };
+}
+
 const EMPTY_FORM: Omit<Transaction, 'id'> = {
   date: todayISO(),
   description: '',
@@ -662,16 +675,16 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               className="mt-3 text-blue-600 text-sm font-medium">{t('addFirst')}</button>
           </div>
         ) : (
-          paged.map(tx => (
+          paged.map(tx => { const flow = flowStyle(tx); return (
             <div key={tx.id}
               className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3"
             >
-              <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${tx.type === 'income' ? 'bg-green-400' : tx.type === 'transfer' ? 'bg-gray-300' : 'bg-red-400'}`} />
+              <div className={`mt-0.5 w-2.5 h-2.5 rounded-full flex-shrink-0 ${flow.dot}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start gap-2">
                   <p className="font-medium text-gray-800 text-sm truncate">{tx.description}</p>
-                  <span className={`font-semibold text-sm flex-shrink-0 font-mono ${tx.type === 'income' ? 'text-green-600' : tx.type === 'transfer' ? 'text-gray-500' : 'text-red-600'}`}>
-                    {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '±' : '-'}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
+                  <span className={`font-semibold text-sm flex-shrink-0 font-mono ${flow.text}`}>
+                    {flow.sign}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -702,7 +715,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 </button>
               </div>
             </div>
-          ))
+          ); })
         )}
         {filtered.length > visibleCount && (
           <button onClick={() => setVisibleCount(c => c + 300)}
@@ -736,7 +749,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                   </td>
                 </tr>
               ) : (
-                paged.map(tx => (
+                paged.map(tx => { const flow = flowStyle(tx); return (
                   <tr key={tx.id} className="hover:bg-gray-50/50">
                     <td className={tdCls}>{formatDate(tx.date, lang)}</td>
                     <td className={tdCls}>
@@ -749,9 +762,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                       </span>
                     </td>
                     <td className={tdCls}>
-                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                        tx.type === 'income' ? 'bg-green-100 text-green-700' : tx.type === 'transfer' ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-700'
-                      }`}>
+                      <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${flow.chip}`}>
                         {t(tx.type)}
                       </span>
                     </td>
@@ -761,8 +772,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                     <td className={`${tdCls} text-right`}>
                       <span className={tx.vatRate === 0 ? 'text-gray-400' : ''}>{tx.vatRate}%</span>
                     </td>
-                    <td className={`${tdCls} text-right font-mono font-semibold ${tx.type === 'income' ? 'text-green-600' : tx.type === 'transfer' ? 'text-gray-500' : 'text-red-600'}`}>
-                      {tx.type === 'income' ? '+' : tx.type === 'transfer' ? '±' : '-'}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
+                    <td className={`${tdCls} text-right font-mono font-semibold ${flow.text}`}>
+                      {flow.sign}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
                     </td>
                     <td className={tdCls}>
                       <div className="flex gap-1">
@@ -782,7 +793,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                       </div>
                     </td>
                   </tr>
-                ))
+                ); })
               )}
             </tbody>
           </table>
