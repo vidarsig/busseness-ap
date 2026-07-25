@@ -405,14 +405,21 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // reversible (re-filter and reassign). Guarded to a filtered subset so it can't
   // silently key the entire history.
   function bulkAssignKey() {
-    const acc = data.accounts.find(a => a.id === bulkKey);
-    if (!acc) return;
-    const label = `${acc.number} — ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`;
-    const msg = lang === 'is'
-      ? `Setja lykil "${label}" á allar ${filtered.length} færslur sem hér sjást? Þú getur breytt aftur síðar.`
-      : `Set key "${label}" on all ${filtered.length} shown transactions? You can change it again later.`;
+    // '__none__' clears the key (accountId → undefined) on every filtered row —
+    // the reverse of assigning, so an over-broad assignment can always be undone.
+    const clearing = bulkKey === '__none__';
+    const acc = clearing ? null : data.accounts.find(a => a.id === bulkKey);
+    if (!clearing && !acc) return;
+    const label = acc ? `${acc.number} — ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}` : '';
+    const msg = clearing
+      ? (lang === 'is'
+          ? `Taka lykil af öllum ${filtered.length} færslum sem hér sjást? Þú getur sett lykil aftur síðar.`
+          : `Remove the key from all ${filtered.length} shown transactions? You can set one again later.`)
+      : (lang === 'is'
+          ? `Setja lykil "${label}" á allar ${filtered.length} færslur sem hér sjást? Þú getur breytt aftur síðar.`
+          : `Set key "${label}" on all ${filtered.length} shown transactions? You can change it again later.`);
     if (!window.confirm(msg)) return;
-    for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, accountId: bulkKey } });
+    for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, accountId: clearing ? undefined : bulkKey } });
     setBulkKey('');
   }
 
@@ -718,6 +725,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <select value={bulkKey} onChange={e => setBulkKey(e.target.value)}
             className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
             <option value="">{lang === 'is' ? 'Veldu lykil…' : 'Choose key…'}</option>
+            <option value="__none__">{lang === 'is' ? '— Taka lykil af (hreinsa) —' : '— Remove key (clear) —'}</option>
             {[...data.accounts].sort((a, b) => a.number.localeCompare(b.number)).map(a => (
               <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
             ))}
