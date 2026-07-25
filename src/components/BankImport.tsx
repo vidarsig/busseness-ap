@@ -228,8 +228,50 @@ interface ImportRow extends ParsedRow {
   category: string;
   vatRate: number;
   matchedRule?: string; // rule id that matched
+  learned?: boolean;    // recognised from how this same payer was booked before
   learnOpen?: boolean;  // show inline learn panel
   needsReview?: boolean; // AI was unsure — human should check before importing
+}
+
+// Reduce a bank description to the counterparty's name, so the same payer is
+// recognised whether it arrives as "Fylkir ehf." or "Fylkir ehf. — leiga".
+function partyKey(desc: string): string {
+  return String(desc || '')
+    .split(/\s+[—–-]\s+/)[0]      // drop an " — leiga" style suffix
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Learn how each counterparty has been booked before, from the owner's own
+// books. Once a payer is keyed consistently — Viðar's own transfers as framlag,
+// Victor's as rent, a lender's money-in as a loan — a NEW deposit from that same
+// payer is recognised as the SAME type automatically: no AI guess, no re-typing.
+// Only trusted when the past bookings agree (≥70%); a payer booked inconsistently
+// is left for the AI / the owner to decide, so a genuine mix never auto-mislabels.
+function buildPartyHistory(txns: Transaction[]): Map<string, { type: TransactionType; category: string; vatRate: number }> {
+  const groups = new Map<string, Transaction[]>();
+  for (const tx of txns) {
+    const k = partyKey(tx.description);
+    if (k.length < 3) continue;   // skip empty / too-generic descriptions
+    const g = groups.get(k);
+    if (g) g.push(tx); else groups.set(k, [tx]);
+  }
+  const out = new Map<string, { type: TransactionType; category: string; vatRate: number }>();
+  for (const [k, list] of groups) {
+    const tally = new Map<string, { n: number; tx: Transaction }>();
+    for (const tx of list) {
+      const ck = `${tx.type}|${tx.category}`;
+      const cur = tally.get(ck);
+      if (cur) cur.n++; else tally.set(ck, { n: 1, tx });
+    }
+    let best: { n: number; tx: Transaction } | null = null;
+    for (const v of tally.values()) if (!best || v.n > best.n) best = v;
+    if (best && best.n / list.length >= 0.7) {
+      out.set(k, { type: best.tx.type, category: best.tx.category, vatRate: best.tx.vatRate });
+    }
+  }
+  return out;
 }
 
 export default function BankImport() {
@@ -249,15 +291,25 @@ export default function BankImport() {
 
   function applyRulesToRows(parsed: ReturnType<typeof parseBank>): ImportRow[] {
     const rules = data.categoryRules;
+    const history = buildPartyHistory(data.transactions);
     return parsed.map(p => {
+      // 1) An explicit rule the owner saved always wins.
       const matched = matchRule(p.description, rules);
+      if (matched) {
+        return { ...p, selected: true, category: matched.category, vatRate: matched.vatRate, type: matched.type, matchedRule: matched.id };
+      }
+      // 2) Otherwise, recognise the payer from how they were booked before.
+      const learned = history.get(partyKey(p.description));
+      if (learned) {
+        return { ...p, selected: true, category: learned.category, vatRate: learned.vatRate, type: learned.type, learned: true };
+      }
+      // 3) New payer, no history — fall back to a plain default for the AI to refine.
       return {
         ...p,
         selected: true,
-        category: matched ? matched.category : (p.type === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold'),
-        vatRate: matched ? matched.vatRate : 0,
-        type: matched ? matched.type : p.type,
-        matchedRule: matched?.id,
+        category: p.type === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold',
+        vatRate: 0,
+        type: p.type,
       };
     });
   }
@@ -268,7 +320,7 @@ export default function BankImport() {
     const validVats = cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates;
     // Only ask the AI about rows your own rules didn't already match — saves
     // calls and keeps your rules authoritative.
-    const todo = rows.map((r, i) => ({ r, i })).filter(({ r }) => !r.matchedRule);
+    const todo = rows.map((r, i) => ({ r, i })).filter(({ r }) => !r.matchedRule && !r.learned);
     if (todo.length === 0) return;
 
     setAiLoading(true);
@@ -586,6 +638,12 @@ export default function BankImport() {
                             <span className="text-blue-500 font-medium">{lang === 'is' ? 'Sjálfvirkt' : 'Auto'}</span>
                           </div>
                         )}
+                        {row.learned && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <BookOpen className="w-2.5 h-2.5 text-purple-500" />
+                            <span className="text-purple-600 font-medium">{lang === 'is' ? 'Lært af bókhaldi' : 'From your books'}</span>
+                          </div>
+                        )}
                         {row.needsReview && (
                           <div className="flex items-center gap-1 mt-0.5">
                             <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
@@ -603,7 +661,7 @@ export default function BankImport() {
                             const defaultCat = type === 'income' ? 'sala_thjonustu' : type === 'expense' ? 'adrir_rekstrargjold' : 'ekki_rekstur';
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, needsReview: false, learnOpen: true }
+                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true }
                               : { ...r, learnOpen: false }));
                           }}>
                           <option value="income">{t('income')}</option>
@@ -617,7 +675,7 @@ export default function BankImport() {
                             const category = e.target.value;
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, category, matchedRule: undefined, needsReview: false, learnOpen: true }
+                              ? { ...r, category, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true }
                               : { ...r, learnOpen: false }));
                           }}>
                           {(row.type === 'income'
