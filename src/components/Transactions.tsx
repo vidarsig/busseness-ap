@@ -339,6 +339,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [amountMax, setAmountMax] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [bulkKey, setBulkKey] = useState(''); // accountId to bulk-assign onto all filtered rows
+  const [bulkType, setBulkType] = useState<string>('');  // '' | income | expense | transfer — bulk-set the type
+  const [bulkCat, setBulkCat] = useState<string>('');    // '' or a category key — bulk-set the category
 
   // When arriving from a drill-down (e.g. clicking a key in Skýrslur), pre-filter
   // to that key and year and open the filter panel so it's obvious what's shown.
@@ -404,23 +406,33 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // Confirms with the exact count first; only the accountId changes, so it's fully
   // reversible (re-filter and reassign). Guarded to a filtered subset so it can't
   // silently key the entire history.
-  function bulkAssignKey() {
-    // '__none__' clears the key (accountId → undefined) on every filtered row —
-    // the reverse of assigning, so an over-broad assignment can always be undone.
+  // Bulk-reclassify every filtered row: set any of type / category / key at once.
+  // '__none__' on the key clears it (accountId → undefined). Guarded to a filtered
+  // subset and confirmed with the exact count, so it can't silently re-key the
+  // whole history and is fully reversible (re-filter and change again).
+  function bulkApply() {
     const clearing = bulkKey === '__none__';
-    const acc = clearing ? null : data.accounts.find(a => a.id === bulkKey);
-    if (!clearing && !acc) return;
-    const label = acc ? `${acc.number} — ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}` : '';
-    const msg = clearing
-      ? (lang === 'is'
-          ? `Taka lykil af öllum ${filtered.length} færslum sem hér sjást? Þú getur sett lykil aftur síðar.`
-          : `Remove the key from all ${filtered.length} shown transactions? You can set one again later.`)
-      : (lang === 'is'
-          ? `Setja lykil "${label}" á allar ${filtered.length} færslur sem hér sjást? Þú getur breytt aftur síðar.`
-          : `Set key "${label}" on all ${filtered.length} shown transactions? You can change it again later.`);
+    const acc = (!clearing && bulkKey) ? data.accounts.find(a => a.id === bulkKey) : null;
+    const changes: Partial<Transaction> = {};
+    if (bulkType) {
+      changes.type = bulkType as TransactionType;
+      if (bulkType === 'transfer') changes.vatRate = 0; // transfers never carry VAT
+    }
+    if (bulkCat) changes.category = bulkCat;
+    if (clearing) changes.accountId = undefined;
+    else if (bulkKey) changes.accountId = bulkKey;
+    if (Object.keys(changes).length === 0) return;
+    const parts: string[] = [];
+    if (bulkType) parts.push(`${lang === 'is' ? 'tegund' : 'type'} → ${t(bulkType as never)}`);
+    if (bulkCat) parts.push(`${lang === 'is' ? 'flokkur' : 'category'} → ${t(bulkCat as never)}`);
+    if (clearing) parts.push(lang === 'is' ? 'taka lykil af' : 'clear key');
+    else if (acc) parts.push(`${lang === 'is' ? 'lykill' : 'key'} → ${acc.number}`);
+    const msg = lang === 'is'
+      ? `Breyta öllum ${filtered.length} færslum sem hér sjást?\n  ${parts.join('\n  ')}\nÞú getur breytt aftur síðar.`
+      : `Change all ${filtered.length} shown transactions?\n  ${parts.join('\n  ')}\nYou can change it again later.`;
     if (!window.confirm(msg)) return;
-    for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, accountId: clearing ? undefined : bulkKey } });
-    setBulkKey('');
+    for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, ...changes } });
+    setBulkType(''); setBulkCat(''); setBulkKey('');
   }
 
   // Render only a page at a time — a full history can be thousands of rows, and
@@ -720,17 +732,32 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       {filtered.length > 0 && filtered.length < data.transactions.length && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-amber-800 font-medium">
-            {lang === 'is' ? `Setja lykil á allar ${filtered.length} færslur:` : `Set key on all ${filtered.length} rows:`}
+            {lang === 'is' ? `Breyta öllum ${filtered.length} færslum:` : `Change all ${filtered.length} rows:`}
           </span>
+          <select value={bulkType} onChange={e => { setBulkType(e.target.value); setBulkCat(''); }}
+            className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="">{lang === 'is' ? 'Tegund…' : 'Type…'}</option>
+            <option value="income">{t('income')}</option>
+            <option value="expense">{t('expense')}</option>
+            <option value="transfer">{t('transfer')}</option>
+          </select>
+          {bulkType && (
+            <select value={bulkCat} onChange={e => setBulkCat(e.target.value)}
+              className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+              <option value="">{lang === 'is' ? 'Flokkur…' : 'Category…'}</option>
+              {(bulkType === 'income' ? INCOME_CATEGORIES : bulkType === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES)
+                .map(c => <option key={c} value={c}>{t(c as never)}</option>)}
+            </select>
+          )}
           <select value={bulkKey} onChange={e => setBulkKey(e.target.value)}
             className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="">{lang === 'is' ? 'Veldu lykil…' : 'Choose key…'}</option>
+            <option value="">{lang === 'is' ? 'Lykill…' : 'Key…'}</option>
             <option value="__none__">{lang === 'is' ? '— Taka lykil af (hreinsa) —' : '— Remove key (clear) —'}</option>
             {[...data.accounts].sort((a, b) => a.number.localeCompare(b.number)).map(a => (
               <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
             ))}
           </select>
-          <button onClick={bulkAssignKey} disabled={!bulkKey}
+          <button onClick={bulkApply} disabled={!bulkType && !bulkCat && !bulkKey}
             className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
             {lang === 'is' ? 'Setja á allar' : 'Apply to all'}
           </button>
