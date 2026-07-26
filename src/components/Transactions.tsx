@@ -545,11 +545,19 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     setDeleteId(null);
   }
 
+  // The account-key label for a row ("6150 — Eldsneytis kaup"), or '' if unkeyed —
+  // so an export can be audited by key without opening the app (R9-3).
+  const keyLabel = (tx: Transaction) => {
+    const a = data.accounts.find(x => x.id === tx.accountId);
+    return a ? `${a.number} — ${lang === 'is' ? a.name : (a.nameEn || a.name)}` : '';
+  };
+
   const txCols = [
     { header: lang === 'is' ? 'Dagsetning' : 'Date',          key: 'date',     width: 14 },
     { header: lang === 'is' ? 'Lýsing' : 'Description',       key: 'desc',     width: 36 },
     { header: lang === 'is' ? 'Tegund' : 'Type',               key: 'type',     width: 12 },
     { header: lang === 'is' ? 'Flokkur' : 'Category',          key: 'cat',      width: 22 },
+    { header: lang === 'is' ? 'Bókhaldslykill' : 'Key',        key: 'acckey',   width: 26 },
     { header: lang === 'is' ? 'Gjaldmiðill' : 'Currency',      key: 'cur',      width: 10 },
     { header: lang === 'is' ? 'Upphæð' : 'Amount',             key: 'amount',   width: 14 },
     { header: `${cc.vatTerm}%`,                                 key: 'vat',      width: 8  },
@@ -560,6 +568,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const txRows = filtered.map(tx => ({
     date: tx.date, desc: tx.description,
     type: t(tx.type), cat: t(tx.category as never),
+    acckey: keyLabel(tx),
     cur: tx.currency, amount: tx.amount, vat: `${tx.vatRate}%`,
     vatamt: Math.round(getVATAmountISK(tx, inclVat)),
     total: Math.round(getTotalISK(tx, inclVat)),
@@ -577,10 +586,10 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
 
   function exportCSV() {
     const header = lang === 'is'
-      ? ['Dagsetning','Lýsing','Tegund','Flokkur','Gjaldmiðill',`Upphæð (án ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} upphæð`,'Heildarupphæð (ISK)','Tilvísun']
-      : ['Date','Description','Type','Category','Currency',`Amount (excl. ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} amount`,'Total (ISK)','Reference'];
+      ? ['Dagsetning','Lýsing','Tegund','Flokkur','Bókhaldslykill','Gjaldmiðill',`Upphæð (án ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} upphæð`,'Heildarupphæð (ISK)','Tilvísun']
+      : ['Date','Description','Type','Category','Key','Currency',`Amount (excl. ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} amount`,'Total (ISK)','Reference'];
     const rows = filtered.map(tx => [
-      tx.date, tx.description, tx.type, tx.category, tx.currency, tx.amount, tx.vatRate,
+      tx.date, tx.description, tx.type, tx.category, keyLabel(tx), tx.currency, tx.amount, tx.vatRate,
       getVATAmountISK(tx, inclVat).toFixed(0),
       (getTotalISK(tx, inclVat)).toFixed(0),
       tx.reference || '',
