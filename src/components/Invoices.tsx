@@ -12,6 +12,7 @@ import MicButton from './MicButton';
 import PhotoViewer from './PhotoViewer';
 import NumberInput from './NumberInput';
 import CustomerAutocomplete from './CustomerAutocomplete';
+import BulkInvoiceModal from './BulkInvoiceModal';
 
 function newId() { return `inv_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function lineId() { return `ln_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -534,6 +535,7 @@ export default function Invoices() {
   }
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [docType, setDocType] = useState<'all' | 'invoice' | 'quote'>('all');
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<Invoice['status'] | 'all'>('all');
   const [statementCustomer, setStatementCustomer] = useState<string>('');
 
@@ -835,6 +837,10 @@ export default function Invoices() {
             className="flex items-center gap-1.5 border border-purple-300 text-purple-700 bg-purple-50 px-3 py-2 rounded-lg text-sm font-medium hover:bg-purple-100">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">{t('addQuote')}</span>
           </button>
+          <button onClick={() => setBulkOpen(true)}
+            className="flex items-center gap-1.5 border border-blue-300 text-blue-700 bg-blue-50 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">{lang === 'is' ? 'Fjöldi' : 'Bulk'}</span>
+          </button>
           <button onClick={() => openAddModal('invoice')}
             className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">{t('addInvoice')}</span>
@@ -1074,6 +1080,8 @@ export default function Invoices() {
           onClose={() => setModal({ open: false })}
         />
       )}
+
+      {bulkOpen && <BulkInvoiceModal onClose={() => setBulkOpen(false)} />}
 
       {/* Photo: pick which invoice (new, or any existing — even locked) */}
       {photoPicker && (
