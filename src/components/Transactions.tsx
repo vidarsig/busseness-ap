@@ -63,8 +63,13 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const vatAmount = form.amount * (form.vatRate / 100);
-  const totalWithVat = form.amount + vatAmount;
+  // When "prices include VAT" is on, the amount entered is GROSS (the VAT is
+  // already inside it) so extract it: net = amount ÷ (1+rate). Legacy/off: the
+  // amount is NET and VAT is added on top. Mirrors getNetISK/getVATAmountISK.
+  const inclVat = data.settings.pricesIncludeVAT;
+  const netAmount = inclVat ? form.amount / (1 + form.vatRate / 100) : form.amount;
+  const vatAmount = inclVat ? form.amount - netAmount : form.amount * (form.vatRate / 100);
+  const totalWithVat = inclVat ? form.amount : form.amount + vatAmount;
   const iskTotal = form.currency === 'ISK' ? totalWithVat : totalWithVat * form.eurToIskRate;
 
   // US reads "Sales Tax", not "VAT"; other languages keep their own translation.
@@ -213,7 +218,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>{exVatLabel} ({form.currency})</label>
+              <label className={labelCls}>{(inclVat ? incVatLabel : exVatLabel)} ({form.currency})</label>
               <input type="number" className={inputCls} value={form.amount || ''}
                 onChange={e => set('amount', parseFloat(e.target.value) || 0)}
                 min={0} step={form.currency === 'ISK' ? '1' : '0.01'} required />
@@ -256,7 +261,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
             <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
               <div className="flex justify-between text-gray-600">
                 <span>{exVatLabel}</span>
-                <span className="font-mono">{formatCurrency(form.amount, form.currency)}</span>
+                <span className="font-mono">{formatCurrency(netAmount, form.currency)}</span>
               </div>
               {form.vatRate > 0 && (
                 <div className="flex justify-between text-gray-600">
