@@ -94,7 +94,11 @@
       "Bash(gh pr create --base main --head claude/back-b1f016 --title 'Deposit-type recognition in Bank Import + bulk clear-key in Færslur' --body 'Two changes: *)",
       "Bash(git ls-remote *)",
       "Bash(python -)",
-      "Bash(py -)"
+      "Bash(py -)",
+      "Bash(gh pr create --base main --head claude/vat-rollout-a0c93f --title 'VAT rollout: invoice-driven VAT on income \\(R9-6\\) + finish inclusive mode' --body ' *)",
+      "Bash(cp \"C:/Users/vidar/Desktop/cleanup.txt\" \"C:/Users/vidar/OneDrive/Desktop/cleanup.txt\")",
+      "Read(//c/Users/vidar/OneDrive/Desktop/**)",
+      "Bash(ls -1 \"C:/Users/vidar/Claude bussines app/.claude/worktrees/\" 2>&1)"
     ]
   }
 }

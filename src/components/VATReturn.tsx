@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { calcVATSummary, filterByMonth } from '../utils/calculations';
+import { calcVATSummary, filterByMonth, filterByQuarter, filterByYear } from '../utils/calculations';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 const PERIOD_MONTHS: Record<number, number[]> = {
@@ -10,16 +10,35 @@ const PERIOD_MONTHS: Record<number, number[]> = {
 
 export default function VATReturn() {
   const { data, t, lang, cc, fmtISK } = useApp();
+  // US sales tax has NO input reclaim — you remit the tax collected on sales — and
+  // states file monthly/quarterly/annually, not Iceland's bi-monthly. So the US
+  // path is a slimmer report with its own filing-period picker.
+  const isUS = cc.isUSA;
   const [year, setYear] = useState(data.settings.fiscalYear);
   const [period, setPeriod] = useState<number>(() => Math.ceil(new Date().getMonth() / 2) || 1);
+  const [usFreq, setUsFreq] = useState<'month' | 'quarter' | 'year'>('quarter');
+  const [usMonth, setUsMonth] = useState<number>(() => new Date().getMonth() + 1);
+  const [usQuarter, setUsQuarter] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);
 
   const months = PERIOD_MONTHS[period] ?? [1, 2];
-  const periodTx = useMemo(() =>
-    months.flatMap(m => filterByMonth(data.transactions, year, m)),
-    [data.transactions, year, period]);
+  const periodTx = useMemo(() => {
+    if (!isUS) return months.flatMap(m => filterByMonth(data.transactions, year, m));
+    if (usFreq === 'year') return filterByYear(data.transactions, year);
+    if (usFreq === 'quarter') return filterByQuarter(data.transactions, year, usQuarter);
+    return filterByMonth(data.transactions, year, usMonth);
+  }, [data.transactions, year, period, isUS, usFreq, usMonth, usQuarter]);
 
-  const vat = useMemo(() => calcVATSummary(periodTx, cc.vatRates, data.settings.pricesIncludeVAT), [periodTx, cc.vatRates, data.settings.pricesIncludeVAT]);
+  // For the US the effective rate lives in settings (the state rate the owner set),
+  // not the static country config (which is just [0]) — feed that so collected tax
+  // actually shows instead of everything landing in the 0% bucket.
+  const rates = isUS ? Array.from(new Set([data.settings.salesTaxRate, 0])) : cc.vatRates;
+  const vat = useMemo(() => calcVATSummary(periodTx, rates, data.settings.pricesIncludeVAT), [periodTx, rates, data.settings.pricesIncludeVAT]);
   const fmt = (n: number) => fmtISK(n);
+
+  const usPeriodLabel = usFreq === 'year' ? String(year)
+    : usFreq === 'quarter' ? `Q${usQuarter} ${year}`
+    : `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][usMonth - 1]} ${year}`;
+  const usState = data.settings.usState;
 
   const years = Array.from(new Set([year - 1, year, year + 1,
     ...data.transactions.map(tx => new Date(tx.date).getFullYear())])).sort((a, b) => b - a);
@@ -49,7 +68,15 @@ export default function VATReturn() {
     { field: `${outputRateRows.length + idx * 2 + 1}a`, label: `${vatTerm} ${lang === 'is' ? 'af línu' : 'on line'} ${outputRateRows.length + idx * 2 + 1} (${row.rate}%)`, value: row.vatAmount },
   ]);
   const netField = String(outputRateRows.length + inputRateRows.length + 1);
-  const vatRows = [
+  // US: sales tax collected on sales, and the total to remit — no purchases/reclaim.
+  const usRows = [
+    ...vat.outputByRate.flatMap((row, idx) => [
+      { field: String(idx + 1), label: `Taxable sales ${row.rate}%`, value: row.baseAmount },
+      { field: `${idx + 1}a`, label: `Sales tax collected ${row.rate}%`, value: row.vatAmount },
+    ]),
+    { field: '', label: 'Total sales tax to remit', value: vat.totalOutput },
+  ];
+  const vatRows = isUS ? usRows : [
     ...outputRateRows,
     { field: '',   label: lang === 'is' ? 'Samtals útskattr' : `Total output ${vatTerm}`, value: vat.totalOutput },
     ...inputRateRows,
@@ -58,14 +85,17 @@ export default function VATReturn() {
       label: lang === 'is' ? (vat.netVAT >= 0 ? `${vatTerm} til greiðslu` : `${vatTerm} til endurgreiðslu`) : (vat.netVAT >= 0 ? `${vatTerm} to pay` : `${vatTerm} refund`),
       value: Math.abs(vat.netVAT) },
   ];
-  const vatTitle = `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'Return'} — ${year} · ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`;
+  const vatTitle = isUS
+    ? `Sales Tax Report — ${usState ? usState + ' · ' : ''}${usPeriodLabel}`
+    : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'Return'} — ${year} · ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`;
 
+  const fileTag = isUS ? `salestax_${usPeriodLabel.replace(/\s+/g, '_')}` : `vsk_${year}_${period}`;
   function exportToPDF() {
-    exportPDF(vatTitle, data.settings.company.name || '', vatCols, vatRows, `vsk_${year}_${period}.pdf`);
+    exportPDF(vatTitle, data.settings.company.name || '', vatCols, vatRows, `${fileTag}.pdf`);
   }
   function exportToExcel() {
-    exportExcel([{ name: lang === 'is' ? 'VSK-skýrsla' : 'VAT Return', columns: vatCols, rows: vatRows }],
-      `vsk_${year}_${period}.xlsx`);
+    exportExcel([{ name: isUS ? 'Sales Tax' : (lang === 'is' ? 'VSK-skýrsla' : 'VAT Return'), columns: vatCols, rows: vatRows }],
+      `${fileTag}.xlsx`);
   }
 
   function exportCSV() {
@@ -75,7 +105,7 @@ export default function VATReturn() {
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `vsk_${year}_${period}.csv`; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${fileTag}.csv`; a.click();
     URL.revokeObjectURL(url);
   }
 
@@ -92,8 +122,10 @@ export default function VATReturn() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('vatreturn')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? `${vatTerm}-skýrsla til ${cc.taxAuthority}` : `${vatTerm} return for ${cc.taxAuthority}`}</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">{isUS ? 'Sales Tax Report' : t('vatreturn')}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{isUS
+            ? `Sales tax collected — to remit to ${usState ? `${usState}'s` : 'your state'} tax authority`
+            : lang === 'is' ? `${vatTerm}-skýrsla til ${cc.taxAuthority}` : `${vatTerm} return for ${cc.taxAuthority}`}</p>
         </div>
         <div className="flex gap-2 no-print">
           <button onClick={exportToPDF}
@@ -124,20 +156,47 @@ export default function VATReturn() {
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-600">{lang === 'is' ? 'Tímabil' : 'Period'}:</label>
-          <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={period} onChange={e => setPeriod(parseInt(e.target.value))}>
-            {[1,2,3,4,5,6].map(p => <option key={p} value={p}>{p}. {lang === 'is' ? 'tímabil' : 'period'} ({periodLabel(p)})</option>)}
-          </select>
-        </div>
+        {!isUS && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-gray-600">{lang === 'is' ? 'Tímabil' : 'Period'}:</label>
+            <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={period} onChange={e => setPeriod(parseInt(e.target.value))}>
+              {[1,2,3,4,5,6].map(p => <option key={p} value={p}>{p}. {lang === 'is' ? 'tímabil' : 'period'} ({periodLabel(p)})</option>)}
+            </select>
+          </div>
+        )}
+        {isUS && (
+          <>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-600">Filing period:</label>
+              <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={usFreq} onChange={e => setUsFreq(e.target.value as 'month' | 'quarter' | 'year')}>
+                <option value="month">Monthly</option>
+                <option value="quarter">Quarterly</option>
+                <option value="year">Annual</option>
+              </select>
+            </div>
+            {usFreq === 'month' && (
+              <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={usMonth} onChange={e => setUsMonth(parseInt(e.target.value))}>
+                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            )}
+            {usFreq === 'quarter' && (
+              <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={usQuarter} onChange={e => setUsQuarter(parseInt(e.target.value))}>
+                {[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}
+              </select>
+            )}
+          </>
+        )}
       </div>
 
       {/* Print header */}
       <div className="print-only mb-6">
-        <h2 className="text-xl font-bold">{vatTerm} {lang === 'is' ? 'skýrsla' : 'return'}</h2>
+        <h2 className="text-xl font-bold">{isUS ? 'Sales Tax Report' : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'return'}`}</h2>
         <p className="text-sm">{data.settings.company.name} — {data.settings.company.kennitala}</p>
-        <p className="text-sm">{year} — {period}. {lang === 'is' ? 'tímabil' : 'period'} ({periodLabel(period)})</p>
+        <p className="text-sm">{isUS ? usPeriodLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -146,46 +205,59 @@ export default function VATReturn() {
             {data.settings.company.name || (lang === 'is' ? 'Fyrirtæki' : 'Company')}
             {data.settings.company.vskNumber && <span className="ml-2 text-sm font-normal text-gray-500">{cc.vatNumberLabel}: {data.settings.company.vskNumber}</span>}
           </h2>
-          <p className="text-xs text-gray-500">{year} — {period}. {lang === 'is' ? 'tímabil' : 'period'} · {periodLabel(period)}</p>
+          <p className="text-xs text-gray-500">{isUS ? usPeriodLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} · ${periodLabel(period)}`}</p>
         </div>
 
         <div className="px-4 py-2 bg-green-50 border-b border-green-100">
-          <p className="text-xs font-bold text-green-700 uppercase">{lang === 'is' ? `Útskattr — ${vatTerm} á sölu` : `Output ${vatTerm} — ${vatTerm} on sales`}</p>
+          <p className="text-xs font-bold text-green-700 uppercase">{isUS ? 'Sales tax collected on sales' : lang === 'is' ? `Útskattr — ${vatTerm} á sölu` : `Output ${vatTerm} — ${vatTerm} on sales`}</p>
         </div>
         {vat.outputByRate.map((row, idx) => (
           <div key={row.rate}>
-            {field(String(idx * 2 + 1), `${lang === 'is' ? 'Skattskyld velta' : 'Taxable turnover'} ${row.rate}%`, row.baseAmount)}
-            {field(`${idx * 2 + 1}a`, `${vatTerm} ${row.rate}%`, row.vatAmount)}
+            {field(String(idx * 2 + 1), `${isUS ? 'Taxable sales' : lang === 'is' ? 'Skattskyld velta' : 'Taxable turnover'} ${row.rate}%`, row.baseAmount)}
+            {field(`${idx * 2 + 1}a`, `${isUS ? 'Sales tax' : vatTerm} ${row.rate}%`, row.vatAmount)}
           </div>
         ))}
-        {field(null, lang === 'is' ? 'Samtals útskattr' : `Total output ${vatTerm}`, vat.totalOutput)}
 
-        <div className="px-4 py-2 bg-red-50 border-b border-red-100 border-t border-gray-100">
-          <p className="text-xs font-bold text-red-700 uppercase">{lang === 'is' ? `Innskattr — ${vatTerm} á kaupum` : `Input ${vatTerm} — ${vatTerm} on purchases`}</p>
-        </div>
-        {vat.inputByRate.map((row, idx) => (
-          <div key={row.rate}>
-            {field(String(outputRateRows.length + idx * 2 + 1), `${lang === 'is' ? 'Skattskyld innkaup' : 'Taxable purchases'} ${row.rate}%`, row.baseAmount)}
-            {field(`${outputRateRows.length + idx * 2 + 1}a`, `${vatTerm} ${row.rate}%`, row.vatAmount)}
+        {isUS ? (
+          <div className="border-t-2 border-blue-200">
+            {field('', 'Total sales tax to remit', vat.totalOutput, true)}
           </div>
-        ))}
-        {field(null, lang === 'is' ? 'Samtals innskattr' : `Total input ${vatTerm}`, vat.totalInput)}
+        ) : (
+          <>
+            {field(null, lang === 'is' ? 'Samtals útskattr' : `Total output ${vatTerm}`, vat.totalOutput)}
 
-        <div className="border-t-2 border-blue-200">
-          {vat.netVAT >= 0
-            ? field(netField, lang === 'is' ? `${vatTerm} til greiðslu (útskattr − innskattr)` : `${vatTerm} to pay (output − input)`, vat.netVAT, true)
-            : field(String(parseInt(netField) + 1), lang === 'is' ? `${vatTerm} til endurgreiðslu (innskattr > útskattr)` : `${vatTerm} refund (input > output)`, Math.abs(vat.netVAT), true)
-          }
-        </div>
+            <div className="px-4 py-2 bg-red-50 border-b border-red-100 border-t border-gray-100">
+              <p className="text-xs font-bold text-red-700 uppercase">{lang === 'is' ? `Innskattr — ${vatTerm} á kaupum` : `Input ${vatTerm} — ${vatTerm} on purchases`}</p>
+            </div>
+            {vat.inputByRate.map((row, idx) => (
+              <div key={row.rate}>
+                {field(String(outputRateRows.length + idx * 2 + 1), `${lang === 'is' ? 'Skattskyld innkaup' : 'Taxable purchases'} ${row.rate}%`, row.baseAmount)}
+                {field(`${outputRateRows.length + idx * 2 + 1}a`, `${vatTerm} ${row.rate}%`, row.vatAmount)}
+              </div>
+            ))}
+            {field(null, lang === 'is' ? 'Samtals innskattr' : `Total input ${vatTerm}`, vat.totalInput)}
+
+            <div className="border-t-2 border-blue-200">
+              {vat.netVAT >= 0
+                ? field(netField, lang === 'is' ? `${vatTerm} til greiðslu (útskattr − innskattr)` : `${vatTerm} to pay (output − input)`, vat.netVAT, true)
+                : field(String(parseInt(netField) + 1), lang === 'is' ? `${vatTerm} til endurgreiðslu (innskattr > útskattr)` : `${vatTerm} refund (input > output)`, Math.abs(vat.netVAT), true)
+              }
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
+        {(isUS ? [
+          { label: 'Taxable sales', value: vat.outputByRate.reduce((s, r) => s + r.baseAmount, 0), color: 'green' },
+          { label: 'Sales tax to remit', value: vat.totalOutput, color: 'orange' },
+          { label: 'Transactions', value: periodTx.length, color: 'gray', isCount: true },
+        ] : [
           { label: lang === 'is' ? 'Útskattr' : `Output ${vatTerm}`, value: vat.totalOutput, color: 'green' },
           { label: lang === 'is' ? 'Innskattr' : `Input ${vatTerm}`, value: vat.totalInput, color: 'red' },
           { label: lang === 'is' ? vat.netVAT >= 0 ? 'Til greiðslu' : 'Til endurgreiðslu' : vat.netVAT >= 0 ? 'To pay' : 'Refund', value: Math.abs(vat.netVAT), color: vat.netVAT >= 0 ? 'orange' : 'blue' },
           { label: lang === 'is' ? 'Fjöldi færslna' : 'Transactions', value: periodTx.length, color: 'gray', isCount: true },
-        ].map(({ label, value, color, isCount }) => (
+        ]).map(({ label, value, color, isCount }) => (
           <div key={label} className={`bg-white rounded-xl border border-${color}-200 p-3`}>
             <p className={`text-xs text-${color}-600 font-medium`}>{label}</p>
             <p className={`text-lg font-bold font-mono text-${color}-700 mt-0.5`}>
