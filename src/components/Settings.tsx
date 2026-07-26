@@ -480,6 +480,33 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Payments (get paid online via Stripe) */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Greiðslur á netinu (Stripe)' : 'Get paid online (Stripe)'}</h2>
+            <p className="text-xs text-gray-500 mb-3">{lang === 'is' ? 'Leyfðu viðskiptavinum að greiða reikninga með millifærslu (ACH) eða korti.' : 'Let customers pay invoices by bank (ACH) or card.'}</p>
+            <label className="flex items-start gap-2 cursor-pointer mb-3">
+              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded flex-shrink-0"
+                checked={form.paymentsEnabled ?? false}
+                onChange={e => setTop('paymentsEnabled', e.target.checked)} />
+              <span className="text-sm text-gray-700">
+                {lang === 'is' ? 'Sýna „Greiðsluhlekk“ á reikningum' : 'Show the "Payment link" button on invoices'}
+                <span className="block text-xs text-gray-400 mt-0.5">
+                  {lang === 'is' ? 'Kveiktu eftir að þú hefur klárað skrefin hér að neðan.' : 'Turn on after you finish the steps below.'}
+                </span>
+              </span>
+            </label>
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-gray-600 space-y-1.5">
+              <p className="font-semibold text-gray-700">{lang === 'is' ? 'Uppsetning (þú gerir þetta sjálf/ur — ég sé aldrei bankaupplýsingar):' : 'Setup (you do this yourself — I never see your banking details):'}</p>
+              <ol className="list-decimal ml-4 space-y-1">
+                <li>{lang === 'is' ? 'Stofnaðu Stripe reikning á stripe.com og tengdu bankareikninginn þinn (fyrir ACH — lægstu gjöldin).' : 'Create a Stripe account at stripe.com and connect your bank (for ACH — lowest fees).'}</li>
+                <li>{lang === 'is' ? 'Í Stripe: Developers → API keys → afritaðu „Secret key“.' : 'In Stripe: Developers → API keys → copy your "Secret key".'}</li>
+                <li>{lang === 'is' ? 'Í Netlify: Site settings → Environment variables → bættu við STRIPE_SECRET_KEY með lyklinum.' : 'In Netlify: Site settings → Environment variables → add STRIPE_SECRET_KEY with that key.'}</li>
+                <li>{lang === 'is' ? 'Komdu aftur hingað og kveiktu á rofanum að ofan.' : 'Come back here and turn the switch above on.'}</li>
+              </ol>
+              <p className="text-gray-500">{lang === 'is' ? 'Þegar greitt er berst upphæðin í bankann þinn og bankainnflutningurinn tengir hana sjálfkrafa við reikninginn.' : 'When a customer pays, the money lands in your bank and the bank import auto-links it to the invoice.'}</p>
+            </div>
+          </div>
+
           {/* Exchange rates */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Gengi gjaldeyrils (á móti ISK)' : 'Exchange rates (vs ISK)'}</h2>

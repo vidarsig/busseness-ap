@@ -8,6 +8,11 @@
   to = "/.netlify/functions/send-email"
   status = 200
 
+[[redirects]]
+  from = "/api/create-checkout"
+  to = "/.netlify/functions/create-checkout"
+  status = 200
+
 # Clean URL for the public info / marketing page
 [[redirects]]
   from = "/kynning"

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, RotateCcw, Lock, Camera, Image, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Printer, X, CheckCircle, Send, PlusCircle, MinusCircle, Mail, FileText, ArrowRightLeft, RotateCcw, Lock, Camera, Image, Package, CreditCard } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Invoice, InvoiceLine, Currency, InvoicePhoto, StockItem } from '../types';
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
@@ -696,6 +696,41 @@ export default function Invoices() {
     dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: data.settings.invoiceLastNumber + 1 } });
   }
 
+  // Get paid online (R): turn an invoice into a Stripe Checkout link the customer
+  // pays by ACH or card. The link is created server-side (secret key in Netlify);
+  // we copy it and open it so the owner can send it. When paid, the deposit lands
+  // in the bank and the bank import auto-links it to the invoice (R9-6).
+  const [payLinkId, setPayLinkId] = useState<string | null>(null);
+  async function paymentLink(inv: Invoice) {
+    setPayLinkId(inv.id);
+    try {
+      const gross = invoiceTotals(inv).total;
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: gross,
+          currency: inv.currency,
+          description: `${lang === 'is' ? 'Reikningur' : 'Invoice'} ${inv.number} — ${inv.customer.name}`,
+          invoiceNumber: inv.number,
+          origin: window.location.origin,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        alert(data?.error?.message || (lang === 'is' ? 'Ekki tókst að búa til greiðsluhlekk. Kláraðu uppsetningu greiðslna í Stillingum.' : 'Could not create a payment link. Finish payment setup in Settings.'));
+        return;
+      }
+      try { await navigator.clipboard.writeText(data.url); } catch { /* clipboard may be blocked */ }
+      window.open(data.url, '_blank');
+      alert(lang === 'is' ? 'Greiðsluhlekkur afritaður — sendu hann á viðskiptavininn.' : 'Payment link copied — send it to your customer.');
+    } catch {
+      alert(lang === 'is' ? 'Villa við að búa til greiðsluhlekk.' : 'Error creating the payment link.');
+    } finally {
+      setPayLinkId(null);
+    }
+  }
+
   function markPaid(inv: Invoice) {
     dispatch({ type: 'UPDATE_INVOICE', payload: { ...inv, status: 'paid' } });
     // Book income net of VAT, split per VAT rate so mixed-rate invoices
@@ -1007,6 +1042,13 @@ export default function Invoices() {
                     <button onClick={() => markPaid(inv)}
                       className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700 border border-green-200 bg-green-50 px-2.5 py-1.5 rounded-lg">
                       <CheckCircle className="w-3.5 h-3.5" /> {t('markAsPaid')}
+                    </button>
+                  )}
+                  {/* Invoice: get paid online (Stripe ACH/card) — only when payments are set up */}
+                  {data.settings.paymentsEnabled && !isQuote && inv.status !== 'paid' && (
+                    <button onClick={() => paymentLink(inv)} disabled={payLinkId === inv.id}
+                      className="flex items-center gap-1 text-xs text-white bg-emerald-600 border border-emerald-600 px-2.5 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+                      <CreditCard className="w-3.5 h-3.5" /> {payLinkId === inv.id ? (lang === 'is' ? 'Bý til…' : 'Creating…') : (lang === 'is' ? 'Greiðsluhlekkur' : 'Payment link')}
                     </button>
                   )}
                   {inv.status === 'draft' && (
