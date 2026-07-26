@@ -44,12 +44,17 @@ export interface SessionUser {
 const FOUNDER_EMAILS = ['vidarsig@pm.me'];
 
 function AppInner() {
-  const [view, setView] = useState<View>('dashboard');
   // Drill-down target: set when the user clicks a key in Reports, consumed by
   // Transactions to pre-filter to that key (and year) so they can fix it.
   const [txDrill, setTxDrill] = useState<{ category?: string; year?: number } | null>(null);
   const clearTxDrill = useCallback(() => setTxDrill(null), []);
   const { data, dispatch } = useApp();
+  // Land a brand-new user (empty app, hasn't chatted yet) on the AI concierge for
+  // first open (slice 2) instead of the empty dashboard — the "easy and welcoming"
+  // first minute. Lazy init runs once; once they chat or add anything, it's off.
+  const [view, setView] = useState<View>(() =>
+    (data.transactions?.length ?? 0) === 0 && (data.invoices?.length ?? 0) === 0 &&
+    (data.jobs?.length ?? 0) === 0 && (data.aiChat?.length ?? 0) === 0 ? 'ai' : 'dashboard');
 
   const { supabaseUrl, supabaseKey } = data.settings;
   const supabaseConfigured = !!(supabaseUrl && supabaseKey);

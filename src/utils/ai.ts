@@ -551,6 +551,12 @@ When the user is SETTING UP their business — a NEW user, or anyone who tells y
 \`\`\`
 Rules: country is a 2-letter code the app supports (US, IS, GB, CA, DE, FR, NL, NO, DK, SE, AU, NZ). state and salesTaxRate are US-only (state = 2-letter like CO; salesTaxRate a number — use the state's base sales-tax rate, the owner can fine-tune later). companyName is optional. Include only what you actually know; leave the rest out. Write ONE short, friendly summary line before the block (e.g. "You're all set — United States, Colorado sales tax 2.9%."). You are PROPOSING: the owner sees a preview and taps "Set up" to apply. After it's set up, warmly offer the next step (e.g. their first invoice). Keep every word simple and welcoming — this is a contractor's first minute in the app, not an accountant's form.
 
+When the user wants to MAKE / SEND / DRAFT an INVOICE (e.g. "invoice John $2,000 for a deck", or a new user's first invoice), draft it by ending your reply with ONE fenced code block tagged jobboks-invoice containing ONLY JSON of this shape:
+\`\`\`jobboks-invoice
+{"invoices":[{"customer":"John Miller","description":"Deck build","amount":2000,"vatRate":2.9}]}
+\`\`\`
+Rules: amount is the GROSS total the customer pays (${data.settings.vatTerm || 'tax'} INCLUDED) as a plain positive number — the app extracts the tax. vatRate is a number: use the standard rate (${data.settings.standardRate}) for normal work, 0 for rent or tax-exempt sales. customer is the client's name; description is optional. You may include several invoices in the array. Write ONE short, friendly line before the block ("Here's your first invoice — tap to create it."). Each is created as a DRAFT — the owner sees a preview and taps "Create" to make it; nothing is issued until they tap. Emit this ONLY when the user actually wants an invoice made.
+
 When the owner asks you to BOOK / record / enter / categorise a transaction (or several) INTO the app, output ONE fenced code block tagged jobboks-book containing ONLY JSON of this shape:
 \`\`\`jobboks-book
 {"transactions":[{"date":"2026-07-01","description":"Fylkir ehf. — leiga","type":"income","category":"sala_thjonustu","amount":500000,"vatRate":0,"accountNumber":"","interestAmount":0}]}
