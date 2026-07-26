@@ -56,6 +56,19 @@ function extractInvoice(content: string): { text: string; invoices: InvoicePropo
   return { text: content.replace(m[0], '').trim(), invoices };
 }
 
+// A settings change the AI proposes (```jobboks-settings``` block). Only a safe
+// whitelist of user-facing settings can be changed (never API keys, Supabase, plan,
+// or permissions — those are handled by applySettings, which ignores anything else).
+// The owner taps "Apply" — the AI guides + does it, the owner confirms.
+type SettingsSet = Record<string, string | number | boolean>;
+function extractSettings(content: string): { text: string; settings: SettingsSet | null } {
+  const m = content.match(/```jobboks-settings\s*([\s\S]*?)```/);
+  if (!m) return { text: content, settings: null };
+  let settings: SettingsSet | null = null;
+  try { const p = JSON.parse(m[1].trim()); if (p && typeof p.set === 'object' && p.set) settings = p.set; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), settings };
+}
+
 // A correction the AI proposes to an EXISTING transaction (```jobboks-fix```).
 // `ref` is the row's 1-based position in txPool() — the #n the AI was shown.
 // `was` is that row's date/amount as the AI saw it: checked before anything
@@ -533,6 +546,46 @@ export default function AIAssistant() {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner approved an AI-proposed settings change → apply only the SAFE,
+  // whitelisted user-facing settings; any other key (API keys, Supabase, plan,
+  // permissions, …) is silently ignored, so the AI can never touch sensitive config.
+  function applySettings(msgIndex: number, set: SettingsSet) {
+    const s = data.settings;
+    const payload: Record<string, unknown> = {};
+    const company = { ...s.company };
+    let touchedCompany = false;
+    for (const [k, v] of Object.entries(set)) {
+      switch (k) {
+        case 'companyName': company.name = String(v); touchedCompany = true; break;
+        case 'companyEmail': company.email = String(v); touchedCompany = true; break;
+        case 'companyPhone': company.phone = String(v); touchedCompany = true; break;
+        case 'companyAddress': company.address = String(v); touchedCompany = true; break;
+        case 'companyId': company.kennitala = String(v); touchedCompany = true; break;
+        case 'invoicePrefix': payload.invoicePrefix = String(v); break;
+        case 'pricesIncludeVAT': payload.pricesIncludeVAT = Boolean(v); break;
+        case 'paymentsEnabled': payload.paymentsEnabled = Boolean(v); break;
+        case 'defaultCurrency': payload.defaultCurrency = String(v); break;
+        case 'fiscalYear': payload.fiscalYear = Number(v); break;
+        case 'salesTaxRate': {
+          const r = Number(v) || 0;
+          payload.salesTaxRate = r;
+          if (s.country === 'US') { payload.standardRate = r; payload.vatRates = Array.from(new Set([r, 0])); }
+          break;
+        }
+        default: break; // unknown / unsafe key → ignored
+      }
+    }
+    if (touchedCompany) payload.company = company;
+    if (Object.keys(payload).length === 0) {
+      const err = lang === 'is' ? '⚠️ Ekkert öruggt til að breyta þar.' : '⚠️ Nothing safe to change there.';
+      setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-settings\s*[\s\S]*?```/, `\n${err}`) } : m));
+      return;
+    }
+    dispatch({ type: 'UPDATE_SETTINGS', payload });
+    const done = lang === 'is' ? '✅ Stillingum breytt' : '✅ Settings updated';
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-settings\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved the AI's proposed entries → book them straight into Jobboks.
   // Then rewrite the message so the block can't be booked twice (persists in aiChat).
   function approveBook(msgIndex: number, book: BookTx[]) {
@@ -833,7 +886,8 @@ export default function AIAssistant() {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
                       const { text: afterMem, remember, forget } = extractMemory(afterExcel);
                       const { text: afterSetup, setup } = extractSetup(afterMem);
-                      const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterSetup);
+                      const { text: afterSettings, settings: settingsSet } = extractSettings(afterSetup);
+                      const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterSettings);
                       const { text: afterBook, book } = extractBook(afterInvoice);
                       const { text, fixes, matches, badBlock } = extractFix(afterBook);
                       return (
@@ -891,6 +945,25 @@ export default function AIAssistant() {
                               </div>
                             );
                           })()}
+                          {settingsSet && Object.keys(settingsSet).length > 0 && (
+                            <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                              <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                {lang === 'is' ? 'Stillingabreyting — samþykktu til að stilla' : 'Settings change — approve to apply'}
+                              </div>
+                              <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                {Object.entries(settingsSet).map(([k, v]) => (
+                                  <span key={k} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                    {k}: {String(v)}
+                                  </span>
+                                ))}
+                              </div>
+                              <button onClick={() => applySettings(i, settingsSet)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? 'Vista stillingar' : 'Apply settings'}
+                              </button>
+                            </div>
+                          )}
                           {aiInvoices.length > 0 && (
                             <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
                               <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
