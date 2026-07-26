@@ -94,7 +94,7 @@ export default function Dashboard({ setView, perms }: Props) {
       border: netProfit >= 0 ? 'border-blue-200' : 'border-red-200',
     },
     {
-      label: cc.isUSA
+      label: (cc.isUSA || lang === 'en')
         ? (vat.netVAT >= 0 ? `${cc.vatTerm} owed` : `${cc.vatTerm} refund`)
         : (vat.netVAT >= 0 ? t('vatOwed') : t('vatRefund')),
       value: fmtISK(Math.abs(vat.netVAT)),
