@@ -5,7 +5,7 @@ import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buil
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
-import { Transaction, TransactionType, Currency, Invoice } from '../types';
+import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus } from '../types';
 import { COUNTRY_CONFIGS } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
@@ -54,6 +54,17 @@ function extractInvoice(content: string): { text: string; invoices: InvoicePropo
   let invoices: InvoiceProposal[] = [];
   try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.invoices)) invoices = p.invoices; } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), invoices };
+}
+
+// A job / site-visit the AI logs from a sentence (```jobboks-job``` block). Default
+// status is 'survey' (the site-visit-first pipeline). The owner taps "Create job".
+interface JobProposal { name: string; client?: string; address?: string; status?: string; quotedAmount?: number; description?: string; }
+function extractJob(content: string): { text: string; jobs: JobProposal[] } {
+  const m = content.match(/```jobboks-job\s*([\s\S]*?)```/);
+  if (!m) return { text: content, jobs: [] };
+  let jobs: JobProposal[] = [];
+  try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.jobs)) jobs = p.jobs; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), jobs };
 }
 
 // A settings change the AI proposes (```jobboks-settings``` block). Only a safe
@@ -546,6 +557,44 @@ export default function AIAssistant() {
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner approved AI-logged job(s) → create them. Numbers run JOB-YYYY-NNN off
+  // the count of this year's jobs; status defaults to 'survey' (site visit); a new
+  // client name is saved to Viðskiptavinir. Mirrors the Jobs screen's saveJob path.
+  function applyJob(msgIndex: number, jobs: JobProposal[]) {
+    const now = new Date().toISOString();
+    const year = new Date().getFullYear();
+    const valid: JobStatus[] = ['survey', 'scheduled', 'active', 'paused', 'complete', 'cancelled'];
+    let count = (data.jobs ?? []).filter(j => j.number.includes(String(year))).length;
+    const added: string[] = [];
+    let made = 0;
+    for (const jp of jobs) {
+      const name = String(jp.name || '').trim();
+      if (!name) continue;
+      count += 1; made += 1;
+      const client = String(jp.client || '').trim();
+      const job: Job = {
+        id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        number: `JOB-${year}-${String(count).padStart(3, '0')}`,
+        name,
+        clientName: client,
+        status: valid.includes(jp.status as JobStatus) ? (jp.status as JobStatus) : 'survey',
+        currency: data.settings.defaultCurrency,
+        quotedAmount: Number(jp.quotedAmount) || 0,
+        ...(jp.address ? { address: String(jp.address) } : {}),
+        ...(jp.description ? { description: String(jp.description) } : {}),
+        createdAt: now, updatedAt: now,
+      };
+      dispatch({ type: 'ADD_JOB', payload: job });
+      const key = client.toLowerCase();
+      if (client && !(data.customers ?? []).some(c => c.name.trim().toLowerCase() === key) && !added.includes(key)) {
+        added.push(key);
+        dispatch({ type: 'ADD_CUSTOMER', payload: { id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: client, createdAt: now } });
+      }
+    }
+    const done = lang === 'is' ? `✅ ${made} verk skráð` : `✅ ${made} job${made === 1 ? '' : 's'} created`;
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-job\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved an AI-proposed settings change → apply only the SAFE,
   // whitelisted user-facing settings; any other key (API keys, Supabase, plan,
   // permissions, …) is silently ignored, so the AI can never touch sensitive config.
@@ -887,7 +936,8 @@ export default function AIAssistant() {
                       const { text: afterMem, remember, forget } = extractMemory(afterExcel);
                       const { text: afterSetup, setup } = extractSetup(afterMem);
                       const { text: afterSettings, settings: settingsSet } = extractSettings(afterSetup);
-                      const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterSettings);
+                      const { text: afterJob, jobs: aiJobs } = extractJob(afterSettings);
+                      const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterJob);
                       const { text: afterBook, book } = extractBook(afterInvoice);
                       const { text, fixes, matches, badBlock } = extractFix(afterBook);
                       return (
@@ -961,6 +1011,26 @@ export default function AIAssistant() {
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? 'Vista stillingar' : 'Apply settings'}
+                              </button>
+                            </div>
+                          )}
+                          {aiJobs.length > 0 && (
+                            <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                              <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                {lang === 'is' ? 'Nýtt verk — samþykktu til að skrá' : 'New job — approve to create'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiJobs.map((jp, ji) => (
+                                  <div key={ji} className="px-3 py-1.5 text-xs">
+                                    <span className="text-gray-700">{jp.name}{jp.client ? ` · ${jp.client}` : ''}</span>
+                                    {(jp.address || jp.status) && <span className="text-gray-400">{jp.address ? ` · ${jp.address}` : ''}{jp.status ? ` · ${jp.status}` : ''}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={() => applyJob(i, aiJobs)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? `Skrá ${aiJobs.length} verk` : `Create ${aiJobs.length} job${aiJobs.length === 1 ? '' : 's'}`}
                               </button>
                             </div>
                           )}

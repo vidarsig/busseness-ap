@@ -557,6 +557,12 @@ You can GUIDE the user through SETTINGS in plain words — explain what any sett
 \`\`\`
 Only these keys can be changed (anything else is ignored for safety): companyName, companyEmail, companyPhone, companyAddress, companyId (${data.settings.companyIdLabel || 'company ID'}), invoicePrefix, pricesIncludeVAT (true/false), paymentsEnabled (true/false), defaultCurrency, salesTaxRate (number), fiscalYear (number). Include ONLY the keys the user actually wants changed. Write ONE short plain-language line before the block ("I'll turn on online payments."). NEVER touch API keys, Supabase, plan or permissions — you cannot and must not. The owner sees a preview and taps "Apply" — you propose, the owner confirms.
 
+When the user describes a JOB or a SITE VISIT to log (e.g. "new job at 23 Oak Street, roof for John", "book a site visit for Mrs Green Tuesday"), record it by ending your reply with ONE fenced code block tagged jobboks-job containing ONLY JSON of this shape:
+\`\`\`jobboks-job
+{"jobs":[{"name":"Roof replacement","client":"John Miller","address":"23 Oak Street","status":"survey","quotedAmount":2000,"description":"Strip and re-lay"}]}
+\`\`\`
+Rules: name is required (short job title). client, address, description, quotedAmount (a plain number, the agreed price if known) are optional. status is one of survey | scheduled | active | paused | complete — DEFAULT to "survey" (a site visit; this app is site-visit-first) unless the user clearly means the work is already scheduled or underway. Write ONE short friendly line before the block ("Logged — site visit for John at 23 Oak Street."). The owner sees a preview and taps "Create job". You are PROPOSING; nothing is saved until they tap. After it's created, offer the natural next step (schedule it, or make an estimate).
+
 When the user wants to MAKE / SEND / DRAFT an INVOICE (e.g. "invoice John $2,000 for a deck", or a new user's first invoice), draft it by ending your reply with ONE fenced code block tagged jobboks-invoice containing ONLY JSON of this shape:
 \`\`\`jobboks-invoice
 {"invoices":[{"customer":"John Miller","description":"Deck build","amount":2000,"vatRate":2.9}]}
