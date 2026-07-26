@@ -77,7 +77,24 @@
       "Bash(sed -n '/function findCandidates/,/^}/p' src/components/ReceiptMatcher.tsx)",
       "Bash(sed -n '/function classify/,/^}/p' src/components/ReceiptMatcher.tsx)",
       "Bash(curl -s -o /dev/null -w \"claude-stream: %{http_code}\\\\n\" -X POST https://jobboks.app/api/claude-stream -H \"content-type: application/json\" -d '{}')",
-      "Bash(curl -s -o /dev/null -w \"claude: %{http_code}\\\\n\" -X POST https://jobboks.app/api/claude -H \"content-type: application/json\" -d '{}')"
+      "Bash(curl -s -o /dev/null -w \"claude: %{http_code}\\\\n\" -X POST https://jobboks.app/api/claude -H \"content-type: application/json\" -d '{}')",
+      "Read(//c/Users/vidar/Downloads/**)",
+      "Bash(markitdown \"Tekjur 24.xlsx\")",
+      "Bash(python -c \"import sys; from markitdown import MarkItDown; print\\(MarkItDown\\(\\).convert\\(r'C:\\\\Users\\\\vidar\\\\Downloads\\\\Tekjur 24.xlsx'\\).text_content[:4000]\\)\")",
+      "Bash(py --version)",
+      "Bash(py -c \"from markitdown import MarkItDown; print\\(MarkItDown\\(\\).convert\\(r'C:\\\\Users\\\\vidar\\\\Downloads\\\\Tekjur 24.xlsx'\\).text_content[:5000]\\)\")",
+      "Bash(py -c \"import openpyxl; print\\('ok'\\)\")",
+      "Bash(py -c \"import pandas; print\\('ok'\\)\")",
+      "Bash(py)",
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 py)",
+      "WebFetch(domain:www.althingi.is)",
+      "Bash(ls -la \"/c/Users/vidar/Downloads/\" | grep -iE \"lan|loan|lán|Aætlun|aetlun|eirik|00750|2595\" )",
+      "Bash(git commit -q -m 'Færslur: add a bulk '\\\\''clear key'\\\\'' option to undo an over-broad key assignment *)",
+      "Bash(gh pr *)",
+      "Bash(gh pr create --base main --head claude/back-b1f016 --title 'Deposit-type recognition in Bank Import + bulk clear-key in Færslur' --body 'Two changes: *)",
+      "Bash(git ls-remote *)",
+      "Bash(python -)",
+      "Bash(py -)"
     ]
   }
 }

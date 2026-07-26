@@ -18,7 +18,7 @@ export default function VATReturn() {
     months.flatMap(m => filterByMonth(data.transactions, year, m)),
     [data.transactions, year, period]);
 
-  const vat = useMemo(() => calcVATSummary(periodTx, cc.vatRates), [periodTx, cc.vatRates]);
+  const vat = useMemo(() => calcVATSummary(periodTx, cc.vatRates, data.settings.pricesIncludeVAT), [periodTx, cc.vatRates, data.settings.pricesIncludeVAT]);
   const fmt = (n: number) => fmtISK(n);
 
   const years = Array.from(new Set([year - 1, year, year + 1,

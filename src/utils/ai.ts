@@ -208,8 +208,8 @@ const fmtNum = (n: number) => Math.round(n).toLocaleString();
 function yearSummary(data: AppData, year: number): string {
   const txs = filterByYear(data.transactions, year);
   if (txs.length === 0) return '';
-  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
-  const vat = calcVATSummary(txs, data.settings.vatRates);
+  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+  const vat = calcVATSummary(txs, data.settings.vatRates, data.settings.pricesIncludeVAT);
   const catBreakdown: Record<string, number> = {};
   txs.forEach(tx => { catBreakdown[tx.category] = (catBreakdown[tx.category] ?? 0) + tx.amount; });
 

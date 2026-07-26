@@ -462,6 +462,21 @@ export default function Settings() {
                   onChange={e => setTop('corporateTaxRate', parseFloat(e.target.value) || 0)} min={0} max={100} step="0.01" />
                 <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Notað í ársreikningi og rekstrarniðurstöðu' : 'Used in annual accounts and profit/loss'}</p>
               </div>
+              <div className="md:col-span-2">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 w-4 h-4 rounded flex-shrink-0"
+                    checked={form.pricesIncludeVAT ?? false}
+                    onChange={e => setTop('pricesIncludeVAT', e.target.checked)} />
+                  <span className="text-sm text-gray-700">
+                    {lang === 'is' ? `Upphæðir innihalda ${form.vatTerm || 'VSK'} (draga innan úr, ekki bæta ofan á)` : `Amounts include ${form.vatTerm || 'VAT'} (extract from within, don't add on top)`}
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      {lang === 'is'
+                        ? 'Kveiktu ef fjárhæðir (t.d. bankainnborganir) eru með VSK innifalinn — þá reiknar VSK-skýrslan og rekstur nettó = upphæð ÷ (1 + hlutfall).'
+                        : 'Turn on if your amounts (e.g. bank deposits) are VAT-inclusive — the VAT return and P&L then use net = amount ÷ (1 + rate).'}
+                    </span>
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
 

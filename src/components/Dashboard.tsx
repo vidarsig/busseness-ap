@@ -53,7 +53,7 @@ export default function Dashboard({ setView, perms }: Props) {
   const totalIncome = yearly.filter(t => t.type === 'income').reduce((s, t) => s + getTransactionISK(t), 0);
   const totalExpenses = yearly.filter(t => t.type === 'expense').reduce((s, t) => s + getTransactionISK(t), 0);
   const netProfit = totalIncome - totalExpenses;
-  const vat = calcVATSummary(yearly);
+  const vat = calcVATSummary(yearly, cc.vatRates, data.settings.pricesIncludeVAT);
 
   const monthlyData = getMonthlyTotals(data.transactions, year);
   const monthLabels = [t('january'),t('february'),t('march'),t('april'),t('may'),t('june'),

@@ -40,7 +40,7 @@ export default function VAT() {
   else if (periodType === 'quarter') filtered = filterByQuarter(filtered, year, quarter);
   else filtered = filterByMonth(filtered, year, month);
 
-  const vat = calcVATSummary(filtered);
+  const vat = calcVATSummary(filtered, cc.vatRates, data.settings.pricesIncludeVAT);
 
   const SectionTable = ({
     title, rows, total, color,

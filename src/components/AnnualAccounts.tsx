@@ -85,7 +85,7 @@ export default function AnnualAccounts() {
   const [year, setYear] = useState(data.settings.fiscalYear);
   const company = data.settings.company;
   const txs = filterByYear(data.transactions, year);
-  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
+  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
 
   const [bsModal, setBsModal] = useState<{ open: boolean; item?: BalanceSheetItem }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -145,7 +145,7 @@ export default function AnnualAccounts() {
     [data.transactions, data.accounts, year]);
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
-    return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate).profitBeforeTax, 0);
+    return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
   }, [data.transactions, year, data.settings.corporateTaxRate]);
   const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
   const posAssets = trackedCash + posAssetKeys;

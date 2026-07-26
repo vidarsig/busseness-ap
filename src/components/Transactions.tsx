@@ -8,7 +8,7 @@ import {
   Transaction, TransactionType, Currency,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../types';
-import { getTransactionISK, getVATAmountISK } from '../utils/calculations';
+import { getVATAmountISK, getTotalISK } from '../utils/calculations';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
 import { isTransactionLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
@@ -295,6 +295,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 
 export default function Transactions({ initialFilter, onFilterConsumed }: { initialFilter?: { category?: string; year?: number } | null; onFilterConsumed?: () => void } = {}) {
   const { data, dispatch, t, lang, cc } = useApp();
+  const inclVat = data.settings.pricesIncludeVAT; // amounts are gross → extract VAT for display
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -393,7 +394,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const summary = useMemo(() => {
     let income = 0, expense = 0, transfer = 0;
     for (const tx of filtered) {
-      const v = getTransactionISK(tx) + getVATAmountISK(tx);
+      const v = getTotalISK(tx, inclVat);
       if (tx.type === 'income') income += v;
       else if (tx.type === 'expense') expense += v;
       else transfer += v;
@@ -473,8 +474,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     date: tx.date, desc: tx.description,
     type: t(tx.type), cat: t(tx.category as never),
     cur: tx.currency, amount: tx.amount, vat: `${tx.vatRate}%`,
-    vatamt: Math.round(getVATAmountISK(tx)),
-    total: Math.round(getTransactionISK(tx) + getVATAmountISK(tx)),
+    vatamt: Math.round(getVATAmountISK(tx, inclVat)),
+    total: Math.round(getTotalISK(tx, inclVat)),
     ref: tx.reference || '',
   }));
   const subtitle = `${data.settings.company.name || ''} · ${new Date().toLocaleDateString()}`;
@@ -493,8 +494,8 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       : ['Date','Description','Type','Category','Currency',`Amount (excl. ${cc.vatTerm})`,`${cc.vatTerm}%`,`${cc.vatTerm} amount`,'Total (ISK)','Reference'];
     const rows = filtered.map(tx => [
       tx.date, tx.description, tx.type, tx.category, tx.currency, tx.amount, tx.vatRate,
-      getVATAmountISK(tx).toFixed(0),
-      (getTransactionISK(tx) + getVATAmountISK(tx)).toFixed(0),
+      getVATAmountISK(tx, inclVat).toFixed(0),
+      (getTotalISK(tx, inclVat)).toFixed(0),
       tx.reference || '',
     ]);
     const csv = [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
@@ -517,7 +518,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       let e = map.get(key);
       if (!e) { e = { inc: 0, exp: 0, count: 0, perYear: {} }; map.set(key, e); }
       const y = new Date(tx.date).getFullYear();
-      const v = getTransactionISK(tx) + getVATAmountISK(tx);
+      const v = getTotalISK(tx, inclVat);
       e.perYear[y] = e.perYear[y] ?? 0;
       if (tx.type === 'income') { e.inc += v; e.perYear[y] += v; }
       else if (tx.type === 'expense') { e.exp += v; e.perYear[y] -= v; }
@@ -782,7 +783,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 <div className="flex justify-between items-start gap-2">
                   <p className="font-medium text-gray-800 text-sm truncate">{tx.description}</p>
                   <span className={`font-semibold text-sm flex-shrink-0 font-mono ${flow.text}`}>
-                    {flow.sign}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
+                    {flow.sign}{formatISK(getTotalISK(tx, inclVat), lang)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -871,7 +872,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                       <span className={tx.vatRate === 0 ? 'text-gray-400' : ''}>{tx.vatRate}%</span>
                     </td>
                     <td className={`${tdCls} text-right font-mono font-semibold ${flow.text}`}>
-                      {flow.sign}{formatISK(getTransactionISK(tx) + getVATAmountISK(tx), lang)}
+                      {flow.sign}{formatISK(getTotalISK(tx, inclVat), lang)}
                     </td>
                     <td className={tdCls}>
                       <div className="flex gap-1">
@@ -907,10 +908,10 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
             <span>{filtered.length} {lang === 'is' ? 'færslur' : 'transactions'}</span>
             <div className="flex gap-4">
               <span className="text-green-600 font-semibold">
-                +{formatISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTransactionISK(tx) + getVATAmountISK(tx), 0), lang)}
+                +{formatISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
               </span>
               <span className="text-red-600 font-semibold">
-                -{formatISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTransactionISK(tx) + getVATAmountISK(tx), 0), lang)}
+                -{formatISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
               </span>
             </div>
           </div>
@@ -923,10 +924,10 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <span>{filtered.length} {lang === 'is' ? 'færslur' : 'transactions'}</span>
           <div className="flex gap-3">
             <span className="text-green-600 font-semibold">
-              +{formatISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTransactionISK(tx) + getVATAmountISK(tx), 0), lang)}
+              +{formatISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
             </span>
             <span className="text-red-600 font-semibold">
-              -{formatISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTransactionISK(tx) + getVATAmountISK(tx), 0), lang)}
+              -{formatISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
             </span>
           </div>
         </div>

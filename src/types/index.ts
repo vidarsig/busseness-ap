@@ -288,6 +288,11 @@ export interface AppSettings {
   salesTaxRate: number;
   corporateTaxRate: number;
   vatRates: number[];
+  // When true the amounts stored on transactions are GROSS (VAT is already inside
+  // the figure, as with bank deposits) — the app EXTRACTS the VAT from within
+  // (net = amount ÷ (1+rate)). When false/undefined the amount is NET and VAT is
+  // added on top (legacy). See getNetISK/getVATAmountISK in calculations.ts.
+  pricesIncludeVAT?: boolean;
   aiMaxTransactions?: number; // how many recent transactions the in-app AI reads (default 12,000)
   invoiceEmailFrom?: string;  // verified sender for app-sent invoices, e.g. "Jobboks <accounts@jobboks.app>"
   standardRate: number;
