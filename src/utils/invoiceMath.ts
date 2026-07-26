@@ -26,3 +26,13 @@ export function invoiceTotals(inv: Discountable) {
   const netSubtotal = subtotal - discount;
   return { subtotal, discount, netSubtotal, vatTotal, total: netSubtotal + vatTotal };
 }
+
+// The one VAT rate that speaks for an invoice, for linking a payment to it (R9-6).
+// If every line shares a rate that's the invoice's rate; a mixed-rate invoice has
+// no single rate, so returns null (caller keeps the row's rate + warns instead of
+// guessing). Empty/lineless invoices return null too.
+export function invoiceVatRate(lines: InvoiceLine[]): number | null {
+  if (!lines.length) return null;
+  const first = lines[0].vatRate;
+  return lines.every(l => l.vatRate === first) ? first : null;
+}
