@@ -6,6 +6,7 @@ import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
 import { Transaction, TransactionType, Currency } from '../types';
+import { COUNTRY_CONFIGS } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
 
@@ -24,6 +25,23 @@ function extractBook(content: string): { text: string; book: BookTx[] } {
     if (Array.isArray(p?.transactions)) book = p.transactions;
   } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), book };
+}
+
+// The business setup the AI proposes for a new user (```jobboks-setup``` block):
+// country + (US) state/rate + company name. The owner taps "Set up" to apply — the
+// AI directs, the owner confirms. This is the "it set itself up for me" moment.
+interface SetupProposal {
+  country?: string;      // 2-letter code the app supports (US, IS, CA, GB, …)
+  state?: string;        // US state code, e.g. "CO"
+  salesTaxRate?: number; // US only
+  companyName?: string;
+}
+function extractSetup(content: string): { text: string; setup: SetupProposal | null } {
+  const m = content.match(/```jobboks-setup\s*([\s\S]*?)```/);
+  if (!m) return { text: content, setup: null };
+  let setup: SetupProposal | null = null;
+  try { const p = JSON.parse(m[1].trim()); if (p && typeof p === 'object') setup = p; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), setup };
 }
 
 // A correction the AI proposes to an EXISTING transaction (```jobboks-fix```).
@@ -422,6 +440,42 @@ export default function AIAssistant() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
+  // The owner approved the AI's proposed setup → configure the business. Reuses the
+  // exact country-apply path onboarding uses (COUNTRY_CONFIGS → settings), plus the
+  // US state rate (mirrors applyUsRate) and an optional company name.
+  function applySetup(msgIndex: number, setup: SetupProposal) {
+    const code = String(setup.country || '').toUpperCase();
+    const cc = COUNTRY_CONFIGS[code];
+    if (!cc) {
+      const err = lang === 'is' ? `⚠️ Þekki ekki landið „${setup.country}“.` : `⚠️ Unknown country "${setup.country}".`;
+      setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-setup\s*[\s\S]*?```/, `\n${err}`) } : m));
+      return;
+    }
+    const usRate = code === 'US' && setup.salesTaxRate != null ? (Number(setup.salesTaxRate) || 0) : null;
+    dispatch({ type: 'UPDATE_SETTINGS', payload: {
+      country: code,
+      defaultCurrency: cc.currency,
+      taxWithholdingRate: cc.taxWithholdingRate,
+      employeePensionRate: cc.employeePensionRate,
+      employerPensionRate: cc.employerPensionRate,
+      socialInsuranceRate: cc.socialInsuranceRate,
+      personalDeductionMonthly: cc.personalDeductionMonthly,
+      vatRates: usRate != null ? Array.from(new Set([usRate, 0])) : cc.vatRates,
+      standardRate: usRate != null ? usRate : cc.standardRate,
+      vatTerm: cc.vatTerm,
+      taxAuthority: cc.taxAuthority,
+      companyIdLabel: cc.companyIdLabel,
+      vatNumberLabel: cc.vatNumberLabel,
+      ...(setup.state ? { usState: String(setup.state).toUpperCase() } : {}),
+      ...(usRate != null ? { salesTaxRate: usRate } : {}),
+      ...(setup.companyName ? { company: { ...data.settings.company, name: String(setup.companyName) } } : {}),
+    }});
+    const done = lang === 'is'
+      ? `✅ Uppsett: ${cc.nameEn}${setup.companyName ? ` · ${setup.companyName}` : ''}`
+      : `✅ Set up: ${cc.nameEn}${setup.companyName ? ` · ${setup.companyName}` : ''}`;
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-setup\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved the AI's proposed entries → book them straight into Jobboks.
   // Then rewrite the message so the block can't be booked twice (persists in aiChat).
   function approveBook(msgIndex: number, book: BookTx[]) {
@@ -687,7 +741,8 @@ export default function AIAssistant() {
                     (() => {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
                       const { text: afterMem, remember, forget } = extractMemory(afterExcel);
-                      const { text: afterBook, book } = extractBook(afterMem);
+                      const { text: afterSetup, setup } = extractSetup(afterMem);
+                      const { text: afterBook, book } = extractBook(afterSetup);
                       const { text, fixes, matches, badBlock } = extractFix(afterBook);
                       return (
                         <>
@@ -717,6 +772,33 @@ export default function AIAssistant() {
                               </span>
                             </div>
                           )}
+                          {setup && (() => {
+                            const cc = COUNTRY_CONFIGS[String(setup.country || '').toUpperCase()];
+                            const chips = [
+                              cc ? cc.nameEn : setup.country,
+                              setup.state ? `${setup.state}${setup.salesTaxRate != null ? ` ${setup.salesTaxRate}%` : ''}` : null,
+                              setup.companyName,
+                            ].filter(Boolean) as string[];
+                            return (
+                              <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                                <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                  {lang === 'is' ? 'Uppsetning — samþykktu til að stilla' : 'Setup — approve to configure'}
+                                </div>
+                                <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                  {chips.map((c, ci) => (
+                                    <span key={ci} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                      <CheckCircle className="w-3 h-3" /> {c}
+                                    </span>
+                                  ))}
+                                </div>
+                                <button onClick={() => applySetup(i, setup)}
+                                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                  <CheckCircle className="w-4 h-4" />
+                                  {lang === 'is' ? 'Setja upp' : 'Set up'}
+                                </button>
+                              </div>
+                            );
+                          })()}
                           {book.length > 0 && (
                             <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
                               <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
