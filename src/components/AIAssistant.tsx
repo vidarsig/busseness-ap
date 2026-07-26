@@ -5,7 +5,8 @@ import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buil
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
-import { Transaction, TransactionType, Currency } from '../types';
+import { Transaction, TransactionType, Currency, Invoice } from '../types';
+import { COUNTRY_CONFIGS } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
 
@@ -24,6 +25,48 @@ function extractBook(content: string): { text: string; book: BookTx[] } {
     if (Array.isArray(p?.transactions)) book = p.transactions;
   } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), book };
+}
+
+// The business setup the AI proposes for a new user (```jobboks-setup``` block):
+// country + (US) state/rate + company name. The owner taps "Set up" to apply — the
+// AI directs, the owner confirms. This is the "it set itself up for me" moment.
+interface SetupProposal {
+  country?: string;      // 2-letter code the app supports (US, IS, CA, GB, …)
+  state?: string;        // US state code, e.g. "CO"
+  salesTaxRate?: number; // US only
+  companyName?: string;
+}
+function extractSetup(content: string): { text: string; setup: SetupProposal | null } {
+  const m = content.match(/```jobboks-setup\s*([\s\S]*?)```/);
+  if (!m) return { text: content, setup: null };
+  let setup: SetupProposal | null = null;
+  try { const p = JSON.parse(m[1].trim()); if (p && typeof p === 'object') setup = p; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), setup };
+}
+
+// An invoice the AI drafts (```jobboks-invoice``` block): the owner enters the GROSS
+// amount and it's created as a DRAFT on one tap (net = gross ÷ (1+rate)). The AI
+// directs, the owner confirms — nothing is issued until they tap.
+interface InvoiceProposal { customer: string; description?: string; amount: number; vatRate?: number; }
+function extractInvoice(content: string): { text: string; invoices: InvoiceProposal[] } {
+  const m = content.match(/```jobboks-invoice\s*([\s\S]*?)```/);
+  if (!m) return { text: content, invoices: [] };
+  let invoices: InvoiceProposal[] = [];
+  try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.invoices)) invoices = p.invoices; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), invoices };
+}
+
+// A settings change the AI proposes (```jobboks-settings``` block). Only a safe
+// whitelist of user-facing settings can be changed (never API keys, Supabase, plan,
+// or permissions — those are handled by applySettings, which ignores anything else).
+// The owner taps "Apply" — the AI guides + does it, the owner confirms.
+type SettingsSet = Record<string, string | number | boolean>;
+function extractSettings(content: string): { text: string; settings: SettingsSet | null } {
+  const m = content.match(/```jobboks-settings\s*([\s\S]*?)```/);
+  if (!m) return { text: content, settings: null };
+  let settings: SettingsSet | null = null;
+  try { const p = JSON.parse(m[1].trim()); if (p && typeof p.set === 'object' && p.set) settings = p.set; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), settings };
 }
 
 // A correction the AI proposes to an EXISTING transaction (```jobboks-fix```).
@@ -227,6 +270,9 @@ export default function AIAssistant() {
   const { data, t, lang, dispatch } = useApp();
   const [tab, setTab] = useState<'chat' | 'insights' | 'memory'>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>(() => data.aiChat ?? []);
+  // A brand-new user with an empty app — greet them like a concierge (slice 2)
+  // rather than the generic "how can I help" prompt.
+  const isNewUser = (data.transactions?.length ?? 0) === 0 && (data.invoices?.length ?? 0) === 0 && (data.jobs?.length ?? 0) === 0;
 
   // The year the AI is working on. One year at a time: it then gets EVERY row of
   // that year rather than a newest-first sweep that quietly drops the oldest.
@@ -420,6 +466,124 @@ export default function AIAssistant() {
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  // The owner approved the AI's proposed setup → configure the business. Reuses the
+  // exact country-apply path onboarding uses (COUNTRY_CONFIGS → settings), plus the
+  // US state rate (mirrors applyUsRate) and an optional company name.
+  function applySetup(msgIndex: number, setup: SetupProposal) {
+    const code = String(setup.country || '').toUpperCase();
+    const cc = COUNTRY_CONFIGS[code];
+    if (!cc) {
+      const err = lang === 'is' ? `⚠️ Þekki ekki landið „${setup.country}“.` : `⚠️ Unknown country "${setup.country}".`;
+      setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-setup\s*[\s\S]*?```/, `\n${err}`) } : m));
+      return;
+    }
+    const usRate = code === 'US' && setup.salesTaxRate != null ? (Number(setup.salesTaxRate) || 0) : null;
+    dispatch({ type: 'UPDATE_SETTINGS', payload: {
+      country: code,
+      defaultCurrency: cc.currency,
+      taxWithholdingRate: cc.taxWithholdingRate,
+      employeePensionRate: cc.employeePensionRate,
+      employerPensionRate: cc.employerPensionRate,
+      socialInsuranceRate: cc.socialInsuranceRate,
+      personalDeductionMonthly: cc.personalDeductionMonthly,
+      vatRates: usRate != null ? Array.from(new Set([usRate, 0])) : cc.vatRates,
+      standardRate: usRate != null ? usRate : cc.standardRate,
+      vatTerm: cc.vatTerm,
+      taxAuthority: cc.taxAuthority,
+      companyIdLabel: cc.companyIdLabel,
+      vatNumberLabel: cc.vatNumberLabel,
+      ...(setup.state ? { usState: String(setup.state).toUpperCase() } : {}),
+      ...(usRate != null ? { salesTaxRate: usRate } : {}),
+      ...(setup.companyName ? { company: { ...data.settings.company, name: String(setup.companyName) } } : {}),
+    }});
+    const done = lang === 'is'
+      ? `✅ Uppsett: ${cc.nameEn}${setup.companyName ? ` · ${setup.companyName}` : ''}`
+      : `✅ Set up: ${cc.nameEn}${setup.companyName ? ` · ${setup.companyName}` : ''}`;
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-setup\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
+  // The owner approved the AI's drafted invoice(s) → create them as DRAFTS. The
+  // owner enters a GROSS amount; the line stores net = gross ÷ (1+rate) so the
+  // invoice total reproduces the gross exactly (same math as bulk invoicing).
+  // Sequential numbers off invoiceLastNumber; new customers saved to Viðskiptavinir.
+  function applyInvoice(msgIndex: number, invoices: InvoiceProposal[]) {
+    const s = data.settings;
+    const today = new Date().toISOString().split('T')[0];
+    const due = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+    let seq = s.invoiceLastNumber;
+    const added: string[] = [];
+    for (const iv of invoices) {
+      const name = String(iv.customer || '').trim();
+      const gross = Number(iv.amount) || 0;
+      if (!name || gross <= 0) continue;
+      seq += 1;
+      const rate = Number(iv.vatRate) || 0;
+      const net = rate ? gross / (1 + rate / 100) : gross;
+      const existing = (data.customers ?? []).find(c => c.name.trim().toLowerCase() === name.toLowerCase());
+      const inv: Invoice = {
+        id: `inv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'invoice',
+        number: `${s.invoicePrefix}${String(seq).padStart(4, '0')}`,
+        date: today, dueDate: due,
+        customer: existing
+          ? { name: existing.name, kennitala: existing.kennitala, address: existing.address, postalCode: existing.postalCode, city: existing.city, email: existing.email, phone: existing.phone }
+          : { name },
+        lines: [{ id: `ln_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, description: String(iv.description || (lang === 'is' ? 'Verk og þjónusta' : 'Work and services')), quantity: 1, unitPrice: net, vatRate: rate }],
+        notes: '', status: 'draft', currency: s.defaultCurrency, eurToIskRate: s.exchangeRates.EUR,
+      };
+      dispatch({ type: 'ADD_INVOICE', payload: inv });
+      const key = name.toLowerCase();
+      if (!existing && !added.includes(key)) {
+        added.push(key);
+        dispatch({ type: 'ADD_CUSTOMER', payload: { id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name, createdAt: new Date().toISOString() } });
+      }
+    }
+    dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: seq } });
+    const n = seq - s.invoiceLastNumber;
+    const done = lang === 'is' ? `✅ ${n} reikningur búinn til sem drög` : `✅ ${n} invoice${n === 1 ? '' : 's'} created as draft${n === 1 ? '' : 's'}`;
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
+  // The owner approved an AI-proposed settings change → apply only the SAFE,
+  // whitelisted user-facing settings; any other key (API keys, Supabase, plan,
+  // permissions, …) is silently ignored, so the AI can never touch sensitive config.
+  function applySettings(msgIndex: number, set: SettingsSet) {
+    const s = data.settings;
+    const payload: Record<string, unknown> = {};
+    const company = { ...s.company };
+    let touchedCompany = false;
+    for (const [k, v] of Object.entries(set)) {
+      switch (k) {
+        case 'companyName': company.name = String(v); touchedCompany = true; break;
+        case 'companyEmail': company.email = String(v); touchedCompany = true; break;
+        case 'companyPhone': company.phone = String(v); touchedCompany = true; break;
+        case 'companyAddress': company.address = String(v); touchedCompany = true; break;
+        case 'companyId': company.kennitala = String(v); touchedCompany = true; break;
+        case 'invoicePrefix': payload.invoicePrefix = String(v); break;
+        case 'pricesIncludeVAT': payload.pricesIncludeVAT = Boolean(v); break;
+        case 'paymentsEnabled': payload.paymentsEnabled = Boolean(v); break;
+        case 'defaultCurrency': payload.defaultCurrency = String(v); break;
+        case 'fiscalYear': payload.fiscalYear = Number(v); break;
+        case 'salesTaxRate': {
+          const r = Number(v) || 0;
+          payload.salesTaxRate = r;
+          if (s.country === 'US') { payload.standardRate = r; payload.vatRates = Array.from(new Set([r, 0])); }
+          break;
+        }
+        default: break; // unknown / unsafe key → ignored
+      }
+    }
+    if (touchedCompany) payload.company = company;
+    if (Object.keys(payload).length === 0) {
+      const err = lang === 'is' ? '⚠️ Ekkert öruggt til að breyta þar.' : '⚠️ Nothing safe to change there.';
+      setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-settings\s*[\s\S]*?```/, `\n${err}`) } : m));
+      return;
+    }
+    dispatch({ type: 'UPDATE_SETTINGS', payload });
+    const done = lang === 'is' ? '✅ Stillingum breytt' : '✅ Settings updated';
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-settings\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
   // The owner approved the AI's proposed entries → book them straight into Jobboks.
@@ -639,31 +803,65 @@ export default function AIAssistant() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto space-y-4 pb-2">
             {messages.length === 0 && (
-              <div className="text-center py-12">
-                <Bot className="w-12 h-12 text-blue-200 mx-auto mb-3" />
-                <p className="text-gray-500 text-sm font-medium">
-                  {lang === 'is' ? 'Hvernig get ég hjálpað þér í dag?' : 'How can I help you today?'}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                  {(lang === 'is' ? [
-                    'Hvernig líður rekstrinum?',
-                    'Hverjar eru stærstu útgjaldirnar?',
-                    'Eru einhverjar ógreiddar reikningar?',
-                    'Skrifaðu lýsingu á reikning fyrir vefsíðugerð',
-                  ] : [
-                    'How is the business doing?',
-                    'What are my biggest expenses?',
-                    'Any overdue invoices?',
-                    'Draft an invoice description for web design',
-                  ]).map(suggestion => (
-                    <button key={suggestion}
-                      onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
-                      className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-full hover:bg-blue-100">
-                      {suggestion}
-                    </button>
-                  ))}
+              isNewUser ? (
+                /* First-run concierge: a warm hello that starts the AI-led setup. */
+                <div className="text-center py-10 px-2">
+                  <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-7 h-7 text-blue-600" />
+                  </div>
+                  <p className="text-gray-900 text-base font-semibold">
+                    {lang === 'is' ? 'Velkomin/n í Jobboks' : 'Welcome to Jobboks'}
+                  </p>
+                  <p className="text-gray-500 text-sm mt-1.5 max-w-xs mx-auto leading-relaxed">
+                    {lang === 'is'
+                      ? 'Ég kem þér af stað — tekur eina mínútu. Segðu mér hvaða vinnu þú stundar og hvar þú ert.'
+                      : "I'll get you going — takes a minute. Tell me what kind of work you do and where you're based."}
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-2 justify-center">
+                    {(lang === 'is' ? [
+                      'Ég er þaksmiður í Reykjavík',
+                      'Settu upp fyrirtækið mitt',
+                      'Búðu til fyrsta reikninginn minn',
+                    ] : [
+                      'I do roofing in Denver',
+                      'Set up my business',
+                      'Make my first invoice',
+                    ]).map(suggestion => (
+                      <button key={suggestion}
+                        onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
+                        className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-full hover:bg-blue-100">
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="text-center py-12">
+                  <Bot className="w-12 h-12 text-blue-200 mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm font-medium">
+                    {lang === 'is' ? 'Hvernig get ég hjálpað þér í dag?' : 'How can I help you today?'}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                    {(lang === 'is' ? [
+                      'Hvernig líður rekstrinum?',
+                      'Hverjar eru stærstu útgjaldirnar?',
+                      'Eru einhverjar ógreiddar reikningar?',
+                      'Skrifaðu lýsingu á reikning fyrir vefsíðugerð',
+                    ] : [
+                      'How is the business doing?',
+                      'What are my biggest expenses?',
+                      'Any overdue invoices?',
+                      'Draft an invoice description for web design',
+                    ]).map(suggestion => (
+                      <button key={suggestion}
+                        onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
+                        className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-full hover:bg-blue-100">
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
             )}
 
             {messages.map((msg, i) => (
@@ -687,7 +885,10 @@ export default function AIAssistant() {
                     (() => {
                       const { text: afterExcel, excel } = extractExcel(msg.content);
                       const { text: afterMem, remember, forget } = extractMemory(afterExcel);
-                      const { text: afterBook, book } = extractBook(afterMem);
+                      const { text: afterSetup, setup } = extractSetup(afterMem);
+                      const { text: afterSettings, settings: settingsSet } = extractSettings(afterSetup);
+                      const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterSettings);
+                      const { text: afterBook, book } = extractBook(afterInvoice);
                       const { text, fixes, matches, badBlock } = extractFix(afterBook);
                       return (
                         <>
@@ -715,6 +916,72 @@ export default function AIAssistant() {
                                 {remember.length > 0 && forget.length > 0 && ' · '}
                                 {forget.length > 0 && <>{lang === 'is' ? 'Leiðrétt (fjarlægt)' : 'Corrected (removed)'}: {forget.join('; ')}</>}
                               </span>
+                            </div>
+                          )}
+                          {setup && (() => {
+                            const cc = COUNTRY_CONFIGS[String(setup.country || '').toUpperCase()];
+                            const chips = [
+                              cc ? cc.nameEn : setup.country,
+                              setup.state ? `${setup.state}${setup.salesTaxRate != null ? ` ${setup.salesTaxRate}%` : ''}` : null,
+                              setup.companyName,
+                            ].filter(Boolean) as string[];
+                            return (
+                              <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                                <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                  {lang === 'is' ? 'Uppsetning — samþykktu til að stilla' : 'Setup — approve to configure'}
+                                </div>
+                                <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                  {chips.map((c, ci) => (
+                                    <span key={ci} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                      <CheckCircle className="w-3 h-3" /> {c}
+                                    </span>
+                                  ))}
+                                </div>
+                                <button onClick={() => applySetup(i, setup)}
+                                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                  <CheckCircle className="w-4 h-4" />
+                                  {lang === 'is' ? 'Setja upp' : 'Set up'}
+                                </button>
+                              </div>
+                            );
+                          })()}
+                          {settingsSet && Object.keys(settingsSet).length > 0 && (
+                            <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                              <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                {lang === 'is' ? 'Stillingabreyting — samþykktu til að stilla' : 'Settings change — approve to apply'}
+                              </div>
+                              <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                {Object.entries(settingsSet).map(([k, v]) => (
+                                  <span key={k} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                    {k}: {String(v)}
+                                  </span>
+                                ))}
+                              </div>
+                              <button onClick={() => applySettings(i, settingsSet)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? 'Vista stillingar' : 'Apply settings'}
+                              </button>
+                            </div>
+                          )}
+                          {aiInvoices.length > 0 && (
+                            <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
+                              <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                                {lang === 'is' ? 'Reikningsdrög — samþykktu til að búa til' : 'Draft invoice — approve to create'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiInvoices.map((iv, ii) => (
+                                  <div key={ii} className="px-3 py-1.5 text-xs flex justify-between gap-3">
+                                    <span className="text-gray-700">{iv.customer}{iv.description ? ` · ${iv.description}` : ''}{iv.vatRate ? <span className="text-gray-400"> ({iv.vatRate}%)</span> : null}</span>
+                                    <span className="font-mono flex-shrink-0 text-gray-700">{Number(iv.amount).toLocaleString(lang === 'is' ? 'is-IS' : 'en-US')}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={() => applyInvoice(i, aiInvoices)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? `Búa til ${aiInvoices.length} reikning(a)` : `Create ${aiInvoices.length} invoice${aiInvoices.length === 1 ? '' : 's'}`}
+                              </button>
                             </div>
                           )}
                           {book.length > 0 && (

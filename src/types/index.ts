@@ -296,6 +296,7 @@ export interface AppSettings {
   pricesIncludeVAT?: boolean;
   aiMaxTransactions?: number; // how many recent transactions the in-app AI reads (default 12,000)
   invoiceEmailFrom?: string;  // verified sender for app-sent invoices, e.g. "Jobboks <accounts@jobboks.app>"
+  paymentsEnabled?: boolean;  // show the "get paid online" (Stripe) button on invoices; needs STRIPE_SECRET_KEY set in Netlify
   standardRate: number;
   vatTerm: string;
   taxAuthority: string;
