@@ -8,7 +8,8 @@ import {
   Transaction, TransactionType, Currency,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../types';
-import { getVATAmountISK, getTotalISK } from '../utils/calculations';
+import { getVATAmountISK, getTotalISK, invoiceReceivedISK } from '../utils/calculations';
+import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
 import { isTransactionLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
@@ -63,8 +64,13 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  const vatAmount = form.amount * (form.vatRate / 100);
-  const totalWithVat = form.amount + vatAmount;
+  // When "prices include VAT" is on, the amount entered is GROSS (the VAT is
+  // already inside it) so extract it: net = amount ÷ (1+rate). Legacy/off: the
+  // amount is NET and VAT is added on top. Mirrors getNetISK/getVATAmountISK.
+  const inclVat = data.settings.pricesIncludeVAT;
+  const netAmount = inclVat ? form.amount / (1 + form.vatRate / 100) : form.amount;
+  const vatAmount = inclVat ? form.amount - netAmount : form.amount * (form.vatRate / 100);
+  const totalWithVat = inclVat ? form.amount : form.amount + vatAmount;
   const iskTotal = form.currency === 'ISK' ? totalWithVat : totalWithVat * form.eurToIskRate;
 
   // US reads "Sales Tax", not "VAT"; other languages keep their own translation.
@@ -73,9 +79,38 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 
   const categories = form.type === 'income' ? INCOME_CATEGORIES : form.type === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES;
 
+  // R9-6: link an income deposit to the Reikningur it pays so its VAT rate comes
+  // from the invoice, never a guess. Only real invoices (not quotes) are linkable.
+  const invoices = (data.invoices ?? []).filter(inv => inv.type === 'invoice');
+  const linkedInvoice = form.invoiceId ? invoices.find(i => i.id === form.invoiceId) : undefined;
+  // The invoice's authoritative rate — a number when every line shares one rate,
+  // null for a mixed-rate invoice (then the row keeps its own rate and we warn).
+  const linkedRate = linkedInvoice ? invoiceVatRate(linkedInvoice.lines) : null;
+
+  // Sanity-check the linked amount: if this payment is bigger than what's still
+  // owed on the invoice (its total minus everything else already linked to it —
+  // this row excluded so editing it doesn't count twice), flag it — usually the
+  // wrong invoice was picked. Soft warning only; a real overpayment can still save.
+  const linkedOverpay = (() => {
+    if (!linkedInvoice) return null;
+    const totalISK = invoiceTotals(linkedInvoice).total * (linkedInvoice.currency === 'ISK' ? 1 : (data.settings.exchangeRates[linkedInvoice.currency as 'EUR'] ?? 1));
+    const others = invoiceReceivedISK(linkedInvoice.id, data.transactions.filter(t => t.id !== initial.id));
+    const outstanding = totalISK - others;
+    const thisISK = form.amount * (form.currency === 'ISK' ? 1 : form.eurToIskRate);
+    return thisISK - outstanding > Math.max(1, totalISK * 0.005) ? { thisISK, outstanding: Math.max(0, outstanding) } : null;
+  })();
+
+  function pickInvoice(id: string) {
+    const inv = invoices.find(i => i.id === id);
+    const rate = inv ? invoiceVatRate(inv.lines) : null;
+    // Selecting an invoice pulls its VAT onto the deposit; clearing leaves the rate as-is.
+    setForm(f => ({ ...f, invoiceId: id || undefined, vatRate: (id && rate != null ? rate : f.vatRate) as typeof f.vatRate }));
+  }
+
   function handleTypeChange(newType: TransactionType) {
     const defaultCat = newType === 'income' ? 'sala_thjonustu' : newType === 'transfer' ? 'ekki_rekstur' : 'adrir_rekstrargjold';
-    setForm(f => ({ ...f, type: newType, category: defaultCat, vatRate: newType === 'transfer' ? 0 : f.vatRate }));
+    // An invoice link only makes sense on income — drop it when leaving income.
+    setForm(f => ({ ...f, type: newType, category: defaultCat, vatRate: newType === 'transfer' ? 0 : f.vatRate, invoiceId: newType === 'income' ? f.invoiceId : undefined }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -155,6 +190,45 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
             </div>
           </div>
 
+          {form.type === 'income' && invoices.length > 0 && (
+            <div>
+              <label className={labelCls}>{lang === 'is' ? 'Reikningur (valfrjálst)' : 'Invoice (optional)'}</label>
+              <select className={inputCls} value={form.invoiceId ?? ''} onChange={e => pickInvoice(e.target.value)}>
+                <option value="">{lang === 'is' ? 'Enginn reikningur' : 'No invoice'}</option>
+                {invoices
+                  .slice()
+                  .sort((a, b) => b.number.localeCompare(a.number, undefined, { numeric: true }))
+                  .map(inv => {
+                    const total = invoiceTotals(inv);
+                    return (
+                      <option key={inv.id} value={inv.id}>
+                        #{inv.number}{inv.customer.name ? ` — ${inv.customer.name}` : ''} · {formatISK(total.total)}
+                      </option>
+                    );
+                  })}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                {lang === 'is'
+                  ? 'Tengir greiðsluna við reikninginn — VSK-hlutfallið kemur þá af reikningnum (engin ágiskun).'
+                  : "Links this payment to the invoice — the VAT rate then comes from the invoice (no guess)."}
+              </p>
+              {linkedInvoice && linkedRate == null && (
+                <p className="text-xs text-amber-600 mt-1">
+                  {lang === 'is'
+                    ? 'Reikningurinn er með fleiri en eitt VSK-hlutfall — stilltu hlutfallið handvirkt hér að neðan.'
+                    : 'This invoice has more than one VAT rate — set the rate manually below.'}
+                </p>
+              )}
+              {linkedOverpay && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠ {lang === 'is'
+                    ? `Þessi greiðsla (${formatISK(linkedOverpay.thisISK, lang)}) er hærri en það sem eftir stendur á reikningi #${linkedInvoice?.number} (${formatISK(linkedOverpay.outstanding, lang)} eftir). Athugaðu hvort réttur reikningur sé valinn.`
+                    : `This payment (${formatISK(linkedOverpay.thisISK, lang)}) is more than what's left on invoice #${linkedInvoice?.number} (${formatISK(linkedOverpay.outstanding, lang)} left). Check you linked the right invoice.`}
+                </p>
+              )}
+            </div>
+          )}
+
           {(data.jobs ?? []).length > 0 && (
             <div>
               <label className={labelCls}>{lang === 'is' ? 'Verkefni (valfrjálst)' : 'Project (optional)'}</label>
@@ -213,7 +287,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               </select>
             </div>
             <div>
-              <label className={labelCls}>{exVatLabel} ({form.currency})</label>
+              <label className={labelCls}>{(inclVat ? incVatLabel : exVatLabel)} ({form.currency})</label>
               <input type="number" className={inputCls} value={form.amount || ''}
                 onChange={e => set('amount', parseFloat(e.target.value) || 0)}
                 min={0} step={form.currency === 'ISK' ? '1' : '0.01'} required />
@@ -231,12 +305,22 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 
           <div>
             <label className={labelCls}>{cc.isUSA ? `${cc.vatTerm} Rate` : t('vatRate')}</label>
-            <select className={inputCls} value={form.vatRate}
-              onChange={e => set('vatRate', parseFloat(e.target.value))}>
-              {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
-                .filter((r, i, arr) => arr.indexOf(r) === i)
-                .map(r => <option key={r} value={r}>{r}%</option>)}
-            </select>
+            {linkedRate != null ? (
+              // Authoritative: the rate is fixed by the linked invoice, not chosen here.
+              <div className={`${inputCls} bg-gray-50 text-gray-700 flex items-center justify-between`}>
+                <span>{form.vatRate}%</span>
+                <span className="text-xs text-blue-600">
+                  {lang === 'is' ? `úr reikningi #${linkedInvoice?.number}` : `from invoice #${linkedInvoice?.number}`}
+                </span>
+              </div>
+            ) : (
+              <select className={inputCls} value={form.vatRate}
+                onChange={e => set('vatRate', parseFloat(e.target.value))}>
+                {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
+                  .filter((r, i, arr) => arr.indexOf(r) === i)
+                  .map(r => <option key={r} value={r}>{r}%</option>)}
+              </select>
+            )}
           </div>
 
           <div>
@@ -256,7 +340,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
             <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-1.5">
               <div className="flex justify-between text-gray-600">
                 <span>{exVatLabel}</span>
-                <span className="font-mono">{formatCurrency(form.amount, form.currency)}</span>
+                <span className="font-mono">{formatCurrency(netAmount, form.currency)}</span>
               </div>
               {form.vatRate > 0 && (
                 <div className="flex justify-between text-gray-600">
@@ -801,6 +885,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                   <span className="text-xs text-gray-400">·</span>
                   <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">{t(tx.category as never)}</span>
                   {tx.accountId && (() => { const acc = data.accounts.find(a => a.id === tx.accountId); return acc ? <span className="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded-full">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</span> : null; })()}
+                  {tx.invoiceId && (() => { const inv = data.invoices?.find(i => i.id === tx.invoiceId); return inv ? <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">📄 #{inv.number}</span> : null; })()}
                   {tx.vatRate > 0 && <span className="text-xs text-gray-400">{cc.vatTerm} {tx.vatRate}%</span>}
                   {tx.currency === 'EUR' && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">EUR</span>}
                 </div>
@@ -864,6 +949,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                     <td className={tdCls}>
                       <div className="font-medium text-gray-800">{tx.description}</div>
                       {tx.reference && <div className="text-xs text-gray-400">{tx.reference}</div>}
+                      {tx.invoiceId && (() => { const inv = data.invoices?.find(i => i.id === tx.invoiceId); return inv ? <div className="text-xs text-blue-600">📄 {lang === 'is' ? 'reikn.' : 'inv.'} #{inv.number}</div> : null; })()}
                     </td>
                     <td className={tdCls}>
                       <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">

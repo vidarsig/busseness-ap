@@ -16,6 +16,17 @@ export function getTransactionISK(t: Transaction): number {
   return toISK(t.amount, t.currency, t.eurToIskRate);
 }
 
+// How much has actually been received against an invoice (R9-6): the sum, in ISK,
+// of the income deposits linked to it. Compared against the invoice's gross total
+// it gives the outstanding balance and an exact paid/partly-paid/unpaid state, so
+// "the customer's last unpaid invoice" is derived from real money in, not a manual
+// status flag. Both sides are gross (VAT-included), so they're directly comparable.
+export function invoiceReceivedISK(invoiceId: string, transactions: Transaction[]): number {
+  return transactions
+    .filter(t => t.type === 'income' && t.invoiceId === invoiceId)
+    .reduce((sum, t) => sum + getTransactionISK(t), 0);
+}
+
 // Carry-forward: a balance-sheet key's closing balance at the end of each year =
 // opening balance + the entries booked onto it (money in +, money out −), rolled
 // forward so each year's close is the next year's open. By-the-book normal

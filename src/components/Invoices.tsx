@@ -5,6 +5,7 @@ import { Invoice, InvoiceLine, Currency, InvoicePhoto, StockItem } from '../type
 import { formatISK, formatCurrency, formatDate, todayISO } from '../utils/formatters';
 import { exportPDF, sharePDF, pdfBase64 } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
+import { invoiceReceivedISK } from '../utils/calculations';
 import { isInvoiceLimitReached } from '../utils/planLimits';
 import PlanLimitModal from './PlanLimitModal';
 import MicButton from './MicButton';
@@ -544,6 +545,17 @@ export default function Invoices() {
   // ── Customer statement ──
   const invTotal = (inv: Invoice) => invoiceTotals(inv).total;
   const toISK = (amt: number, cur: Currency) => amt * ((data.settings.exchangeRates[cur as 'EUR'] ?? 1));
+
+  // What's actually been received against an invoice, from the deposits linked to
+  // it (R9-6), so the list/statement show an exact paid / part-paid / owing state.
+  // A manual "paid" status still counts as fully paid.
+  function payState(inv: Invoice) {
+    const totalISK = toISK(invTotal(inv), inv.currency);
+    const receivedISK = invoiceReceivedISK(inv.id, data.transactions);
+    const fullyPaid = inv.status === 'paid' || receivedISK >= totalISK - 1;
+    const outstandingISK = fullyPaid ? 0 : Math.max(0, totalISK - receivedISK);
+    return { totalISK, receivedISK, outstandingISK, fullyPaid, hasPayments: receivedISK > 0 };
+  }
   const customerNames = Array.from(
     new Set(data.invoices.filter(i => i.type === 'invoice' && i.customer.name).map(i => i.customer.name))
   ).sort((a, b) => a.localeCompare(b));
@@ -553,10 +565,10 @@ export default function Invoices() {
         .sort((a, b) => a.date.localeCompare(b.date))
     : [];
   const stTotals = statementInvoices.reduce((acc, inv) => {
-    const tISK = toISK(invTotal(inv), inv.currency);
-    acc.invoiced += tISK;
-    if (inv.status === 'paid') acc.paid += tISK;
-    else acc.outstanding += tISK;
+    const { totalISK, outstandingISK } = payState(inv);
+    acc.invoiced += totalISK;
+    acc.paid += totalISK - outstandingISK;   // counts partial payments, not just fully-paid invoices
+    acc.outstanding += outstandingISK;
     return acc;
   }, { invoiced: 0, paid: 0, outstanding: 0 });
 
@@ -578,7 +590,7 @@ export default function Invoices() {
         dueDate: formatDate(inv.dueDate, lang),
         status: t(inv.status),
         total: formatCurrency(tot, inv.currency),
-        outstanding: inv.status === 'paid' ? '—' : formatCurrency(tot, inv.currency),
+        outstanding: payState(inv).outstandingISK <= 0 ? '—' : formatISK(payState(inv).outstandingISK, lang),
       };
     });
     rows.push({
@@ -968,6 +980,12 @@ export default function Invoices() {
                     {inv.currency !== 'ISK' && (
                       <div className="text-xs text-gray-400">{formatISK(total * (data.settings.exchangeRates[inv.currency as 'EUR'] ?? 1), lang)}</div>
                     )}
+                    {/* R9-6: paid / part-paid state derived from the deposits linked to this invoice */}
+                    {!isQuote && (() => { const ps = payState(inv); if (!ps.hasPayments && !ps.fullyPaid) return null;
+                      return ps.outstandingISK <= 0
+                        ? <div className="text-xs font-medium text-green-600 mt-0.5">{lang === 'is' ? 'Greitt ✓' : 'Paid ✓'}</div>
+                        : <div className="text-xs font-medium text-amber-600 mt-0.5">{lang === 'is' ? `Eftir ${formatISK(ps.outstandingISK, lang)}` : `${formatISK(ps.outstandingISK, lang)} left`}</div>;
+                    })()}
                   </div>
                 </div>
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-50 flex-wrap">
