@@ -342,6 +342,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [bulkKey, setBulkKey] = useState(''); // accountId to bulk-assign onto all filtered rows
   const [bulkType, setBulkType] = useState<string>('');  // '' | income | expense | transfer — bulk-set the type
   const [bulkCat, setBulkCat] = useState<string>('');    // '' or a category key — bulk-set the category
+  const [bulkVat, setBulkVat] = useState<string>('');    // '' = no change, else a VAT rate to set on all filtered rows
 
   // When arriving from a drill-down (e.g. clicking a key in Skýrslur), pre-filter
   // to that key and year and open the filter panel so it's obvious what's shown.
@@ -420,12 +421,14 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       if (bulkType === 'transfer') changes.vatRate = 0; // transfers never carry VAT
     }
     if (bulkCat) changes.category = bulkCat;
+    if (bulkVat !== '') changes.vatRate = parseFloat(bulkVat);
     if (clearing) changes.accountId = undefined;
     else if (bulkKey) changes.accountId = bulkKey;
     if (Object.keys(changes).length === 0) return;
     const parts: string[] = [];
     if (bulkType) parts.push(`${lang === 'is' ? 'tegund' : 'type'} → ${t(bulkType as never)}`);
     if (bulkCat) parts.push(`${lang === 'is' ? 'flokkur' : 'category'} → ${t(bulkCat as never)}`);
+    if (bulkVat !== '') parts.push(`${cc.vatTerm} → ${bulkVat}%`);
     if (clearing) parts.push(lang === 'is' ? 'taka lykil af' : 'clear key');
     else if (acc) parts.push(`${lang === 'is' ? 'lykill' : 'key'} → ${acc.number}`);
     const msg = lang === 'is'
@@ -433,7 +436,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       : `Change all ${filtered.length} shown transactions?\n  ${parts.join('\n  ')}\nYou can change it again later.`;
     if (!window.confirm(msg)) return;
     for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, ...changes } });
-    setBulkType(''); setBulkCat(''); setBulkKey('');
+    setBulkType(''); setBulkCat(''); setBulkKey(''); setBulkVat('');
   }
 
   // Render only a page at a time — a full history can be thousands of rows, and
@@ -750,6 +753,13 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 .map(c => <option key={c} value={c}>{t(c as never)}</option>)}
             </select>
           )}
+          <select value={bulkVat} onChange={e => setBulkVat(e.target.value)}
+            className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+            <option value="">{cc.vatTerm}…</option>
+            {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
+              .filter((r, i, arr) => arr.indexOf(r) === i)
+              .map(r => <option key={r} value={r}>{r}%</option>)}
+          </select>
           <select value={bulkKey} onChange={e => setBulkKey(e.target.value)}
             className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
             <option value="">{lang === 'is' ? 'Lykill…' : 'Key…'}</option>
@@ -758,7 +768,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
             ))}
           </select>
-          <button onClick={bulkApply} disabled={!bulkType && !bulkCat && !bulkKey}
+          <button onClick={bulkApply} disabled={!bulkType && !bulkCat && !bulkKey && bulkVat === ''}
             className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
             {lang === 'is' ? 'Setja á allar' : 'Apply to all'}
           </button>
