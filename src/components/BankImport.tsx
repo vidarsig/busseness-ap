@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
-import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt } from 'lucide-react';
+import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt, FileText } from 'lucide-react';
 import ReceiptMatcher from './ReceiptMatcher';
 import OpeningBalances from './OpeningBalances';
 import { useApp } from '../contexts/AppContext';
-import { Transaction, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
+import { Transaction, TransactionType, Invoice, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
 import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/ai';
+import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { matchRule } from './AutoRules';
 import { todayISO } from '../utils/formatters';
 
@@ -231,6 +232,52 @@ interface ImportRow extends ParsedRow {
   learned?: boolean;    // recognised from how this same payer was booked before
   learnOpen?: boolean;  // show inline learn panel
   needsReview?: boolean; // AI was unsure — human should check before importing
+  invoiceId?: string;    // linked to this Reikningur — VAT then comes from the invoice (R9-6)
+  matchedInvoice?: string; // that invoice's number, for the row badge
+}
+
+// Fold case + Icelandic accents so "Fylkir" in a bank line matches a "Fylkir ehf."
+// customer name (same idea as the AI match helper / the Færslur name filter).
+const foldName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o')
+  .replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// The customer's "core" name for matching against a (often terse) bank line:
+// drop a trailing company form so "Fylkir ehf." is found when the bank writes
+// just "Fylkir". Kept ≥3 chars by the caller so a tiny core can't over-match.
+const coreName = (s: string) => foldName(s).replace(/\s+(ehf|hf|sf|slf|ohf|ses|ltd|inc|llc|co)$/, '').trim();
+
+// R9-6 auto-link: find the invoice a deposit pays, so its VAT rate comes from the
+// invoice instead of a guess. The customer's name MUST appear in the bank
+// description (that's how we know whose invoice it is); draft and mixed-rate
+// invoices are ignored (no single authoritative rate to copy). Then:
+//   • Exact total match → that invoice (a full payment), if unique.
+//   • Otherwise a PARTIAL payment (owner's rule) → the customer's LAST (most
+//     recent) still-unpaid invoice it could be paying (deposit ≤ its total).
+// Never links on amount alone, and stays silent when the customer is ambiguous.
+function invoiceTotalISK(inv: Invoice): number {
+  const t = invoiceTotals(inv);
+  return inv.currency === 'ISK' ? t.total : t.total * inv.eurToIskRate;
+}
+function matchInvoice(desc: string, amountISK: number, invoices: Invoice[]): Invoice | null {
+  const fdesc = foldName(desc);
+  const mine = invoices.filter(inv => {
+    if (inv.type !== 'invoice' || inv.status === 'draft') return false;
+    if (invoiceVatRate(inv.lines) == null) return false;   // mixed-rate → don't guess one rate
+    const name = coreName(inv.customer.name || '');
+    return name.length >= 3 && fdesc.includes(name);
+  });
+  if (!mine.length) return null;
+
+  // Full payment: a single invoice whose total equals the deposit (within rounding).
+  const exact = mine.filter(inv => Math.abs(invoiceTotalISK(inv) - amountISK) <= Math.max(1, amountISK * 0.005));
+  if (exact.length === 1) return exact[0];
+
+  // Partial payment: attach to the most recent unpaid invoice the deposit fits inside.
+  const unpaid = mine
+    .filter(inv => (inv.status === 'sent' || inv.status === 'overdue') && amountISK <= invoiceTotalISK(inv) * 1.005)
+    .sort((a, b) => (b.date.localeCompare(a.date)) || b.number.localeCompare(a.number, undefined, { numeric: true }));
+  return unpaid[0] ?? null;
 }
 
 // Reduce a bank description to the counterparty's name, so the same payer is
@@ -298,12 +345,21 @@ export default function BankImport() {
       if (matched) {
         return { ...p, selected: true, category: matched.category, vatRate: matched.vatRate, type: matched.type, matchedRule: matched.id };
       }
-      // 2) Otherwise, recognise the payer from how they were booked before.
+      // 2) An income deposit that clearly pays one invoice takes its VAT from that
+      //    invoice (R9-6) — the authoritative rate, ahead of any learned guess.
+      if (p.type === 'income') {
+        const inv = matchInvoice(p.description, p.amount, data.invoices ?? []);
+        if (inv) {
+          const rate = invoiceVatRate(inv.lines) ?? 0;
+          return { ...p, selected: true, category: 'sala_thjonustu', vatRate: rate, type: 'income', invoiceId: inv.id, matchedInvoice: inv.number };
+        }
+      }
+      // 4) Otherwise, recognise the payer from how they were booked before.
       const learned = history.get(partyKey(p.description));
       if (learned) {
         return { ...p, selected: true, category: learned.category, vatRate: learned.vatRate, type: learned.type, learned: true };
       }
-      // 3) New payer, no history — fall back to a plain default for the AI to refine.
+      // 5) New payer, no history — fall back to a plain default for the AI to refine.
       return {
         ...p,
         selected: true,
@@ -320,7 +376,7 @@ export default function BankImport() {
     const validVats = cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates;
     // Only ask the AI about rows your own rules didn't already match — saves
     // calls and keeps your rules authoritative.
-    const todo = rows.map((r, i) => ({ r, i })).filter(({ r }) => !r.matchedRule && !r.learned);
+    const todo = rows.map((r, i) => ({ r, i })).filter(({ r }) => !r.matchedRule && !r.learned && !r.invoiceId);
     if (todo.length === 0) return;
 
     setAiLoading(true);
@@ -469,7 +525,7 @@ export default function BankImport() {
         id: newId(), date: r.date, description: r.description,
         category: r.category, type: r.type, amount: r.amount,
         currency: 'ISK', eurToIskRate: rate, vatRate: r.vatRate,
-        reference: r.reference,
+        reference: r.reference, invoiceId: r.invoiceId,
       });
       if (r.matchedRule) ruleHits[r.matchedRule] = (ruleHits[r.matchedRule] ?? 0) + 1;
     });
@@ -644,6 +700,12 @@ export default function BankImport() {
                             <span className="text-purple-600 font-medium">{lang === 'is' ? 'Lært af bókhaldi' : 'From your books'}</span>
                           </div>
                         )}
+                        {row.matchedInvoice && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <FileText className="w-2.5 h-2.5 text-blue-500" />
+                            <span className="text-blue-600 font-medium">{lang === 'is' ? `VSK af reikningi #${row.matchedInvoice}` : `VAT from invoice #${row.matchedInvoice}`}</span>
+                          </div>
+                        )}
                         {row.needsReview && (
                           <div className="flex items-center gap-1 mt-0.5">
                             <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
@@ -661,7 +723,7 @@ export default function BankImport() {
                             const defaultCat = type === 'income' ? 'sala_thjonustu' : type === 'expense' ? 'adrir_rekstrargjold' : 'ekki_rekstur';
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true }
+                              ? { ...r, type, category: defaultCat, vatRate: type === 'transfer' ? 0 : r.vatRate, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true, invoiceId: undefined, matchedInvoice: undefined }
                               : { ...r, learnOpen: false }));
                           }}>
                           <option value="income">{t('income')}</option>
@@ -675,7 +737,7 @@ export default function BankImport() {
                             const category = e.target.value;
                             setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
                             setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, category, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true }
+                              ? { ...r, category, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true, invoiceId: undefined, matchedInvoice: undefined }
                               : { ...r, learnOpen: false }));
                           }}>
                           {(row.type === 'income'
@@ -688,7 +750,7 @@ export default function BankImport() {
                       </td>
                       <td className="px-2 py-2">
                         <select value={row.vatRate} className={inp}
-                          onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, vatRate: parseFloat(e.target.value) } : r))}>
+                          onChange={e => setRows(prev => prev.map((r, j) => j === i ? { ...r, vatRate: parseFloat(e.target.value), invoiceId: undefined, matchedInvoice: undefined } : r))}>
                           {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
                             .filter((r, i, arr) => arr.indexOf(r) === i)
                             .map(r => <option key={r} value={r}>{r}%</option>)}
