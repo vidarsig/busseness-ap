@@ -259,7 +259,9 @@ function invoiceTotalISK(inv: Invoice): number {
   const t = invoiceTotals(inv);
   return inv.currency === 'ISK' ? t.total : t.total * inv.eurToIskRate;
 }
-function matchInvoice(desc: string, amountISK: number, invoices: Invoice[]): Invoice | null {
+// `received` maps invoice id → ISK already paid against it (from linked deposits),
+// so "unpaid" and "the amount still owed" are exact, not a manual status flag.
+function matchInvoice(desc: string, amountISK: number, invoices: Invoice[], received: Map<string, number>): Invoice | null {
   const fdesc = foldName(desc);
   const mine = invoices.filter(inv => {
     if (inv.type !== 'invoice' || inv.status === 'draft') return false;
@@ -273,9 +275,14 @@ function matchInvoice(desc: string, amountISK: number, invoices: Invoice[]): Inv
   const exact = mine.filter(inv => Math.abs(invoiceTotalISK(inv) - amountISK) <= Math.max(1, amountISK * 0.005));
   if (exact.length === 1) return exact[0];
 
-  // Partial payment: attach to the most recent unpaid invoice the deposit fits inside.
+  // Partial payment: attach to the most recent invoice that still has a balance
+  // owing and is big enough to be paying (deposit ≤ what's still outstanding).
   const unpaid = mine
-    .filter(inv => (inv.status === 'sent' || inv.status === 'overdue') && amountISK <= invoiceTotalISK(inv) * 1.005)
+    .filter(inv => {
+      if (inv.status === 'paid') return false;
+      const outstanding = invoiceTotalISK(inv) - (received.get(inv.id) ?? 0);
+      return outstanding > 1 && amountISK <= outstanding * 1.005;
+    })
     .sort((a, b) => (b.date.localeCompare(a.date)) || b.number.localeCompare(a.number, undefined, { numeric: true }));
   return unpaid[0] ?? null;
 }
@@ -339,6 +346,14 @@ export default function BankImport() {
   function applyRulesToRows(parsed: ReturnType<typeof parseBank>): ImportRow[] {
     const rules = data.categoryRules;
     const history = buildPartyHistory(data.transactions);
+    // How much has already been received against each invoice (from deposits
+    // linked in earlier imports/edits), so partials land on a truly-open invoice.
+    const received = new Map<string, number>();
+    for (const tx of data.transactions) {
+      if (tx.type === 'income' && tx.invoiceId) {
+        received.set(tx.invoiceId, (received.get(tx.invoiceId) ?? 0) + (tx.currency === 'ISK' ? tx.amount : tx.amount * tx.eurToIskRate));
+      }
+    }
     return parsed.map(p => {
       // 1) An explicit rule the owner saved always wins.
       const matched = matchRule(p.description, rules);
@@ -348,7 +363,7 @@ export default function BankImport() {
       // 2) An income deposit that clearly pays one invoice takes its VAT from that
       //    invoice (R9-6) — the authoritative rate, ahead of any learned guess.
       if (p.type === 'income') {
-        const inv = matchInvoice(p.description, p.amount, data.invoices ?? []);
+        const inv = matchInvoice(p.description, p.amount, data.invoices ?? [], received);
         if (inv) {
           const rate = invoiceVatRate(inv.lines) ?? 0;
           return { ...p, selected: true, category: 'sala_thjonustu', vatRate: rate, type: 'income', invoiceId: inv.id, matchedInvoice: inv.number };
