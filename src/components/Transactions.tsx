@@ -8,7 +8,7 @@ import {
   Transaction, TransactionType, Currency,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../types';
-import { getVATAmountISK, getTotalISK } from '../utils/calculations';
+import { getVATAmountISK, getTotalISK, invoiceReceivedISK } from '../utils/calculations';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
 import { isTransactionLimitReached } from '../utils/planLimits';
@@ -86,6 +86,19 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   // The invoice's authoritative rate — a number when every line shares one rate,
   // null for a mixed-rate invoice (then the row keeps its own rate and we warn).
   const linkedRate = linkedInvoice ? invoiceVatRate(linkedInvoice.lines) : null;
+
+  // Sanity-check the linked amount: if this payment is bigger than what's still
+  // owed on the invoice (its total minus everything else already linked to it —
+  // this row excluded so editing it doesn't count twice), flag it — usually the
+  // wrong invoice was picked. Soft warning only; a real overpayment can still save.
+  const linkedOverpay = (() => {
+    if (!linkedInvoice) return null;
+    const totalISK = invoiceTotals(linkedInvoice).total * (linkedInvoice.currency === 'ISK' ? 1 : (data.settings.exchangeRates[linkedInvoice.currency as 'EUR'] ?? 1));
+    const others = invoiceReceivedISK(linkedInvoice.id, data.transactions.filter(t => t.id !== initial.id));
+    const outstanding = totalISK - others;
+    const thisISK = form.amount * (form.currency === 'ISK' ? 1 : form.eurToIskRate);
+    return thisISK - outstanding > Math.max(1, totalISK * 0.005) ? { thisISK, outstanding: Math.max(0, outstanding) } : null;
+  })();
 
   function pickInvoice(id: string) {
     const inv = invoices.find(i => i.id === id);
@@ -204,6 +217,13 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                   {lang === 'is'
                     ? 'Reikningurinn er með fleiri en eitt VSK-hlutfall — stilltu hlutfallið handvirkt hér að neðan.'
                     : 'This invoice has more than one VAT rate — set the rate manually below.'}
+                </p>
+              )}
+              {linkedOverpay && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠ {lang === 'is'
+                    ? `Þessi greiðsla (${formatISK(linkedOverpay.thisISK, lang)}) er hærri en það sem eftir stendur á reikningi #${linkedInvoice?.number} (${formatISK(linkedOverpay.outstanding, lang)} eftir). Athugaðu hvort réttur reikningur sé valinn.`
+                    : `This payment (${formatISK(linkedOverpay.thisISK, lang)}) is more than what's left on invoice #${linkedInvoice?.number} (${formatISK(linkedOverpay.outstanding, lang)} left). Check you linked the right invoice.`}
                 </p>
               )}
             </div>
