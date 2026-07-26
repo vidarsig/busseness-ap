@@ -87,9 +87,19 @@ function SyncIndicator() {
 }
 
 export default function Layout({ view, setView, children, sessionUser, perms, onSignOut }: Props) {
-  const { t, lang, data } = useApp();
+  const { t, lang, cc, data } = useApp();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const companyName = data.settings.company.name || t('appName');
+
+  // Nav label for the tax screens follows the country's tax term instead of the
+  // hardcoded "VAT": US → "Sales Tax", any other English UI → the config term
+  // ("GST/HST" for Canada), Icelandic → the Icelandic dictionary.
+  const navLabel = (id: string) => {
+    if (id !== 'vat' && id !== 'vatreturn') return t(id as never);
+    if (data.settings.country === 'US') return id === 'vat' ? 'Sales Tax' : 'Sales Tax Return';
+    if (lang === 'en') return id === 'vat' ? cc.vatTerm : `${cc.vatTerm} Return`;
+    return t(id as never);
+  };
   const supabaseConfigured = !!(data.settings.supabaseUrl && data.settings.supabaseKey);
 
   async function handleSignOut() {
@@ -148,9 +158,7 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
                 }`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" />
-                {data.settings.country === 'US' && id === 'vat' ? 'Sales Tax'
-                  : data.settings.country === 'US' && id === 'vatreturn' ? 'Sales Tax Return'
-                  : t(id)}
+                {navLabel(id)}
               </button>
             ))}
             {section.labelKey && <div className="mx-3 mt-1 border-t border-gray-100" />}
@@ -245,7 +253,7 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
             }`}
           >
             <Icon className="w-5 h-5" />
-            <span className="text-[10px] font-medium leading-tight">{t(id)}</span>
+            <span className="text-[10px] font-medium leading-tight">{navLabel(id)}</span>
           </button>
         ))}
       </nav>

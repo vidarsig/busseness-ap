@@ -8,21 +8,26 @@ import {
 type PeriodType = 'year' | 'quarter' | 'month';
 
 export default function VAT() {
-  const { data, t, fmtISK, cc } = useApp();
+  const { data, t, lang, fmtISK, cc } = useApp();
   const year = data.settings.fiscalYear;
-  // US "Sales Tax" mode: relabel the whole tax screen in plain American English.
-  // Gated to US so the Icelandic (and other) live experience is untouched.
+  // Tax-screen labels are country-aware:
+  //  • US → plain American "Sales Tax" wording (no input reclaim in practice).
+  //  • Icelandic UI → the Icelandic dictionary (Útskattur/Innskattur/RSK).
+  //  • any other English UI (Canada GST/HST, UK VAT, etc.) → build from the country
+  //    config so it reads "GST/HST"/"CRA", not a hardcoded "VAT"/"RSK".
   const isUS = data.settings.country === 'US';
+  const term = cc.vatTerm;
+  const gen = lang === 'en' && !isUS;   // generic English, from the country config
   const L = {
-    summary:   isUS ? 'Sales Tax Summary'            : t('vatSummary'),
-    info:      isUS ? cc.vatNumberLabel              : t('vatInfo'),
-    toPay:     isUS ? 'Sales Tax to pay'             : t('toPayRSK'),
-    refund:    isUS ? 'Sales Tax refund'             : t('refundFromRSK'),
-    output:    isUS ? 'Sales Tax collected (on sales)'    : t('outputVAT'),
-    input:     isUS ? 'Sales Tax paid (on purchases)'     : t('inputVAT'),
-    rateCol:   `${cc.vatTerm}%`,
-    vatCol:    isUS ? 'Sales Tax'                    : t('vatAmountCol'),
-    totalCol:  isUS ? 'Total incl. tax'             : t('totalWithVAT'),
+    summary:   isUS ? 'Sales Tax Summary'            : gen ? `${term} Summary`               : t('vatSummary'),
+    info:      isUS ? cc.vatNumberLabel              : gen ? cc.vatNumberLabel               : t('vatInfo'),
+    toPay:     isUS ? 'Sales Tax to pay'             : gen ? `${term} to pay`                : t('toPayRSK'),
+    refund:    isUS ? 'Sales Tax refund'             : gen ? `${term} refund`                : t('refundFromRSK'),
+    output:    isUS ? 'Sales Tax collected (on sales)'    : gen ? `${term} on sales`          : t('outputVAT'),
+    input:     isUS ? 'Sales Tax paid (on purchases)'     : gen ? `${term} on purchases`      : t('inputVAT'),
+    rateCol:   `${term}%`,
+    vatCol:    isUS ? 'Sales Tax'                    : gen ? term                            : t('vatAmountCol'),
+    totalCol:  isUS ? 'Total incl. tax'             : gen ? 'Total incl. tax'               : t('totalWithVAT'),
   };
 
   const [periodType, setPeriodType] = useState<PeriodType>('year');
