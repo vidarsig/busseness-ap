@@ -49,6 +49,29 @@ export default function BulkInvoiceModal({ onClose }: { onClose: () => void }) {
 
   const customerNames = Array.from(new Set((data.customers ?? []).map(c => c.name).filter(Boolean)));
 
+  // Prefill a row per finished job (status 'complete'): client → customer, the job
+  // number+name → description, quotedAmount → gross (as Work). Keeps any rows you've
+  // already typed and skips jobs already in the list (matched by number+name).
+  const completedJobs = (data.jobs ?? []).filter(j => j.status === 'complete');
+  function loadFromJobs() {
+    setRows(prev => {
+      const kept = prev.filter(r => r.name.trim() || r.gross.trim());
+      const have = new Set(kept.map(r => r.description));
+      const jobRows: Row[] = completedJobs
+        .map(j => ({
+          id: rowId(),
+          name: j.clientName || '',
+          description: j.name ? `${j.number} — ${j.name}` : j.number,
+          gross: j.quotedAmount ? String(j.quotedAmount) : '',
+          kind: 'work' as Kind,
+          rate: cc.standardRate,
+        }))
+        .filter(jr => !have.has(jr.description));
+      const merged = [...kept, ...jobRows];
+      return merged.length ? merged : [emptyRow()];
+    });
+  }
+
   function create() {
     if (!valid.length) return;
     const defaultDesc = (r: Row) => r.kind === 'rent'
@@ -173,9 +196,16 @@ export default function BulkInvoiceModal({ onClose }: { onClose: () => void }) {
               ))}
             </div>
 
-            <button type="button" onClick={addRow} className="flex items-center gap-1.5 text-sm text-blue-600 font-medium hover:text-blue-700">
-              <Plus className="w-4 h-4" /> {lang === 'is' ? 'Bæta við línu' : 'Add row'}
-            </button>
+            <div className="flex flex-wrap items-center gap-4">
+              <button type="button" onClick={addRow} className="flex items-center gap-1.5 text-sm text-blue-600 font-medium hover:text-blue-700">
+                <Plus className="w-4 h-4" /> {lang === 'is' ? 'Bæta við línu' : 'Add row'}
+              </button>
+              {completedJobs.length > 0 && (
+                <button type="button" onClick={loadFromJobs} className="flex items-center gap-1.5 text-sm text-blue-600 font-medium hover:text-blue-700">
+                  <Plus className="w-4 h-4" /> {lang === 'is' ? `Sækja lokin verk (${completedJobs.length})` : `Load completed jobs (${completedJobs.length})`}
+                </button>
+              )}
+            </div>
 
             <div className="bg-gray-50 rounded-xl p-3 text-sm flex items-center justify-between">
               <span className="text-gray-600">
