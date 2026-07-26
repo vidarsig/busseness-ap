@@ -10,34 +10,40 @@ const PERIOD_MONTHS: Record<number, number[]> = {
 
 export default function VATReturn() {
   const { data, t, lang, cc, fmtISK } = useApp();
-  // US sales tax has NO input reclaim — you remit the tax collected on sales — and
-  // states file monthly/quarterly/annually, not Iceland's bi-monthly. So the US
-  // path is a slimmer report with its own filing-period picker.
+  // Two independent country traits:
+  //  • REPORT SHAPE — the US remits tax collected on sales with NO input reclaim,
+  //    so it gets a slimmer report. Canada's GST/HST is VAT-style (input tax
+  //    credits), so it keeps the full output − input = net return like Iceland.
+  //  • FILING PERIOD — the US and Canada file monthly/quarterly/annually, not
+  //    Iceland's bi-monthly, so both get a filing-frequency picker.
   const isUS = cc.isUSA;
+  const isCA = cc.code === 'CA';
+  const filingByFreq = isUS || isCA;
   const [year, setYear] = useState(data.settings.fiscalYear);
   const [period, setPeriod] = useState<number>(() => Math.ceil(new Date().getMonth() / 2) || 1);
-  const [usFreq, setUsFreq] = useState<'month' | 'quarter' | 'year'>('quarter');
-  const [usMonth, setUsMonth] = useState<number>(() => new Date().getMonth() + 1);
-  const [usQuarter, setUsQuarter] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);
+  const [freq, setFreq] = useState<'month' | 'quarter' | 'year'>('quarter');
+  const [freqMonth, setFreqMonth] = useState<number>(() => new Date().getMonth() + 1);
+  const [freqQuarter, setFreqQuarter] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);
 
   const months = PERIOD_MONTHS[period] ?? [1, 2];
   const periodTx = useMemo(() => {
-    if (!isUS) return months.flatMap(m => filterByMonth(data.transactions, year, m));
-    if (usFreq === 'year') return filterByYear(data.transactions, year);
-    if (usFreq === 'quarter') return filterByQuarter(data.transactions, year, usQuarter);
-    return filterByMonth(data.transactions, year, usMonth);
-  }, [data.transactions, year, period, isUS, usFreq, usMonth, usQuarter]);
+    if (!filingByFreq) return months.flatMap(m => filterByMonth(data.transactions, year, m));
+    if (freq === 'year') return filterByYear(data.transactions, year);
+    if (freq === 'quarter') return filterByQuarter(data.transactions, year, freqQuarter);
+    return filterByMonth(data.transactions, year, freqMonth);
+  }, [data.transactions, year, period, filingByFreq, freq, freqMonth, freqQuarter]);
 
   // For the US the effective rate lives in settings (the state rate the owner set),
   // not the static country config (which is just [0]) — feed that so collected tax
-  // actually shows instead of everything landing in the 0% bucket.
+  // actually shows instead of everything landing in the 0% bucket. Canada and the
+  // rest use the config's rates (Canada's GST/HST rates are fixed per province).
   const rates = isUS ? Array.from(new Set([data.settings.salesTaxRate, 0])) : cc.vatRates;
   const vat = useMemo(() => calcVATSummary(periodTx, rates, data.settings.pricesIncludeVAT), [periodTx, rates, data.settings.pricesIncludeVAT]);
   const fmt = (n: number) => fmtISK(n);
 
-  const usPeriodLabel = usFreq === 'year' ? String(year)
-    : usFreq === 'quarter' ? `Q${usQuarter} ${year}`
-    : `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][usMonth - 1]} ${year}`;
+  const freqLabel = freq === 'year' ? String(year)
+    : freq === 'quarter' ? `Q${freqQuarter} ${year}`
+    : `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][freqMonth - 1]} ${year}`;
   const usState = data.settings.usState;
 
   const years = Array.from(new Set([year - 1, year, year + 1,
@@ -85,16 +91,19 @@ export default function VATReturn() {
       label: lang === 'is' ? (vat.netVAT >= 0 ? `${vatTerm} til greiðslu` : `${vatTerm} til endurgreiðslu`) : (vat.netVAT >= 0 ? `${vatTerm} to pay` : `${vatTerm} refund`),
       value: Math.abs(vat.netVAT) },
   ];
+  const periodText = filingByFreq ? freqLabel : `${year} · ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`;
   const vatTitle = isUS
-    ? `Sales Tax Report — ${usState ? usState + ' · ' : ''}${usPeriodLabel}`
-    : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'Return'} — ${year} · ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`;
+    ? `Sales Tax Report — ${usState ? usState + ' · ' : ''}${freqLabel}`
+    : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'Return'} — ${periodText}`;
 
-  const fileTag = isUS ? `salestax_${usPeriodLabel.replace(/\s+/g, '_')}` : `vsk_${year}_${period}`;
+  const fileTag = isUS ? `salestax_${freqLabel.replace(/\s+/g, '_')}`
+    : filingByFreq ? `tax_${freqLabel.replace(/[\s/]+/g, '_')}`
+    : `vsk_${year}_${period}`;
   function exportToPDF() {
     exportPDF(vatTitle, data.settings.company.name || '', vatCols, vatRows, `${fileTag}.pdf`);
   }
   function exportToExcel() {
-    exportExcel([{ name: isUS ? 'Sales Tax' : (lang === 'is' ? 'VSK-skýrsla' : 'VAT Return'), columns: vatCols, rows: vatRows }],
+    exportExcel([{ name: isUS ? 'Sales Tax' : (lang === 'is' ? 'VSK-skýrsla' : `${vatTerm} Return`), columns: vatCols, rows: vatRows }],
       `${fileTag}.xlsx`);
   }
 
@@ -122,7 +131,7 @@ export default function VATReturn() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900">{isUS ? 'Sales Tax Report' : t('vatreturn')}</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">{isUS ? 'Sales Tax Report' : lang === 'en' ? `${vatTerm} Return` : t('vatreturn')}</h1>
           <p className="text-xs text-gray-500 mt-0.5">{isUS
             ? `Sales tax collected — to remit to ${usState ? `${usState}'s` : 'your state'} tax authority`
             : lang === 'is' ? `${vatTerm}-skýrsla til ${cc.taxAuthority}` : `${vatTerm} return for ${cc.taxAuthority}`}</p>
@@ -156,7 +165,7 @@ export default function VATReturn() {
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        {!isUS && (
+        {!filingByFreq && (
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-gray-600">{lang === 'is' ? 'Tímabil' : 'Period'}:</label>
             <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -165,26 +174,26 @@ export default function VATReturn() {
             </select>
           </div>
         )}
-        {isUS && (
+        {filingByFreq && (
           <>
             <div className="flex items-center gap-2">
               <label className="text-xs font-medium text-gray-600">Filing period:</label>
               <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={usFreq} onChange={e => setUsFreq(e.target.value as 'month' | 'quarter' | 'year')}>
+                value={freq} onChange={e => setFreq(e.target.value as 'month' | 'quarter' | 'year')}>
                 <option value="month">Monthly</option>
                 <option value="quarter">Quarterly</option>
                 <option value="year">Annual</option>
               </select>
             </div>
-            {usFreq === 'month' && (
+            {freq === 'month' && (
               <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={usMonth} onChange={e => setUsMonth(parseInt(e.target.value))}>
+                value={freqMonth} onChange={e => setFreqMonth(parseInt(e.target.value))}>
                 {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
               </select>
             )}
-            {usFreq === 'quarter' && (
+            {freq === 'quarter' && (
               <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={usQuarter} onChange={e => setUsQuarter(parseInt(e.target.value))}>
+                value={freqQuarter} onChange={e => setFreqQuarter(parseInt(e.target.value))}>
                 {[1,2,3,4].map(q => <option key={q} value={q}>Q{q}</option>)}
               </select>
             )}
@@ -196,7 +205,7 @@ export default function VATReturn() {
       <div className="print-only mb-6">
         <h2 className="text-xl font-bold">{isUS ? 'Sales Tax Report' : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'return'}`}</h2>
         <p className="text-sm">{data.settings.company.name} — {data.settings.company.kennitala}</p>
-        <p className="text-sm">{isUS ? usPeriodLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`}</p>
+        <p className="text-sm">{filingByFreq ? freqLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -205,7 +214,7 @@ export default function VATReturn() {
             {data.settings.company.name || (lang === 'is' ? 'Fyrirtæki' : 'Company')}
             {data.settings.company.vskNumber && <span className="ml-2 text-sm font-normal text-gray-500">{cc.vatNumberLabel}: {data.settings.company.vskNumber}</span>}
           </h2>
-          <p className="text-xs text-gray-500">{isUS ? usPeriodLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} · ${periodLabel(period)}`}</p>
+          <p className="text-xs text-gray-500">{filingByFreq ? freqLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} · ${periodLabel(period)}`}</p>
         </div>
 
         <div className="px-4 py-2 bg-green-50 border-b border-green-100">
