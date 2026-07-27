@@ -18,15 +18,15 @@ export default function CountryOnboarding() {
     if (COUNTRY_LANG[code]) setLang(COUNTRY_LANG[code]);
   }
 
-  const ONBOARDING_STRINGS: Record<Language, { title: string; subtitle: string; usNote: string; start: string }> = {
-    is: { title: 'Veldu land / umdæmi', subtitle: 'Stillir sjálfgefið gjaldmiðil, VSK-hlutföll og launareglur', usNote: '🇺🇸 Bandaríkin: Söluskattur er mismunandi eftir ríki. Þú getur stillt hlutfallið í Stillingum.', start: 'Hefja notkun' },
-    en: { title: 'Choose your country / jurisdiction', subtitle: 'Sets default currency, tax rates and payroll rules', usNote: '🇺🇸 United States: Sales tax varies by state. You can set your rate in Settings after setup.', start: 'Get started' },
-    de: { title: 'Land / Zuständigkeit wählen', subtitle: 'Setzt Standardwährung, Steuersätze und Lohnregeln', usNote: '🇺🇸 USA: Die Umsatzsteuer variiert je nach Bundesstaat. Sie können den Satz in den Einstellungen festlegen.', start: 'Loslegen' },
-    fr: { title: 'Choisissez votre pays / juridiction', subtitle: 'Définit la devise, les taux de TVA et les règles de paie', usNote: '🇺🇸 États-Unis : La taxe de vente varie selon l\'État. Vous pouvez définir votre taux dans les paramètres.', start: 'Commencer' },
-    nl: { title: 'Kies uw land / rechtsgebied', subtitle: 'Stelt standaardvaluta, BTW-tarieven en loonregels in', usNote: '🇺🇸 VS: De omzetbelasting varieert per staat. U kunt uw tarief instellen in Instellingen.', start: 'Aan de slag' },
-    no: { title: 'Velg land / jurisdiksjon', subtitle: 'Angir standardvaluta, MVA-satser og lønnsregler', usNote: '🇺🇸 USA: Omsetningsavgiften varierer etter stat. Du kan sette satsen i Innstillinger.', start: 'Kom i gang' },
-    da: { title: 'Vælg land / jurisdiktion', subtitle: 'Angiver standardvaluta, momssatser og lønregler', usNote: '🇺🇸 USA: Salgsafgiften varierer efter stat. Du kan indstille satsen i Indstillinger.', start: 'Kom i gang' },
-    sv: { title: 'Välj land / jurisdiktion', subtitle: 'Ställer in standardvaluta, momssatser och löneregler', usNote: '🇺🇸 USA: Omsättningsskatten varierar per delstat. Du kan ställa in satsen i Inställningar.', start: 'Kom igång' },
+  const ONBOARDING_STRINGS: Record<Language, { title: string; subtitle: string; usNote: string; caNote: string; start: string }> = {
+    is: { title: 'Veldu land / umdæmi', subtitle: 'Stillir sjálfgefið gjaldmiðil, VSK-hlutföll og launareglur', usNote: '🇺🇸 Bandaríkin: Söluskattur er mismunandi eftir ríki. Þú getur stillt hlutfallið í Stillingum.', caNote: '🇨🇦 Kanada: GST/HST er mismunandi eftir fylki. Þú getur stillt hlutfallið í Stillingum.', start: 'Hefja notkun' },
+    en: { title: 'Choose your country / jurisdiction', subtitle: 'Sets default currency, tax rates and payroll rules', usNote: '🇺🇸 United States: Sales tax varies by state. You can set your rate in Settings after setup.', caNote: '🇨🇦 Canada: GST/HST varies by province. You can set your rate in Settings after setup.', start: 'Get started' },
+    de: { title: 'Land / Zuständigkeit wählen', subtitle: 'Setzt Standardwährung, Steuersätze und Lohnregeln', usNote: '🇺🇸 USA: Die Umsatzsteuer variiert je nach Bundesstaat. Sie können den Satz in den Einstellungen festlegen.', caNote: '🇨🇦 Kanada: Die GST/HST variiert je nach Provinz. Sie können den Satz in den Einstellungen festlegen.', start: 'Loslegen' },
+    fr: { title: 'Choisissez votre pays / juridiction', subtitle: 'Définit la devise, les taux de TVA et les règles de paie', usNote: '🇺🇸 États-Unis : La taxe de vente varie selon l\'État. Vous pouvez définir votre taux dans les paramètres.', caNote: '🇨🇦 Canada : La TPS/TVH varie selon la province. Vous pouvez définir votre taux dans les paramètres.', start: 'Commencer' },
+    nl: { title: 'Kies uw land / rechtsgebied', subtitle: 'Stelt standaardvaluta, BTW-tarieven en loonregels in', usNote: '🇺🇸 VS: De omzetbelasting varieert per staat. U kunt uw tarief instellen in Instellingen.', caNote: '🇨🇦 Canada: De GST/HST varieert per provincie. U kunt uw tarief instellen in Instellingen.', start: 'Aan de slag' },
+    no: { title: 'Velg land / jurisdiksjon', subtitle: 'Angir standardvaluta, MVA-satser og lønnsregler', usNote: '🇺🇸 USA: Omsetningsavgiften varierer etter stat. Du kan sette satsen i Innstillinger.', caNote: '🇨🇦 Canada: GST/HST varierer etter provins. Du kan sette satsen i Innstillinger.', start: 'Kom i gang' },
+    da: { title: 'Vælg land / jurisdiktion', subtitle: 'Angiver standardvaluta, momssatser og lønregler', usNote: '🇺🇸 USA: Salgsafgiften varierer efter stat. Du kan indstille satsen i Indstillinger.', caNote: '🇨🇦 Canada: GST/HST varierer efter provins. Du kan indstille satsen i Indstillinger.', start: 'Kom i gang' },
+    sv: { title: 'Välj land / jurisdiktion', subtitle: 'Ställer in standardvaluta, momssatser och löneregler', usNote: '🇺🇸 USA: Omsättningsskatten varierar per delstat. Du kan ställa in satsen i Inställningar.', caNote: '🇨🇦 Kanada: GST/HST varierar per provins. Du kan ställa in satsen i Inställningar.', start: 'Kom igång' },
   };
   const ob = ONBOARDING_STRINGS[lang] ?? ONBOARDING_STRINGS['en'];
 
@@ -100,6 +100,13 @@ export default function CountryOnboarding() {
         {selectedCode === 'US' && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-xs text-amber-800">
             {ob.usNote}
+          </div>
+        )}
+
+        {/* Canada note */}
+        {selectedCode === 'CA' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-xs text-amber-800">
+            {ob.caNote}
           </div>
         )}
 
