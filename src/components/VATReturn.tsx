@@ -20,7 +20,7 @@ export default function VATReturn() {
   const isCA = cc.code === 'CA';
   const filingByFreq = isUS || isCA;
   const [year, setYear] = useState(data.settings.fiscalYear);
-  const [period, setPeriod] = useState<number>(() => Math.ceil(new Date().getMonth() / 2) || 1);
+  const [period, setPeriod] = useState<number>(() => Math.floor(new Date().getMonth() / 2) + 1);
   const [freq, setFreq] = useState<'month' | 'quarter' | 'year'>('quarter');
   const [freqMonth, setFreqMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [freqQuarter, setFreqQuarter] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);

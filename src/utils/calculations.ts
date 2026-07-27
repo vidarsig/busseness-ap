@@ -144,6 +144,7 @@ export interface ProfitLoss {
   fagthjonusta: number;
   vorur: number;
   afskriftir: number;
+  rafmagnHiti: number;
   adrir: number;
   totalOperatingExpenses: number;
 
@@ -167,11 +168,14 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const thjonustutekjur = sumCat('income', 'sala_thjonustu');
   const adrarTekjur = sumCat('income', 'adrar_tekjur');
   const fjarmagntekjur = sumCat('income', 'fjarmagns_tekjur');
-  const totalRevenue = salaTekjur + thjonustutekjur + adrarTekjur + fjarmagntekjur;
+  // Operating revenue only — financial income (fjarmagntekjur) belongs BELOW operating
+  // profit, so it must not inflate totalRevenue/operatingProfit (added back in profitBeforeTax).
+  const totalRevenue = salaTekjur + thjonustutekjur + adrarTekjur;
 
   const laun = sumCat('expense', 'laun');
   const launatengd = sumCat('expense', 'launatengd_gjold');
   const husaleiga = sumCat('expense', 'husaleiga');
+  const rafmagnHiti = sumCat('expense', 'rafmagn_hiti'); // electricity/heating — was omitted entirely
   const simagjold = sumCat('expense', 'simagjold');
   const skrifstofugjold = sumCat('expense', 'skrifstofugjold');
   const samgongur = sumCat('expense', 'samgongur');
@@ -186,18 +190,19 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const fjarmagnsgjold = sumCat('expense', 'fjarmagnsgjold') + loanInterest;
   const adrir = sumCat('expense', 'adrir_rekstrargjold');
 
-  const totalOperatingExpenses = laun + launatengd + husaleiga + simagjold +
+  const totalOperatingExpenses = laun + launatengd + husaleiga + rafmagnHiti + simagjold +
     skrifstofugjold + samgongur + markadsmal + fagthjonusta + vorur + afskriftir + adrir;
 
   const operatingProfit = totalRevenue - totalOperatingExpenses;
-  const profitBeforeTax = operatingProfit - fjarmagnsgjold;
+  // Financial income (interest etc.) and financial expenses sit below operating profit.
+  const profitBeforeTax = operatingProfit + fjarmagntekjur - fjarmagnsgjold;
   const incomeTax = profitBeforeTax > 0 ? profitBeforeTax * (corporateTaxRate / 100) : 0;
   const netResult = profitBeforeTax - incomeTax;
 
   return {
     salaTekjur, thjonustutekjur, adrarTekjur, fjarmagntekjur, totalRevenue,
     laun, launatengd, husaleiga, simagjold, skrifstofugjold, samgongur,
-    markadsmal, fagthjonusta, vorur, afskriftir, adrir, totalOperatingExpenses,
+    markadsmal, fagthjonusta, vorur, afskriftir, rafmagnHiti, adrir, totalOperatingExpenses,
     operatingProfit, fjarmagnsgjold, profitBeforeTax, incomeTax, netResult,
   };
 }

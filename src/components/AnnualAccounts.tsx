@@ -140,7 +140,9 @@ export default function AnnualAccounts() {
   const trackedCash = useMemo(() =>
     data.transactions
       .filter(tx => new Date(tx.date).getFullYear() <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
-      .reduce((s, tx) => s + (tx.type === 'income' ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
+      // Money IN = income OR a loan received (lan_mottekid) — mirror accountBalanceByYear,
+      // so a received loan isn't wrongly counted as cash going out.
+      .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.transactions, data.accounts, year]);
   const retainedEarnings = useMemo(() => {
@@ -180,7 +182,7 @@ export default function AnnualAccounts() {
     rows.push(R(t('revenues'), pl.totalRevenue));
     if (pl.laun + pl.launatengd > 0) rows.push(R(t('wagesExpenses'), -(pl.laun + pl.launatengd)));
     if (pl.afskriftir > 0) rows.push(R(t('afskriftir'), -pl.afskriftir));
-    const otherOp = pl.husaleiga + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
+    const otherOp = pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
     if (otherOp > 0) rows.push(R(t('otherOperating'), -otherOp));
     rows.push(R(t('operatingExpenses'), -pl.totalOperatingExpenses));
     rows.push(R(t('operatingProfit'), pl.operatingProfit));
@@ -374,7 +376,7 @@ export default function AnnualAccounts() {
               {(pl.laun + pl.launatengd) > 0 && <PLRow label={t('wagesExpenses')} amount={pl.laun + pl.launatengd} indent isNeg />}
               {pl.afskriftir > 0 && <PLRow label={t('afskriftir')} amount={pl.afskriftir} indent isNeg />}
               {(pl.husaleiga + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir) > 0 && (
-                <PLRow label={t('otherOperating')} amount={pl.husaleiga + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir} indent isNeg />
+                <PLRow label={t('otherOperating')} amount={pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir} indent isNeg />
               )}
               <PLRow label={t('operatingExpenses')} amount={-pl.totalOperatingExpenses} bold />
               <PLRow label={t('operatingProfit')} amount={pl.operatingProfit} bold />
