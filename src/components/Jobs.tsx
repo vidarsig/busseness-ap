@@ -64,6 +64,11 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const { data, dispatch, lang, fmt, cc } = useApp();
   const isIS = lang === 'is';
   const t = (is: string, en: string) => isIS ? is : en;
+  // Guards a job from being invoiced twice: set synchronously so a fast double-click
+  // (both handlers fire before React re-renders) can't create two invoices / two
+  // identical numbers. The persistent check (an invoice already tagged to this job)
+  // covers re-clicks after a render.
+  const convertingRef = useRef<Set<string>>(new Set());
 
   // ── Report-approval permission ──
   // Who may approve a job report and convert it to an invoice is set per
@@ -322,6 +327,16 @@ export default function Jobs({ sessionUser }: JobsProps) {
       return;
     }
 
+    // Refuse a second conversion of the same job — duplicate billing, and a fast
+    // double-click would mint two invoices with the SAME number (both read the same
+    // invoiceLastNumber before it updates). The ref blocks the same-tick double-click;
+    // the notes check blocks a re-click once the first invoice exists.
+    if (convertingRef.current.has(job.id) ||
+        (data.invoices ?? []).some(inv => inv.type === 'invoice' && (inv.notes ?? '').includes(job.number))) {
+      alert(t('Þetta verk hefur þegar verið reikningsfært.', 'This job has already been invoiced.'));
+      return;
+    }
+
     const timeItems = jobTimes(job.id);
     const matItems  = jobMats(job.id);
 
@@ -329,6 +344,9 @@ export default function Jobs({ sessionUser }: JobsProps) {
       alert(t('Engar færslur á þessum verkefni til að reikningsfæra.', 'No time or materials on this job to invoice.'));
       return;
     }
+    // Mark as converting only once we know it's going ahead, so an empty-job early
+    // return above doesn't permanently block a later real conversion.
+    convertingRef.current.add(job.id);
 
     const lines: InvoiceLine[] = [];
 
@@ -636,7 +654,9 @@ export default function Jobs({ sessionUser }: JobsProps) {
             const jPhotos = jobPhotos(job.id);
             const labour  = labourCost(job.id);
             const mat     = matCost(job.id);
-            const total   = labour + mat;
+            // Total cost must include job-tagged purchases too, so the shown cost and
+            // the profit chip (profit = quoted − totalCost, which counts purchases) agree.
+            const total   = totalCost(job.id);
             const profitAmt = profit(job);
 
             return (
