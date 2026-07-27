@@ -30,6 +30,28 @@ const US_STATES: { name: string; rate: number }[] = [
   { name: 'Wisconsin', rate: 5 }, { name: 'Wyoming', rate: 4 }, { name: 'District of Columbia', rate: 6 },
 ];
 
+// Canada provinces/territories with their COMBINED sales-tax rate (%) — GST 5%
+// everywhere, plus HST (single rate) or a separate PST/QST depending on province.
+// Unlike US sales tax, Canada's GST/HST is a value-added tax (recoverable), so the
+// app's VAT engine applies. Rates verified for 2026 (Nova Scotia dropped to 14% on
+// 1 Apr 2025). PST provinces (BC/MB/SK) and Quebec's QST are shown as the combined
+// rate; the customer can override. `type` is informational only.
+const CA_PROVINCES: { name: string; rate: number; type: string }[] = [
+  { name: 'Alberta', rate: 5, type: 'GST' },
+  { name: 'British Columbia', rate: 12, type: 'GST + PST' },
+  { name: 'Manitoba', rate: 12, type: 'GST + PST' },
+  { name: 'New Brunswick', rate: 15, type: 'HST' },
+  { name: 'Newfoundland and Labrador', rate: 15, type: 'HST' },
+  { name: 'Northwest Territories', rate: 5, type: 'GST' },
+  { name: 'Nova Scotia', rate: 14, type: 'HST' },
+  { name: 'Nunavut', rate: 5, type: 'GST' },
+  { name: 'Ontario', rate: 13, type: 'HST' },
+  { name: 'Prince Edward Island', rate: 15, type: 'HST' },
+  { name: 'Quebec', rate: 14.975, type: 'GST + QST' },
+  { name: 'Saskatchewan', rate: 11, type: 'GST + PST' },
+  { name: 'Yukon', rate: 5, type: 'GST' },
+];
+
 function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUserKey, onSave, syncStatus, lastSyncedAt, syncNow, dispatch }: {
   lang: string; url: string; apiKey: string; userKey: string;
   setUrl: (v: string) => void; setApiKey: (v: string) => void; setUserKey: (v: string) => void;
@@ -220,6 +242,15 @@ export default function Settings() {
     setTop('vatRates', r > 0 ? [r, 0] : [0]);
   }
 
+  // Canada: the picked province's combined GST/HST/PST rate drives the VAT engine
+  // (GST/HST is a value-added tax, so — unlike the US — it stays in the VAT report
+  // with input-tax credits). Set the standard rate + the line-dropdown options.
+  function applyCaRate(rate: number) {
+    const r = Number.isFinite(rate) ? rate : 0;
+    setTop('standardRate', r);
+    setTop('vatRates', r > 0 ? [r, 0] : [0]);
+  }
+
   function setRate(currency: keyof ExchangeRates, value: number) {
     setForm(f => ({ ...f, exchangeRates: { ...f.exchangeRates, [currency]: value } }));
   }
@@ -304,6 +335,31 @@ export default function Settings() {
                 onChange={e => applyUsRate(parseFloat(e.target.value) || 0)}
                 min={0} max={30} step="0.01" />
               <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Grunnhlutfall ríkis — bættu við staðbundnu hlutfalli ef á við' : 'State base rate — add your local (city/county) rate if any'}</p>
+            </div>
+          </>
+        )}
+        {/* Canada GST/HST/PST rate */}
+        {form.country === 'CA' && (
+          <>
+            <div className="mt-3">
+              <label className={labelCls}>{lang === 'is' ? 'Fylki / umdæmi' : 'Province / Territory'}</label>
+              <select className={inputCls} value={form.caProvince ?? ''}
+                onChange={e => {
+                  const p = CA_PROVINCES.find(pr => pr.name === e.target.value);
+                  setTop('caProvince', e.target.value);
+                  if (p) applyCaRate(p.rate);
+                }}>
+                <option value="">{lang === 'is' ? 'Veldu fylki…' : 'Select province…'}</option>
+                {CA_PROVINCES.map(p => <option key={p.name} value={p.name}>{p.name} — {p.rate}% ({p.type})</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Velur samsett GST/HST/PST hlutfall fylkisins' : 'Sets the province combined GST/HST/PST rate'}</p>
+            </div>
+            <div className="mt-3">
+              <label className={labelCls}>{lang === 'is' ? 'GST/HST hlutfall (%)' : 'GST/HST rate (%)'}</label>
+              <input type="number" className={inputCls} value={form.standardRate}
+                onChange={e => applyCaRate(parseFloat(e.target.value) || 0)}
+                min={0} max={30} step="0.001" />
+              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Samsett hlutfall — breyttu ef þitt fylki er öðruvísi' : 'Combined rate — change it if your province differs'}</p>
             </div>
           </>
         )}

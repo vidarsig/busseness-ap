@@ -29,6 +29,12 @@ clear PWA cache with Ctrl+Shift+R (2-3x) or force-close/reopen the Android app.
 - US "Sales Tax" mode: relabel "VAT" → "Sales Tax" for US users, let them set their
   state %. Tax labels are already Settings-driven, so this is mostly relabeling +
   state-rate input, not a rebuild.
+- Canada mode: GST/HST is a VAT (recoverable), so the app's VAT engine applies (CA
+  config already isUSA:false). Settings now has a province picker (13 provinces, 2026
+  combined GST/HST/PST rates) mirroring the US state picker. OPEN: PST in BC/MB/SK is
+  NOT recoverable like GST — the combined rate is currently treated wholly as
+  recoverable VAT, so PST is slightly over-reclaimed there (HST provinces + QC/QST are
+  correct). Splitting GST vs PST is the next slice if wanted.
 
 ## Competitive position (research summary)
 - Books giants: QuickBooks (~49% US), Xero (~3.7M). Trades giants: ServiceTitan

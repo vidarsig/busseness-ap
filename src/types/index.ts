@@ -286,6 +286,7 @@ export interface AppSettings {
   personalDeductionMonthly: number;
   country: string;
   usState?: string;        // US state name (drives the base sales-tax rate)
+  caProvince?: string;     // Canada province/territory (drives the combined GST/HST/PST rate)
   salesTaxRate: number;
   corporateTaxRate: number;
   vatRates: number[];
