@@ -37,7 +37,18 @@ export default function VATReturn() {
   // not the static country config (which is just [0]) — feed that so collected tax
   // actually shows instead of everything landing in the 0% bucket. Canada and the
   // rest use the config's rates (Canada's GST/HST rates are fixed per province).
-  const rates = isUS ? Array.from(new Set([data.settings.salesTaxRate, 0])) : cc.vatRates;
+  // CRUCIAL: also fold in every rate ACTUALLY booked in the period. calcVATSummary
+  // only counts rows whose vatRate is in this list, so a sale charged at a rate that
+  // isn't configured (a US local city/county rate, an old rate after a change, a
+  // mixed job) would otherwise vanish silently from the total to remit. Including the
+  // booked rates puts each on its own line instead of dropping it.
+  const rates = useMemo(() => {
+    const base = isUS ? [data.settings.salesTaxRate, 0] : cc.vatRates;
+    const booked = periodTx
+      .filter(tx => (tx.type === 'income' || tx.type === 'expense') && typeof tx.vatRate === 'number')
+      .map(tx => tx.vatRate as number);
+    return [...new Set([...base, ...booked])].sort((a, b) => b - a);
+  }, [isUS, data.settings.salesTaxRate, cc.vatRates, periodTx]);
   const vat = useMemo(() => calcVATSummary(periodTx, rates, data.settings.pricesIncludeVAT), [periodTx, rates, data.settings.pricesIncludeVAT]);
   const fmt = (n: number) => fmtISK(n);
 
