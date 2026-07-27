@@ -158,11 +158,15 @@ function reducer(state: AppData, action: Action): AppData {
     case 'ADD_STOCK_MOVEMENT': {
       // Update qtyOnHand on the item
       const mv = action.payload;
-      const delta = mv.type === 'in' || mv.type === 'return' ? mv.qty : mv.type === 'adjust' ? mv.qty : -mv.qty;
+      // 'adjust' (Leiðrétting) SETS the on-hand count to the entered value — a real
+      // correction that can move stock down as well as up. in/return add, out subtracts.
+      const delta = mv.type === 'in' || mv.type === 'return' ? mv.qty : -mv.qty;
       return {
         ...state,
         stockMovements: [...(state.stockMovements ?? []), mv],
-        stockItems: (state.stockItems ?? []).map(s => s.id === mv.itemId ? { ...s, qtyOnHand: Math.max(0, s.qtyOnHand + delta), updatedAt: mv.createdAt } : s),
+        stockItems: (state.stockItems ?? []).map(s => s.id === mv.itemId
+          ? { ...s, qtyOnHand: Math.max(0, mv.type === 'adjust' ? mv.qty : s.qtyOnHand + delta), updatedAt: mv.createdAt }
+          : s),
       };
     }
     case 'ADD_SUPPLIER': return { ...state, suppliers: [...(state.suppliers ?? []), action.payload] };

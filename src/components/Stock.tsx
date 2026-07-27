@@ -175,21 +175,27 @@ export default function Stock() {
       for (let i = 1; i < rows.length; i++) {
         const cols = rows[i];
         const get = (key: string) => (cols[headers.indexOf(key)] ?? '').toString().trim();
+        // A non-numeric cell ("N/A", "call us", blank) must not poison a numeric
+        // field with NaN — that breaks the stock value and the low-stock test.
+        const num = (v: string, d: number) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
         const name = get('name') || get('description') || get('item');
         if (!name) continue;
-        const existing = items.find(it => it.sku === get('sku') || it.sku === get('code'));
+        const sku = get('sku') || get('code');
+        // Match an existing item only by a NON-EMPTY sku, else a file with no sku
+        // column would collapse every row onto one blank-sku item.
+        const existing = sku ? items.find(it => it.sku && it.sku === sku) : undefined;
         if (existing) {
           // update price only
-          dispatch({ type: 'UPDATE_STOCK_ITEM', payload: { ...existing, costPrice: parseFloat(get('price') || get('cost') || String(existing.costPrice)), updatedAt: now } });
+          dispatch({ type: 'UPDATE_STOCK_ITEM', payload: { ...existing, costPrice: num(get('price') || get('cost'), existing.costPrice), updatedAt: now } });
         } else {
           dispatch({ type: 'ADD_STOCK_ITEM', payload: {
-            id: newId(), sku: get('sku') || get('code') || `SUP-${i}`,
+            id: newId(), sku: sku || `SUP-${i}`,
             name, description: get('description'), category: get('category') || 'Other',
-            unit: get('unit') || 'pcs', qtyOnHand: parseFloat(get('qty') || '0'),
-            qtyReserved: 0, reorderPoint: parseFloat(get('reorder') || '5'),
-            costPrice: parseFloat(get('price') || get('cost') || '0'),
-            sellPrice: parseFloat(get('sell') || get('saleprice') || '0'),
-            currency: (get('currency') || cc.currency) as Currency, vatRate: parseFloat(get('vat') || String(cc.standardRate)),
+            unit: get('unit') || 'pcs', qtyOnHand: num(get('qty'), 0),
+            qtyReserved: 0, reorderPoint: num(get('reorder'), 5),
+            costPrice: num(get('price') || get('cost'), 0),
+            sellPrice: num(get('sell') || get('saleprice'), 0),
+            currency: (get('currency') || cc.currency) as Currency, vatRate: num(get('vat'), cc.standardRate),
             supplierName: get('supplier'), supplierCode: get('suppliercode'),
             location: get('location'), createdAt: now, updatedAt: now,
           } });
@@ -338,7 +344,7 @@ export default function Stock() {
                                   <div key={m.id} className="flex items-center gap-3 text-xs">
                                     <span className="text-gray-400 w-20">{m.date}</span>
                                     <span className={`font-semibold ${mvColor(m.type)} w-14`}>{mvLabel(m.type)}</span>
-                                    <span className="font-medium text-gray-800">{m.type === 'out' ? '-' : '+'}{m.qty} {it.unit}</span>
+                                    <span className="font-medium text-gray-800">{m.type === 'out' ? '−' : m.type === 'adjust' ? '=' : '+'}{m.qty} {it.unit}</span>
                                     {m.reference && <span className="text-gray-400">{m.reference}</span>}
                                     {m.note && <span className="text-gray-400 italic">{m.note}</span>}
                                   </div>
