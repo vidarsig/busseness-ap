@@ -119,8 +119,17 @@ function AppInner() {
     );
   }
 
+  // Dev-only test bypass: running LOCALLY with ?demo in the URL skips the login wall
+  // so an automated tester (or a developer) can drive the UI without credentials.
+  // import.meta.env.DEV is false in the production build, so the deployed app on
+  // jobboks.app can NEVER enter this — its login wall is untouched. No auth happens
+  // here, so resolveCompanyKey stays null and Supabase sync never runs (see the sync
+  // effect in AppContext): the session works purely on local IndexedDB data and can
+  // never pull or push real customer data.
+  const demoBypass = import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo');
+
   // Show login if Supabase configured but no session
-  if (supabaseConfigured && !sessionUser) {
+  if (supabaseConfigured && !sessionUser && !demoBypass) {
     return (
       <Login
         onSuccess={(id, name, email) => setSessionUser({ id, name, email })}
