@@ -79,9 +79,12 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const currentAppUser = sessionUser?.email
     ? appUsers.find(au => au.email.toLowerCase() === sessionUser.email.toLowerCase())
     : undefined;
+  // Enrolled worker → their permission decides. NOT enrolled (solo mode, or the
+  // account holder/owner who was never added to the Users list) → allowed, so the
+  // owner is never locked out of approving their own jobs. Only added workers are gated.
   const canApprove = currentAppUser
     ? !!currentAppUser.permissions?.canApproveJobReports
-    : appUsers.length === 0; // local/solo mode → allowed
+    : true;
   const currentUserName = sessionUser?.name || sessionUser?.email || t('Starfsmaður','Worker');
 
   const jobs      = data.jobs ?? [];
@@ -95,6 +98,21 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const [tab, setTab]                   = useState<Record<string, TabType>>({});
   const [jobForm, setJobForm]           = useState<JobFormState>({ open: false });
   const [limitModal, setLimitModal]     = useState(false);
+  // The job the camera flow auto-creates up front (a photo needs a target job). If
+  // the form is then cancelled and the job is still blank, we delete it so it doesn't
+  // linger, burn a number, and count against the plan limit.
+  const [autoJobId, setAutoJobId]       = useState<string | null>(null);
+
+  // Close the job form; drop a camera-auto-created job that was never filled in.
+  function closeJobForm() {
+    if (autoJobId) {
+      const hasPhoto = (data.jobPhotos ?? []).some(p => p.jobId === autoJobId);
+      const jb = (data.jobs ?? []).find(j => j.id === autoJobId);
+      if (!hasPhoto && !(jb?.clientName ?? '').trim()) dispatch({ type: 'DELETE_JOB', payload: autoJobId });
+      setAutoJobId(null);
+    }
+    setJobForm({ open: false });
+  }
 
   function openNewJob() {
     if (isJobLimitReached(data)) { setLimitModal(true); return; }
@@ -125,6 +143,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       updatedAt: now,
     } as Job;
     dispatch({ type: 'ADD_JOB', payload: job });
+    setAutoJobId(id);
     setPhotoJobId(id);
     setJobForm({ open: true, job });
     setTimeout(() => cameraRef.current?.click(), 150);
@@ -164,10 +183,15 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const setJobTab = (id: string, t: TabType) => setTab(v => ({ ...v, [id]: t }));
 
   // ── job counter ──────────────────────────────────────────
+  // Next number = highest existing sequence for the year + 1, NOT a count — a count
+  // reuses a number after any deletion (delete JOB-2026-002 of 3 → next is 003 again).
   const nextJobNumber = () => {
     const year = new Date().getFullYear();
-    const count = jobs.filter(j => j.number.includes(String(year))).length + 1;
-    return `JOB-${year}-${String(count).padStart(3,'0')}`;
+    const prefix = `JOB-${year}-`;
+    const maxSeq = jobs
+      .filter(j => j.number.startsWith(prefix))
+      .reduce((m, j) => Math.max(m, parseInt(j.number.slice(prefix.length), 10) || 0), 0);
+    return `${prefix}${String(maxSeq + 1).padStart(3, '0')}`;
   };
 
   // ── save job ─────────────────────────────────────────────
@@ -189,6 +213,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
         createdAt: now,
       } });
     }
+    setAutoJobId(null); // saved with real content → keep it
     setJobForm({ open:false });
   }
 
@@ -327,6 +352,12 @@ export default function Jobs({ sessionUser }: JobsProps) {
       return;
     }
 
+    // Only someone who can approve may invoice (canApproveJobReports = "approve AND
+    // convert to invoice") — a plain worker must not turn an approved job into an invoice.
+    if (!canApprove) {
+      alert(t('Þú hefur ekki heimild til að reikningsfæra verk.', 'You do not have permission to invoice jobs.'));
+      return;
+    }
     // Refuse a second conversion of the same job — duplicate billing, and a fast
     // double-click would mint two invoices with the SAME number (both read the same
     // invoiceLastNumber before it updates). The ref blocks the same-tick double-click;
@@ -350,14 +381,16 @@ export default function Jobs({ sessionUser }: JobsProps) {
 
     const lines: InvoiceLine[] = [];
 
-    // Group time by worker
-    const workerMap: Record<string, { hours: number; rate: number }> = {};
+    // Group time by worker AND rate — a worker with entries at different rates (e.g.
+    // regular + overtime) must be billed at EACH rate, not all hours at the first one.
+    const workerMap: Record<string, { name: string; rate: number; hours: number }> = {};
     timeItems.forEach(te => {
-      if (!workerMap[te.employeeName]) workerMap[te.employeeName] = { hours: 0, rate: te.hourlyRate };
-      workerMap[te.employeeName].hours += te.hours;
+      const key = `${te.employeeName}|${te.hourlyRate}`;
+      if (!workerMap[key]) workerMap[key] = { name: te.employeeName, rate: te.hourlyRate, hours: 0 };
+      workerMap[key].hours += te.hours;
     });
 
-    Object.entries(workerMap).forEach(([name, { hours, rate }]) => {
+    Object.values(workerMap).forEach(({ name, rate, hours }) => {
       lines.push({
         id: newId('il'),
         description: `${t('Vinnulaun', 'Labour')} — ${name}`,
@@ -904,8 +937,9 @@ export default function Jobs({ sessionUser }: JobsProps) {
                                   )
                                 )}
 
-                                {/* Convert to Invoice — only after approval */}
-                                {rs === 'approved' ? (
+                                {/* Convert to Invoice — only after approval, and only for
+                                    someone who can approve/invoice (a plain worker can't). */}
+                                {rs === 'approved' && canApprove ? (
                                   <button onClick={() => convertToInvoice(job)}
                                     className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
                                     <Receipt className="w-4 h-4" />
@@ -1177,7 +1211,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
               <h2 className="font-semibold text-gray-900">
                 {jobForm.job?.id ? t('Breyta verkefni','Edit job') : t('Nýtt verkefni','New job')}
               </h2>
-              <button onClick={() => setJobForm({ open:false })} className="p-1 rounded hover:bg-gray-100 text-gray-500">
+              <button onClick={closeJobForm} className="p-1 rounded hover:bg-gray-100 text-gray-500">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1259,7 +1293,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-              <button onClick={() => setJobForm({ open:false })} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">
+              <button onClick={closeJobForm} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">
                 {t('Hætta við','Cancel')}
               </button>
               <button onClick={saveJob} disabled={!jobForm.job?.name?.trim() || !jobForm.job?.clientName?.trim()}
