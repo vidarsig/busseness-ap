@@ -9,6 +9,26 @@ function newId() {
   return `bs_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// Year-end BOOK VALUE of a balance-sheet item for a given year. A plain item just
+// returns its static amount; a depreciating fixed asset (cost + acquiredYear set)
+// returns land + the building depreciated straight-line at depreciationRate from the
+// acquired year — and 0 before it was acquired (so a property only appears once owned).
+function assetBookValue(item: BalanceSheetItem, y: number): number {
+  if (item.cost == null || item.acquiredYear == null) return item.amount;
+  if (y < item.acquiredYear) return 0;
+  const land = item.landValue ?? 0;
+  const building = Math.max(item.cost - land, 0);
+  const rate = (item.depreciationRate ?? 0) / 100;
+  const yearsHeld = Math.max(y - item.acquiredYear, 0);
+  const depreciated = Math.min(building * rate * yearsHeld, building);
+  return land + (building - depreciated);
+}
+// Whether an item should appear in year y — a plain item always does; a fixed asset
+// with an acquired year only from that year on.
+function assetVisible(item: BalanceSheetItem, y: number): boolean {
+  return item.acquiredYear == null || y >= item.acquiredYear;
+}
+
 interface BSModalProps {
   initial?: BalanceSheetItem;
   onSave: (item: BalanceSheetItem) => void;
@@ -16,7 +36,8 @@ interface BSModalProps {
 }
 
 function BSModal({ initial, onSave, onClose }: BSModalProps) {
-  const { t } = useApp();
+  const { t, lang } = useApp();
+  const numOrUndef = (v: string) => v === '' ? undefined : (parseFloat(v) || 0);
   const [form, setForm] = useState<BalanceSheetItem>(initial ?? {
     id: newId(),
     name: '',
@@ -62,6 +83,35 @@ function BSModal({ initial, onSave, onClose }: BSModalProps) {
             <label className={labelCls}>{t('openingBalance')} (ISK)</label>
             <input type="number" className={inputCls} value={form.amount} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} />
           </div>
+
+          {form.section === 'fixed_assets' && (
+            <div className="border-t border-gray-100 pt-3 space-y-3">
+              <p className="text-xs text-gray-500">
+                {lang === 'is'
+                  ? 'Fasteign sem afskrifast? Fylltu út kaupverð og kaupár — þá reiknar appið bókfært verð (kaupverð − afskrift húss) fyrir hvert ár, og eignin birtist bara frá kaupári. Lóð afskrifast ekki. (Láttu autt fyrir venjulegan lið — þá gildir upphæðin að ofan.)'
+                  : 'A property that depreciates? Fill in the cost and the year acquired — the app then shows the book value (cost − building depreciation) per year, and it only appears from the acquired year. Land does not depreciate. (Leave blank for a plain item — the amount above is used.)'}
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>{lang === 'is' ? 'Kaupverð' : 'Cost'}</label>
+                  <input type="number" className={inputCls} value={form.cost ?? ''} onChange={e => setForm(f => ({ ...f, cost: numOrUndef(e.target.value) }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>{lang === 'is' ? 'Kaupár' : 'Year acquired'}</label>
+                  <input type="number" className={inputCls} value={form.acquiredYear ?? ''} onChange={e => setForm(f => ({ ...f, acquiredYear: e.target.value === '' ? undefined : (parseInt(e.target.value) || undefined) }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>{lang === 'is' ? 'Lóðarverð (afskrifast ekki)' : 'Land value (no depreciation)'}</label>
+                  <input type="number" className={inputCls} value={form.landValue ?? ''} onChange={e => setForm(f => ({ ...f, landValue: numOrUndef(e.target.value) }))} />
+                </div>
+                <div>
+                  <label className={labelCls}>{lang === 'is' ? 'Afskrift húss %/ári' : 'Building depreciation %/yr'}</label>
+                  <input type="number" step="0.1" className={inputCls} value={form.depreciationRate ?? ''} onChange={e => setForm(f => ({ ...f, depreciationRate: numOrUndef(e.target.value) }))} />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 pt-2">
             <button onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-50">{t('cancel')}</button>
             <button onClick={() => onSave(form)} className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm hover:bg-blue-700">{t('save')}</button>
@@ -105,7 +155,12 @@ export default function AnnualAccounts() {
   const getSection = (section: BalanceSheetItem['section']) =>
     bsItems.filter(b => b.section === section);
 
-  const totalFixedAssets = getSection('fixed_assets').reduce((s, b) => s + b.amount, 0);
+  // Fixed assets shown at their year-end book value for the selected year; a property
+  // only appears from its acquired year (see assetBookValue/assetVisible).
+  const fixedAssetRows = getSection('fixed_assets')
+    .filter(b => assetVisible(b, year))
+    .map(b => ({ item: b, value: assetBookValue(b, year) }));
+  const totalFixedAssets = fixedAssetRows.reduce((s, r) => s + r.value, 0);
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + b.amount, 0);
   const totalAssets = totalFixedAssets + totalCurrentAssets;
 
@@ -216,6 +271,11 @@ export default function AnnualAccounts() {
     // sheet totals are opening balances and don't vary by year.
     const totalEquityY = getSection('equity').reduce((s, b) => s + b.amount, 0) + plY.netResult;
     const totalEquityAndLiabY = totalEquityY + totalLongTerm + totalCurrentLiab;
+    // Fixed assets at their book value for THIS year (a property only from its
+    // acquired year), so each year's PDF shows that year's depreciated value.
+    const fixedRowsY = getSection('fixed_assets').filter(i => assetVisible(i, y)).map(i => ({ i, v: assetBookValue(i, y) }));
+    const totalFixedY = fixedRowsY.reduce((s, r) => s + r.v, 0);
+    const totalAssetsY = totalFixedY + totalCurrentAssets;
     const rows: ExportRow[] = [];
     rows.push(SEC(t('incomeStatement')));
     rows.push(SEC(t('revenues')));
@@ -234,11 +294,11 @@ export default function AnnualAccounts() {
     if (plY.incomeTax > 0) rows.push(R(t('incomeTax'), -plY.incomeTax));
     rows.push(R(t('netResult'), plY.netResult));
     rows.push(SEC(t('assets')));
-    getSection('fixed_assets').forEach(i => rows.push(R(nm(i), i.amount)));
-    rows.push(R(t('fixedAssets'), totalFixedAssets));
+    fixedRowsY.forEach(({ i, v }) => rows.push(R(nm(i), v)));
+    rows.push(R(t('fixedAssets'), totalFixedY));
     getSection('current_assets').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('currentAssets'), totalCurrentAssets));
-    rows.push(R(t('totalAssets'), totalAssets));
+    rows.push(R(t('totalAssets'), totalAssetsY));
     rows.push(SEC(t('equityAndLiabilities')));
     getSection('equity').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(lang === 'is' ? 'Hagnaður / tap árs' : 'Net result for year', plY.netResult));
@@ -470,14 +530,17 @@ export default function AnnualAccounts() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('fixedAssets')}</td></tr>
-                {getSection('fixed_assets').map(item => (
+                {fixedAssetRows.map(({ item, value }) => (
                   <tr key={item.id}>
                     <td className="px-4 py-1.5 text-sm pl-8 flex items-center gap-2">
                       {lang === 'is' ? item.name : (item.nameEn || item.name)}
+                      {item.cost != null && item.acquiredYear != null && (
+                        <span className="text-xs text-gray-400">({lang === 'is' ? 'bókf. verð' : 'book value'})</span>
+                      )}
                       <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
                       <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(value)}</td>
                   </tr>
                 ))}
                 <BSRow label={t('fixedAssets')} amount={totalFixedAssets} bold />

@@ -107,6 +107,17 @@ export interface BalanceSheetItem {
   nameEn: string;
   section: 'fixed_assets' | 'current_assets' | 'equity' | 'long_term_liabilities' | 'current_liabilities';
   amount: number;
+  // Optional book-value fields for a DEPRECIATING fixed asset (e.g. a property).
+  // When cost + acquiredYear are set, the item shows its year-end BOOK VALUE per
+  // year (cost − straight-line depreciation on the building only) and only appears
+  // from the year it was acquired. `amount` is then ignored for the displayed value.
+  // Land does not depreciate: landValue is carried at cost, the rest (building) is
+  // depreciated at depreciationRate %/yr from acquiredYear. Leaving these unset keeps
+  // the item a plain static line (backward-compatible).
+  acquiredYear?: number;
+  cost?: number;
+  landValue?: number;       // non-depreciating portion (absolute, same currency as cost)
+  depreciationRate?: number; // % per year on the building (cost − landValue)
 }
 
 export interface Account {
