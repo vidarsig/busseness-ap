@@ -87,6 +87,15 @@ export default function AnnualAccounts() {
   const txs = filterByYear(data.transactions, year);
   const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
 
+  // "Other operating expenses" = every operating line except wages and depreciation,
+  // computed once (incl. electricity/heating) so the display and the export agree.
+  const otherOp = pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
+
+  // Whether the immediately prior year has any bookings — drives the one-tap
+  // "download both years" button (each year stays its own separate PDF).
+  const prevYear = year - 1;
+  const hasPrevYear = data.transactions.some(tx => new Date(tx.date).getFullYear() === prevYear);
+
   const [bsModal, setBsModal] = useState<{ open: boolean; item?: BalanceSheetItem }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'income' | 'balance' | 'notes'>('income');
@@ -157,6 +166,35 @@ export default function AnnualAccounts() {
   const posDiff = posAssets - posLiab - posEquity;
   const hasPosition = hasKeyBalances || Math.abs(trackedCash) > 0.5 || Math.abs(retainedEarnings) > 0.5;
 
+  // Full year-end picture for ANY year, from the same pure engines as the on-screen
+  // display — lets each year be exported as its OWN separate statement (the owner
+  // wants 2025 and 2026 as two independent reports, not one merged sheet). Mirrors
+  // the memoised values above for the selected year.
+  function computeYear(y: number) {
+    const plY = calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+    const otherOpY = plY.husaleiga + plY.rafmagnHiti + plY.simagjold + plY.skrifstofugjold + plY.samgongur + plY.markadsmal + plY.fagthjonusta + plY.vorur + plY.adrir;
+    const closingFor = (acc: Account): number => {
+      const rows = accountBalanceByYear(acc, data.transactions).filter(r => r.year <= y);
+      if (rows.length) return rows[rows.length - 1].closing;
+      return acc.openingYear != null && y >= acc.openingYear ? (acc.openingBalance ?? 0) : 0;
+    };
+    const rowsFor = (type: Account['type']) => data.accounts
+      .filter(a => a.isActive && a.type === type && (a.openingBalance != null || data.transactions.some(tx => tx.accountId === a.id)))
+      .map(a => ({ acc: a, closing: closingFor(a) }));
+    const bk = { asset: rowsFor('asset'), liability: rowsFor('liability'), equity: rowsFor('equity') };
+    const cash = data.transactions
+      .filter(tx => new Date(tx.date).getFullYear() <= y && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
+      .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
+    const retained = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))]
+      .filter(yy => yy <= y)
+      .reduce((s, yy) => s + calcProfitLoss(filterByYear(data.transactions, yy), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
+    const posAssets = cash + bk.asset.reduce((s, r) => s + r.closing, 0);
+    const posLiab = bk.liability.reduce((s, r) => s + r.closing, 0);
+    const posEquity = bk.equity.reduce((s, r) => s + r.closing, 0) + retained;
+    const hasPosition = bk.asset.length + bk.liability.length + bk.equity.length > 0 || Math.abs(cash) > 0.5 || Math.abs(retained) > 0.5;
+    return { plY, otherOpY, bk, cash, retained, posAssets, posLiab, posEquity, posDiff: posAssets - posLiab - posEquity, hasPosition };
+  }
+
   function handleSaveBs(item: BalanceSheetItem) {
     const exists = bsItems.find(b => b.id === item.id);
     dispatch(exists
@@ -169,28 +207,32 @@ export default function AnnualAccounts() {
   // The exact figures shown on screen, flattened into a two-column statement so
   // the annual accounts can be downloaded as a PDF or attached to an email. Same
   // numbers as the display — no separate calculation.
-  function statementExport(): { columns: ExportColumn[]; rows: ExportRow[] } {
+  function statementExport(y: number): { columns: ExportColumn[]; rows: ExportRow[] } {
     const nm = (i: BalanceSheetItem) => lang === 'is' ? i.name : (i.nameEn || i.name);
     const R = (label: string, amount: number): ExportRow => ({ label, amount: fmtISK(amount) });
     const SEC = (label: string): ExportRow => ({ label: label.toUpperCase(), amount: '' });
+    const { plY, otherOpY, bk, cash, retained, posAssets, posLiab, posEquity, posDiff, hasPosition } = computeYear(y);
+    // Equity totals depend on the year's own net result; the other manual balance-
+    // sheet totals are opening balances and don't vary by year.
+    const totalEquityY = getSection('equity').reduce((s, b) => s + b.amount, 0) + plY.netResult;
+    const totalEquityAndLiabY = totalEquityY + totalLongTerm + totalCurrentLiab;
     const rows: ExportRow[] = [];
     rows.push(SEC(t('incomeStatement')));
     rows.push(SEC(t('revenues')));
-    if (pl.salaTekjur > 0) rows.push(R(t('sala_vara'), pl.salaTekjur));
-    if (pl.thjonustutekjur > 0) rows.push(R(t('sala_thjonustu'), pl.thjonustutekjur));
-    if (pl.adrarTekjur > 0) rows.push(R(t('adrar_tekjur'), pl.adrarTekjur));
-    rows.push(R(t('revenues'), pl.totalRevenue));
-    if (pl.laun + pl.launatengd > 0) rows.push(R(t('wagesExpenses'), -(pl.laun + pl.launatengd)));
-    if (pl.afskriftir > 0) rows.push(R(t('afskriftir'), -pl.afskriftir));
-    const otherOp = pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
-    if (otherOp > 0) rows.push(R(t('otherOperating'), -otherOp));
-    rows.push(R(t('operatingExpenses'), -pl.totalOperatingExpenses));
-    rows.push(R(t('operatingProfit'), pl.operatingProfit));
-    if (pl.fjarmagntekjur > 0) rows.push(R(t('fjarmagns_tekjur'), pl.fjarmagntekjur));
-    if (pl.fjarmagnsgjold > 0) rows.push(R(t('fjarmagnsgjold'), -pl.fjarmagnsgjold));
-    rows.push(R(t('profitBeforeTax'), pl.profitBeforeTax));
-    if (pl.incomeTax > 0) rows.push(R(t('incomeTax'), -pl.incomeTax));
-    rows.push(R(t('netResult'), pl.netResult));
+    if (plY.salaTekjur > 0) rows.push(R(t('sala_vara'), plY.salaTekjur));
+    if (plY.thjonustutekjur > 0) rows.push(R(t('sala_thjonustu'), plY.thjonustutekjur));
+    if (plY.adrarTekjur > 0) rows.push(R(t('adrar_tekjur'), plY.adrarTekjur));
+    rows.push(R(t('revenues'), plY.totalRevenue));
+    if (plY.laun + plY.launatengd > 0) rows.push(R(t('wagesExpenses'), -(plY.laun + plY.launatengd)));
+    if (plY.afskriftir > 0) rows.push(R(t('afskriftir'), -plY.afskriftir));
+    if (otherOpY > 0) rows.push(R(t('otherOperating'), -otherOpY));
+    rows.push(R(t('operatingExpenses'), -plY.totalOperatingExpenses));
+    rows.push(R(t('operatingProfit'), plY.operatingProfit));
+    if (plY.fjarmagntekjur > 0) rows.push(R(t('fjarmagns_tekjur'), plY.fjarmagntekjur));
+    if (plY.fjarmagnsgjold > 0) rows.push(R(t('fjarmagnsgjold'), -plY.fjarmagnsgjold));
+    rows.push(R(t('profitBeforeTax'), plY.profitBeforeTax));
+    if (plY.incomeTax > 0) rows.push(R(t('incomeTax'), -plY.incomeTax));
+    rows.push(R(t('netResult'), plY.netResult));
     rows.push(SEC(t('assets')));
     getSection('fixed_assets').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('fixedAssets'), totalFixedAssets));
@@ -199,22 +241,22 @@ export default function AnnualAccounts() {
     rows.push(R(t('totalAssets'), totalAssets));
     rows.push(SEC(t('equityAndLiabilities')));
     getSection('equity').forEach(i => rows.push(R(nm(i), i.amount)));
-    rows.push(R(lang === 'is' ? 'Hagnaður / tap árs' : 'Net result for year', pl.netResult));
-    rows.push(R(t('totalEquity'), totalEquity));
+    rows.push(R(lang === 'is' ? 'Hagnaður / tap árs' : 'Net result for year', plY.netResult));
+    rows.push(R(t('totalEquity'), totalEquityY));
     getSection('long_term_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('longTermLiabilities'), totalLongTerm));
     getSection('current_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('currentLiabilities'), totalCurrentLiab));
-    rows.push(R(t('equityAndLiabilities'), totalEquityAndLiab));
+    rows.push(R(t('equityAndLiabilities'), totalEquityAndLiabY));
     if (hasPosition) {
-      rows.push(SEC(lang === 'is' ? `Fjárhagsstaða í árslok ${year}` : `Financial position at year-end ${year}`));
-      rows.push(R(lang === 'is' ? 'Handbært fé (reiknað)' : 'Cash (calculated)', trackedCash));
-      balanceKeys.asset.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+      rows.push(SEC(lang === 'is' ? `Fjárhagsstaða í árslok ${y}` : `Financial position at year-end ${y}`));
+      rows.push(R(lang === 'is' ? 'Handbært fé (reiknað)' : 'Cash (calculated)', cash));
+      bk.asset.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
       rows.push(R(t('totalAssets'), posAssets));
-      balanceKeys.liability.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+      bk.liability.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
       rows.push(R(lang === 'is' ? 'Skuldir samtals' : 'Total liabilities', posLiab));
-      balanceKeys.equity.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
-      rows.push(R(lang === 'is' ? 'Uppsafnaður hagnaður (fyrir skatt)' : 'Accumulated profit (before tax)', retainedEarnings));
+      bk.equity.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
+      rows.push(R(lang === 'is' ? 'Uppsafnaður hagnaður (fyrir skatt)' : 'Accumulated profit (before tax)', retained));
       rows.push(R(t('totalEquity'), posEquity));
       rows.push(R(lang === 'is' ? 'Skuldir og eigið fé' : 'Liabilities and equity', posLiab + posEquity));
       if (Math.abs(posDiff) > 1) rows.push(R(lang === 'is' ? 'Mismunur (vantar opnunarstöður)' : 'Difference (opening balances incomplete)', posDiff));
@@ -222,23 +264,28 @@ export default function AnnualAccounts() {
     return {
       columns: [
         { header: t('description'), key: 'label', width: 120 },
-        { header: `${year} (ISK)`, key: 'amount', width: 45 },
+        { header: `${y} (ISK)`, key: 'amount', width: 45 },
       ],
       rows,
     };
   }
 
   const pdfTitle = company.name || t('annualAccounts');
-  const pdfSubtitle = `${t('annualAccounts')} — ${year}${company.kennitala ? ` · ${company.kennitala}` : ''}`;
-  const pdfFile = `arsreikningur_${year}.pdf`;
+  const subtitleFor = (y: number) => `${t('annualAccounts')} — ${y}${company.kennitala ? ` · ${company.kennitala}` : ''}`;
+  const fileFor = (y: number) => `arsreikningur_${y}.pdf`;
 
-  function downloadAccounts() {
-    const { columns, rows } = statementExport();
-    exportPDF(pdfTitle, pdfSubtitle, columns, rows, pdfFile);
+  function downloadYear(y: number) {
+    const { columns, rows } = statementExport(y);
+    exportPDF(pdfTitle, subtitleFor(y), columns, rows, fileFor(y));
+  }
+  // Two years, two separate PDFs (current + prior) — one tap, each its own report.
+  function downloadBothYears() {
+    downloadYear(year);
+    downloadYear(prevYear);
   }
   async function emailAccounts() {
-    const { columns, rows } = statementExport();
-    await sharePDF(pdfTitle, pdfSubtitle, columns, rows, pdfFile, {
+    const { columns, rows } = statementExport(year);
+    await sharePDF(pdfTitle, subtitleFor(year), columns, rows, fileFor(year), {
       emailTo: '',
       subject: `${t('annualAccounts')} ${year} — ${company.name}`,
       body: `${t('annualAccounts')} ${year}`,
@@ -293,13 +340,23 @@ export default function AnnualAccounts() {
             {t('addBalanceSheetItem')}
           </button>
           <button
-            onClick={downloadAccounts}
-            title={lang === 'is' ? 'Sækja PDF' : 'Download PDF'}
+            onClick={() => downloadYear(year)}
+            title={lang === 'is' ? `Sækja PDF (${year})` : `Download PDF (${year})`}
             className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
           >
             <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">{lang === 'is' ? 'Sækja' : 'Download'}</span>
+            <span className="hidden sm:inline">{lang === 'is' ? `Sækja ${year}` : `Download ${year}`}</span>
           </button>
+          {hasPrevYear && (
+            <button
+              onClick={downloadBothYears}
+              title={lang === 'is' ? `Sækja ${year} og ${prevYear} — sitt hvort PDF` : `Download ${year} and ${prevYear} — separate PDFs`}
+              className="flex items-center gap-1.5 border border-gray-300 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">{lang === 'is' ? `Sækja bæði árin (${year} + ${prevYear})` : `Download both years (${year} + ${prevYear})`}</span>
+            </button>
+          )}
           <button
             onClick={emailAccounts}
             title={lang === 'is' ? 'Senda í tölvupósti' : 'Send by email'}
@@ -375,8 +432,8 @@ export default function AnnualAccounts() {
               <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('operatingExpenses')}</td></tr>
               {(pl.laun + pl.launatengd) > 0 && <PLRow label={t('wagesExpenses')} amount={pl.laun + pl.launatengd} indent isNeg />}
               {pl.afskriftir > 0 && <PLRow label={t('afskriftir')} amount={pl.afskriftir} indent isNeg />}
-              {(pl.husaleiga + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir) > 0 && (
-                <PLRow label={t('otherOperating')} amount={pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir} indent isNeg />
+              {otherOp > 0 && (
+                <PLRow label={t('otherOperating')} amount={otherOp} indent isNeg />
               )}
               <PLRow label={t('operatingExpenses')} amount={-pl.totalOperatingExpenses} bold />
               <PLRow label={t('operatingProfit')} amount={pl.operatingProfit} bold />
