@@ -680,6 +680,12 @@ export default function Invoices() {
   // referencing the original — the original is never edited or deleted.
   function createCreditNote(inv: Invoice) {
     const newNum = `${data.settings.invoicePrefix}${String(data.settings.invoiceLastNumber + 1).padStart(4, '0')}`;
+    // Bake the original's whole-invoice discount into the line prices, and drop the
+    // discount fields. invoiceTotals forces the discount to 0 on a negative subtotal,
+    // so a credit note that kept the discount would over-credit by the discount + its
+    // VAT and never net the original to zero.
+    const { subtotal, netSubtotal } = invoiceTotals(inv);
+    const factor = subtotal > 0 ? netSubtotal / subtotal : 1;
     const credit: Invoice = {
       ...inv,
       id: newId(),
@@ -689,7 +695,9 @@ export default function Invoices() {
       date: todayISO(),
       dueDate: todayISO(),
       status: 'draft',
-      lines: inv.lines.map(l => ({ ...l, id: lineId(), unitPrice: -Math.abs(l.unitPrice) })),
+      discountType: undefined,
+      discountValue: undefined,
+      lines: inv.lines.map(l => ({ ...l, id: lineId(), unitPrice: -Math.abs(l.unitPrice) * factor })),
       notes: `${lang === 'is' ? 'Kreditreikningur vegna reiknings' : 'Credit note for invoice'} ${inv.number}`,
     };
     dispatch({ type: 'ADD_INVOICE', payload: credit });
@@ -732,26 +740,14 @@ export default function Invoices() {
   }
 
   function markPaid(inv: Invoice) {
+    // Model A (owner's decision, 27 Jul): marking an invoice paid ONLY flips its
+    // status — it no longer books an income transaction. Income is booked from the
+    // bank DEPOSIT, which auto-links to the invoice (R9-6); booking here too would
+    // double-count it, and its old per-rate booking also mishandled discounts,
+    // foreign currency and VAT-inclusive mode. Any discrepancy (a paid invoice with
+    // no matching deposit) is reconciled via Bank Import — manually or by the AI —
+    // rather than by a second income entry here.
     dispatch({ type: 'UPDATE_INVOICE', payload: { ...inv, status: 'paid' } });
-    // Book income net of VAT, split per VAT rate so mixed-rate invoices
-    // allocate correctly on the VAT return (one transaction per rate).
-    const netByRate: Record<number, number> = {};
-    inv.lines.forEach(l => {
-      const rate = l.vatRate;
-      netByRate[rate] = (netByRate[rate] ?? 0) + l.quantity * l.unitPrice;
-    });
-    Object.entries(netByRate).forEach(([rateStr, net]) => {
-      const rate = Number(rateStr);
-      const id = `tx_inv_${inv.id}_${rateStr}`;
-      if (data.transactions.find(tx2 => tx2.id === id)) return;
-      dispatch({ type: 'ADD_TRANSACTION', payload: {
-        id, date: todayISO(),
-        description: `${t('invoice')} ${inv.number} — ${inv.customer.name}`,
-        category: 'sala_thjonustu', type: 'income' as const,
-        amount: net, currency: inv.currency, eurToIskRate: inv.eurToIskRate,
-        vatRate: rate, reference: inv.number,
-      }});
-    });
   }
 
   // Shared PDF layout for an invoice/quote — used by both the "PDF" download and
@@ -841,9 +837,12 @@ export default function Invoices() {
     { v: 'overdue', label: t('overdue') },
   ];
 
+  // Outstanding across unpaid invoices, in ISK — via payState so it's discount-,
+  // currency- and partial-payment-correct (the old inline sum ignored the whole-
+  // invoice discount and added foreign-currency totals as if they were ISK).
   const unpaidTotal = data.invoices
     .filter(i => i.type === 'invoice' && (i.status === 'sent' || i.status === 'overdue'))
-    .reduce((s, i) => s + i.lines.reduce((ls, l) => ls + l.quantity * l.unitPrice * (1 + l.vatRate/100), 0), 0);
+    .reduce((s, i) => s + payState(i).outstandingISK, 0);
 
   return (
     <>

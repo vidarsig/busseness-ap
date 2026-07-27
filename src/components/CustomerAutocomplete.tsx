@@ -18,10 +18,14 @@ export default function CustomerAutocomplete({ value, onName, onPick, customers,
   const [open, setOpen] = useState(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  const q = value.trim().toLowerCase();
-  const matches = q.length === 0
-    ? []
-    : customers.filter(c => c.name.toLowerCase().includes(q) && c.name.toLowerCase() !== q).slice(0, 6);
+  // Fold case + Icelandic accents so "jon" finds "Jón" and "thor" finds "Þór"
+  // (card/keyboard input is often unaccented). Same fold used elsewhere (R9-1).
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
+  const q = fold(value.trim());
+  // Include an exact-name match too — hiding it meant typing a customer's FULL name
+  // showed no suggestion, so their saved kennitala/address/email never auto-filled.
+  const matches = q.length === 0 ? [] : customers.filter(c => fold(c.name).includes(q)).slice(0, 6);
 
   return (
     <div className="relative">

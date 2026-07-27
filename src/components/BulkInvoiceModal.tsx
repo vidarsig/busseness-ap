@@ -62,7 +62,10 @@ export default function BulkInvoiceModal({ onClose }: { onClose: () => void }) {
           id: rowId(),
           name: j.clientName || '',
           description: j.name ? `${j.number} — ${j.name}` : j.number,
-          gross: j.quotedAmount ? String(j.quotedAmount) : '',
+          // quotedAmount is the NET agreed price (job offers add VAT on top). This
+          // modal enters GROSS and extracts VAT, so gross it up first — otherwise
+          // the VAT would be extracted from the net figure and the customer under-billed.
+          gross: j.quotedAmount ? String(Math.round(j.quotedAmount * (1 + workRate / 100))) : '',
           kind: 'work' as Kind,
           rate: cc.standardRate,
         }))
@@ -83,7 +86,7 @@ export default function BulkInvoiceModal({ onClose }: { onClose: () => void }) {
       seq += 1;
       const rate = rateOf(r);
       const net = grossOf(r) / (1 + rate / 100);
-      const existing = (data.customers ?? []).find(c => c.name.trim().toLowerCase() === r.name.trim().toLowerCase());
+      const existing = (data.customers ?? []).find(c => (c.name || '').trim().toLowerCase() === r.name.trim().toLowerCase());
       const inv: Invoice = {
         id: newId(),
         type: 'invoice',
