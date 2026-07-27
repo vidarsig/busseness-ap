@@ -113,6 +113,15 @@ function RecurringModal({ initial, onSave, onClose }: {
   );
 }
 
+// Format a Date as YYYY-MM-DD from its LOCAL parts. Using toISOString() here would
+// serialize in UTC, so at a positive UTC offset (the owner is on Kenya time, UTC+3)
+// local midnight rolls back to the previous day — which both dated every generated
+// entry a day early AND made "Generate now" re-create the last period forever
+// (lastGenerated stored one day behind the cursor). Local parts keep them aligned.
+function ymdLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function shouldGenerate(rec: RecurringTransaction, today: Date): string[] {
   const dates: string[] = [];
   const start = new Date(rec.startDate + 'T00:00:00');
@@ -131,7 +140,7 @@ function shouldGenerate(rec: RecurringTransaction, today: Date): string[] {
   while (cursor <= today && safety < 60) {
     safety++;
     if (end && cursor > end) break;
-    const ds = cursor.toISOString().split('T')[0];
+    const ds = ymdLocal(cursor);
     if (!last || cursor > last) dates.push(ds);
     if (rec.frequency === 'monthly') cursor.setMonth(cursor.getMonth() + 1);
     else if (rec.frequency === 'quarterly') cursor.setMonth(cursor.getMonth() + 3);

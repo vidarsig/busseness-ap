@@ -26,6 +26,16 @@ export default function Dashboard({ setView, perms }: Props) {
     return Array.from(ys).sort((a, b) => b - a);
   }, [data.transactions, data.settings.fiscalYear]);
 
+  // Getting-started checklist — the visual half of the concierge: three steps to
+  // first value on the blank page. Shows only for a NEW account (few transactions)
+  // and only until all three are done, so it never nags an established user.
+  const gsSteps: { key: string; done: boolean; label: string; to: View }[] = [
+    { key: 'setup',   done: !!data.settings.company.name?.trim(), label: lang === 'is' ? 'Settu upp fyrirtækið' : 'Set up your business', to: 'ai' },
+    { key: 'invoice', done: (data.invoices?.length ?? 0) > 0,     label: lang === 'is' ? 'Sendu fyrsta reikninginn' : 'Send your first invoice', to: 'invoices' },
+    { key: 'job',     done: (data.jobs?.length ?? 0) > 0,         label: lang === 'is' ? 'Skráðu fyrsta verkið' : 'Log your first job', to: 'jobs' },
+  ];
+  const showGettingStarted = canViewFinancials && !gsSteps.every(s => s.done) && (data.transactions?.length ?? 0) < 20;
+
   // Gentle reminder: how many days since the last backup (null = never).
   const daysSinceBackup = lastBackup
     ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000)
@@ -141,6 +151,30 @@ export default function Dashboard({ setView, perms }: Props) {
         </button>
         )}
       </div>
+
+      {/* Getting-started checklist — blank-page welcome, first value in 3 steps */}
+      {showGettingStarted && (
+        <div className="mb-6 bg-white rounded-2xl border border-blue-100 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-base font-semibold text-gray-900">{lang === 'is' ? 'Byrjaðu hér' : 'Getting started'}</h2>
+            <span className="ml-auto text-xs font-medium text-gray-400">{gsSteps.filter(s => s.done).length}/3</span>
+          </div>
+          <div className="space-y-2">
+            {gsSteps.map(s => (
+              <button key={s.key} onClick={() => { if (!s.done) setView(s.to); }} disabled={s.done}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${s.done ? 'bg-green-50 cursor-default' : 'bg-gray-50 hover:bg-blue-50'}`}>
+                {s.done ? (
+                  <span className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0"><Check className="w-3 h-3 text-white" /></span>
+                ) : (
+                  <Circle className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                )}
+                <span className={`text-sm ${s.done ? 'text-gray-400 line-through' : 'text-gray-800 font-medium'}`}>{s.label}</span>
+                {!s.done && <ArrowRight className="w-4 h-4 text-blue-500 ml-auto flex-shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Gentle backup reminder */}
       {canExport && showBackupReminder && (

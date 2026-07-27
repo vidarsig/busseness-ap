@@ -6,10 +6,16 @@ import { formatDate } from '../utils/formatters';
 
 function newId() { return `rule_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
+// Fold case + Icelandic accents so a rule matches regardless of accents — bank
+// card-terminal lines are often unaccented ("SIMINN" for "Síminn"). Same fold used
+// in the Færslur name filter and the AI match helper (R9-1).
+const foldAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
+
 export function matchRule(description: string, rules: CategoryRule[]): CategoryRule | null {
-  const desc = description.toLowerCase();
+  const desc = foldAccents(description);
   const sorted = [...rules].sort((a, b) => b.pattern.length - a.pattern.length);
-  return sorted.find(r => r.pattern.trim() && desc.includes(r.pattern.toLowerCase().trim())) ?? null;
+  return sorted.find(r => r.pattern.trim() && desc.includes(foldAccents(r.pattern.trim()))) ?? null;
 }
 
 function RuleModal({ initial, onSave, onClose }: {
