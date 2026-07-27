@@ -732,26 +732,14 @@ export default function Invoices() {
   }
 
   function markPaid(inv: Invoice) {
+    // Model A (owner's decision, 27 Jul): marking an invoice paid ONLY flips its
+    // status — it no longer books an income transaction. Income is booked from the
+    // bank DEPOSIT, which auto-links to the invoice (R9-6); booking here too would
+    // double-count it, and its old per-rate booking also mishandled discounts,
+    // foreign currency and VAT-inclusive mode. Any discrepancy (a paid invoice with
+    // no matching deposit) is reconciled via Bank Import — manually or by the AI —
+    // rather than by a second income entry here.
     dispatch({ type: 'UPDATE_INVOICE', payload: { ...inv, status: 'paid' } });
-    // Book income net of VAT, split per VAT rate so mixed-rate invoices
-    // allocate correctly on the VAT return (one transaction per rate).
-    const netByRate: Record<number, number> = {};
-    inv.lines.forEach(l => {
-      const rate = l.vatRate;
-      netByRate[rate] = (netByRate[rate] ?? 0) + l.quantity * l.unitPrice;
-    });
-    Object.entries(netByRate).forEach(([rateStr, net]) => {
-      const rate = Number(rateStr);
-      const id = `tx_inv_${inv.id}_${rateStr}`;
-      if (data.transactions.find(tx2 => tx2.id === id)) return;
-      dispatch({ type: 'ADD_TRANSACTION', payload: {
-        id, date: todayISO(),
-        description: `${t('invoice')} ${inv.number} — ${inv.customer.name}`,
-        category: 'sala_thjonustu', type: 'income' as const,
-        amount: net, currency: inv.currency, eurToIskRate: inv.eurToIskRate,
-        vatRate: rate, reference: inv.number,
-      }});
-    });
   }
 
   // Shared PDF layout for an invoice/quote — used by both the "PDF" download and

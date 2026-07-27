@@ -21,7 +21,7 @@ const sel = inp;
 const emptyItem = (): Partial<StockItem> => ({
   sku: '', name: '', description: '', category: 'Building materials',
   unit: 'pcs', qtyOnHand: 0, qtyReserved: 0, reorderPoint: 5,
-  costPrice: 0, sellPrice: 0, currency: 'ISK', vatRate: 24,
+  costPrice: 0, sellPrice: 0, currency: 'ISK',
   supplierName: '', supplierCode: '', location: '',
 });
 
@@ -121,10 +121,14 @@ export default function Stock() {
     const f = modal.item!;
     if (!f.name?.trim()) return;
     const now = nowISO();
+    // Default VAT to the country's standard rate (0 for US sales tax), not a
+    // hardcoded 24% — a US item would otherwise silently save 24% while the
+    // dropdown showed 0%.
+    const vatRate = f.vatRate ?? cc.standardRate;
     if (f.id) {
-      dispatch({ type: 'UPDATE_STOCK_ITEM', payload: { ...f, updatedAt: now } as StockItem });
+      dispatch({ type: 'UPDATE_STOCK_ITEM', payload: { ...f, vatRate, updatedAt: now } as StockItem });
     } else {
-      dispatch({ type: 'ADD_STOCK_ITEM', payload: { ...f, id: newId(), createdAt: now, updatedAt: now, qtyOnHand: Number(f.qtyOnHand ?? 0), qtyReserved: 0 } as StockItem });
+      dispatch({ type: 'ADD_STOCK_ITEM', payload: { ...f, vatRate, id: newId(), createdAt: now, updatedAt: now, qtyOnHand: Number(f.qtyOnHand ?? 0), qtyReserved: 0 } as StockItem });
     }
     setModal({ open: false });
   }
