@@ -6,7 +6,7 @@ import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
 import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus } from '../types';
-import { COUNTRY_CONFIGS } from '../data/countries';
+import { COUNTRY_CONFIGS, findCaProvince } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
 
@@ -34,6 +34,7 @@ interface SetupProposal {
   country?: string;      // 2-letter code the app supports (US, IS, CA, GB, …)
   state?: string;        // US state code, e.g. "CO"
   salesTaxRate?: number; // US only
+  province?: string;     // Canada province/territory name or code, e.g. "Ontario" / "ON"
   companyName?: string;
 }
 function extractSetup(content: string): { text: string; setup: SetupProposal | null } {
@@ -491,6 +492,10 @@ export default function AIAssistant() {
       return;
     }
     const usRate = code === 'US' && setup.salesTaxRate != null ? (Number(setup.salesTaxRate) || 0) : null;
+    // Canada: the AI names the province; the app looks up the canonical combined
+    // GST/HST rate (same table as the Settings picker) — GST/HST is a recoverable VAT.
+    const caProv = code === 'CA' && setup.province ? findCaProvince(String(setup.province)) : null;
+    const rate = usRate != null ? usRate : caProv ? caProv.rate : null;
     dispatch({ type: 'UPDATE_SETTINGS', payload: {
       country: code,
       defaultCurrency: cc.currency,
@@ -499,13 +504,14 @@ export default function AIAssistant() {
       employerPensionRate: cc.employerPensionRate,
       socialInsuranceRate: cc.socialInsuranceRate,
       personalDeductionMonthly: cc.personalDeductionMonthly,
-      vatRates: usRate != null ? Array.from(new Set([usRate, 0])) : cc.vatRates,
-      standardRate: usRate != null ? usRate : cc.standardRate,
+      vatRates: rate != null ? Array.from(new Set([rate, 0])) : cc.vatRates,
+      standardRate: rate != null ? rate : cc.standardRate,
       vatTerm: cc.vatTerm,
       taxAuthority: cc.taxAuthority,
       companyIdLabel: cc.companyIdLabel,
       vatNumberLabel: cc.vatNumberLabel,
       ...(setup.state ? { usState: String(setup.state).toUpperCase() } : {}),
+      ...(caProv ? { caProvince: caProv.name } : {}),
       ...(usRate != null ? { salesTaxRate: usRate } : {}),
       ...(setup.companyName ? { company: { ...data.settings.company, name: String(setup.companyName) } } : {}),
     }});

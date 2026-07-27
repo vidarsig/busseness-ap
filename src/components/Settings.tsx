@@ -3,7 +3,7 @@ import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2, Flask
 import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
-import { COUNTRY_LIST } from '../data/countries';
+import { COUNTRY_LIST, CA_PROVINCES } from '../data/countries';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
@@ -28,28 +28,6 @@ const US_STATES: { name: string; rate: number }[] = [
   { name: 'Texas', rate: 6.25 }, { name: 'Utah', rate: 6.1 }, { name: 'Vermont', rate: 6 },
   { name: 'Virginia', rate: 5.3 }, { name: 'Washington', rate: 6.5 }, { name: 'West Virginia', rate: 6 },
   { name: 'Wisconsin', rate: 5 }, { name: 'Wyoming', rate: 4 }, { name: 'District of Columbia', rate: 6 },
-];
-
-// Canada provinces/territories with their COMBINED sales-tax rate (%) — GST 5%
-// everywhere, plus HST (single rate) or a separate PST/QST depending on province.
-// Unlike US sales tax, Canada's GST/HST is a value-added tax (recoverable), so the
-// app's VAT engine applies. Rates verified for 2026 (Nova Scotia dropped to 14% on
-// 1 Apr 2025). PST provinces (BC/MB/SK) and Quebec's QST are shown as the combined
-// rate; the customer can override. `type` is informational only.
-const CA_PROVINCES: { name: string; rate: number; type: string }[] = [
-  { name: 'Alberta', rate: 5, type: 'GST' },
-  { name: 'British Columbia', rate: 12, type: 'GST + PST' },
-  { name: 'Manitoba', rate: 12, type: 'GST + PST' },
-  { name: 'New Brunswick', rate: 15, type: 'HST' },
-  { name: 'Newfoundland and Labrador', rate: 15, type: 'HST' },
-  { name: 'Northwest Territories', rate: 5, type: 'GST' },
-  { name: 'Nova Scotia', rate: 14, type: 'HST' },
-  { name: 'Nunavut', rate: 5, type: 'GST' },
-  { name: 'Ontario', rate: 13, type: 'HST' },
-  { name: 'Prince Edward Island', rate: 15, type: 'HST' },
-  { name: 'Quebec', rate: 14.975, type: 'GST + QST' },
-  { name: 'Saskatchewan', rate: 11, type: 'GST + PST' },
-  { name: 'Yukon', rate: 5, type: 'GST' },
 ];
 
 function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUserKey, onSave, syncStatus, lastSyncedAt, syncNow, dispatch }: {

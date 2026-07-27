@@ -100,3 +100,33 @@ export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
 };
 
 export const COUNTRY_LIST = Object.values(COUNTRY_CONFIGS);
+
+// Canada provinces/territories with their COMBINED sales-tax rate (%) — GST 5%
+// everywhere, plus HST (single rate) or a separate PST/QST. GST/HST is a value-added
+// tax (recoverable), so the app's VAT engine applies (unlike US sales tax). Rates
+// verified for 2026 (Nova Scotia dropped to 14% on 1 Apr 2025). `type` is informational.
+// Single source of truth: used by Settings (picker) and the AI concierge setup.
+export interface CaProvince { code: string; name: string; rate: number; type: string; }
+export const CA_PROVINCES: CaProvince[] = [
+  { code: 'AB', name: 'Alberta', rate: 5, type: 'GST' },
+  { code: 'BC', name: 'British Columbia', rate: 12, type: 'GST + PST' },
+  { code: 'MB', name: 'Manitoba', rate: 12, type: 'GST + PST' },
+  { code: 'NB', name: 'New Brunswick', rate: 15, type: 'HST' },
+  { code: 'NL', name: 'Newfoundland and Labrador', rate: 15, type: 'HST' },
+  { code: 'NT', name: 'Northwest Territories', rate: 5, type: 'GST' },
+  { code: 'NS', name: 'Nova Scotia', rate: 14, type: 'HST' },
+  { code: 'NU', name: 'Nunavut', rate: 5, type: 'GST' },
+  { code: 'ON', name: 'Ontario', rate: 13, type: 'HST' },
+  { code: 'PE', name: 'Prince Edward Island', rate: 15, type: 'HST' },
+  { code: 'QC', name: 'Quebec', rate: 14.975, type: 'GST + QST' },
+  { code: 'SK', name: 'Saskatchewan', rate: 11, type: 'GST + PST' },
+  { code: 'YT', name: 'Yukon', rate: 5, type: 'GST' },
+];
+
+// Look up a province by its full name OR 2-letter code (case-insensitive), so both
+// the Settings dropdown and an AI-supplied "Ontario" / "ON" resolve to the same entry.
+export function findCaProvince(nameOrCode: string): CaProvince | null {
+  const q = (nameOrCode || '').trim().toLowerCase();
+  if (!q) return null;
+  return CA_PROVINCES.find(p => p.name.toLowerCase() === q || p.code.toLowerCase() === q) ?? null;
+}
