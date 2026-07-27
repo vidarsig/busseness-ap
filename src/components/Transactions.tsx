@@ -19,13 +19,13 @@ import { exportPDF, exportExcel } from '../utils/exports';
 // filter finds "Krónan"/"Vörður" when you type "kronan"/"vordur".
 const foldAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
 
-// How a row reads at a glance in a long list. Money IN — income, or a loan RECEIVED
-// ('lan_mottekid' transfer) — is green +. Money OUT — expense, or a loan repayment
-// ('lan_afborgun' transfer) — is red −. A neutral transfer whose direction the app
-// can't know ('ekki_rekstur') stays gray ±. Same in/out rule the balance math uses,
-// so the colour and the running balance always agree.
+// How a row reads at a glance in a long list. Money IN — income, a loan RECEIVED
+// ('lan_mottekid'), or an owner contribution ('framlag') — is green +. Money OUT —
+// expense, or a loan repayment ('lan_afborgun' transfer) — is red −. A neutral
+// transfer whose direction the app can't know ('ekki_rekstur') stays gray ±. Same
+// in/out rule the balance math uses, so the colour and the running balance agree.
 function flowStyle(tx: Transaction): { sign: string; text: string; dot: string; chip: string } {
-  if (tx.type === 'income' || tx.category === 'lan_mottekid')
+  if (tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag')
     return { sign: '+', text: 'text-green-600', dot: 'bg-green-400', chip: 'bg-green-100 text-green-700' };
   if (tx.type === 'expense' || tx.category === 'lan_afborgun')
     return { sign: '-', text: 'text-red-600', dot: 'bg-red-400', chip: 'bg-red-100 text-red-700' };

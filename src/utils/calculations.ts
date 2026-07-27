@@ -51,12 +51,13 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
       .reduce((s, tx) => {
         const gross = getTransactionISK(tx);
         // A loan payment's interest is a cost, not a reduction of the loan — only
-        // the principal (gross − interest) moves the balance. Money in (income, or
-        // a loan RECEIVED via 'lan_mottekid') increases the balance by the full
-        // amount — so a borrowed loan booked through the bank raises the liability
-        // instead of being wrongly subtracted like a payment.
+        // the principal (gross − interest) moves the balance. Money in (income, a
+        // loan RECEIVED via 'lan_mottekid', or an owner CONTRIBUTION via 'framlag')
+        // increases the balance by the full amount — so borrowed money or the
+        // owner's own money paid in raises the liability instead of being wrongly
+        // subtracted like a payment (the bug that made the owner-account debt too high).
         const interest = tx.interestAmount ? toISK(tx.interestAmount, tx.currency, tx.eurToIskRate) : 0;
-        const moneyIn = tx.type === 'income' || tx.category === 'lan_mottekid';
+        const moneyIn = tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag';
         return s + (moneyIn ? gross : -(gross - interest));
       }, 0);
     bal += net;

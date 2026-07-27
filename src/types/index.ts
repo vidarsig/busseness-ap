@@ -502,11 +502,15 @@ export const EXPENSE_CATEGORIES = [
 // 'lan_afborgun' = loan / debt repayments (principal + interest paid OUT to a
 // lender) → reduces the loan/liability key. 'lan_mottekid' = a loan RECEIVED
 // (money IN from a lender) → INCREASES the liability key, without being counted
-// as revenue or VAT turnover (it's borrowing, not income). Both kept here, not
-// under income/expenses, so borrowing and repaying never touch profit.
+// as revenue or VAT turnover (it's borrowing, not income). 'framlag' = the owner
+// putting his OWN money INTO the company (money IN) → INCREASES the owner-account
+// liability (the company now owes him more), so it LOWERS his debt — same money-in
+// direction as a loan received, still out of profit/VAT. All kept here, not under
+// income/expenses, so these never touch profit.
 export const TRANSFER_CATEGORIES = [
   'lan_afborgun',
   'lan_mottekid',
+  'framlag',
   'ekki_rekstur',
 ] as const;
 

@@ -204,9 +204,10 @@ export default function AnnualAccounts() {
   const trackedCash = useMemo(() =>
     data.transactions
       .filter(tx => new Date(tx.date).getFullYear() <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
-      // Money IN = income OR a loan received (lan_mottekid) — mirror accountBalanceByYear,
-      // so a received loan isn't wrongly counted as cash going out.
-      .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
+      // Money IN = income, a loan received (lan_mottekid), OR an owner contribution
+      // (framlag) — mirror accountBalanceByYear, so money paid IN isn't wrongly
+      // counted as cash going out.
+      .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.transactions, data.accounts, year]);
   const retainedEarnings = useMemo(() => {
@@ -239,7 +240,7 @@ export default function AnnualAccounts() {
     const bk = { asset: rowsFor('asset'), liability: rowsFor('liability'), equity: rowsFor('equity') };
     const cash = data.transactions
       .filter(tx => new Date(tx.date).getFullYear() <= y && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
-      .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
+      .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
     const retained = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))]
       .filter(yy => yy <= y)
       .reduce((s, yy) => s + calcProfitLoss(filterByYear(data.transactions, yy), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
