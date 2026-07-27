@@ -23,6 +23,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
       { label: t('laun'),                value: -pl.laun },
       { label: t('launatengd_gjold'),    value: -pl.launatengd },
       { label: t('husaleiga'),           value: -pl.husaleiga },
+      { label: t('rafmagn_hiti'),        value: -pl.rafmagnHiti },
       { label: t('simagjold'),           value: -pl.simagjold },
       { label: t('skrifstofugjold'),     value: -pl.skrifstofugjold },
       { label: t('samgongur'),           value: -pl.samgongur },
@@ -59,6 +60,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
       [t('laun'),                  -pl.laun],
       [t('launatengd_gjold'),      -pl.launatengd],
       [t('husaleiga'),             -pl.husaleiga],
+      [t('rafmagn_hiti'),          -pl.rafmagnHiti],
       [t('simagjold'),             -pl.simagjold],
       [t('skrifstofugjold'),       -pl.skrifstofugjold],
       [t('samgongur'),             -pl.samgongur],
@@ -88,7 +90,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
   if (!years.includes(currentYear)) years.unshift(currentYear);
 
   const txs = filterByYear(data.transactions, year);
-  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate);
+  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
 
   const Row = ({ label, amount, bold, indent, isNegative, catKey }: {
     label: string; amount: number; bold?: boolean; indent?: boolean; isNegative?: boolean; catKey?: string;
@@ -187,6 +189,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
             {pl.laun > 0 && <Row label={t('laun')} amount={pl.laun} indent isNegative catKey="laun" />}
             {pl.launatengd > 0 && <Row label={t('launatengd_gjold')} amount={pl.launatengd} indent isNegative catKey="launatengd_gjold" />}
             {pl.husaleiga > 0 && <Row label={t('husaleiga')} amount={pl.husaleiga} indent isNegative catKey="husaleiga" />}
+            {pl.rafmagnHiti > 0 && <Row label={t('rafmagn_hiti')} amount={pl.rafmagnHiti} indent isNegative catKey="rafmagn_hiti" />}
             {pl.simagjold > 0 && <Row label={t('simagjold')} amount={pl.simagjold} indent isNegative catKey="simagjold" />}
             {pl.skrifstofugjold > 0 && <Row label={t('skrifstofugjold')} amount={pl.skrifstofugjold} indent isNegative catKey="skrifstofugjold" />}
             {pl.samgongur > 0 && <Row label={t('samgongur')} amount={pl.samgongur} indent isNegative catKey="samgongur" />}
