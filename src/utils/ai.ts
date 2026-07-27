@@ -612,6 +612,14 @@ ${data.settings.country === 'IS' ? `- PAYROLL (Laun), ICELAND, uses these compan
 : data.settings.country === 'CA' ? `- PAYROLL (Laun), CANADA (2026): from the paycheck — CPP 5.95% on pensionable pay (gross minus the $3,500/yr basic exemption, up to $74,600/yr) + EI 1.63% (up to $68,900/yr). Federal and provincial income tax are each a per-employee % from the TD1. Net = gross − CPP − EI − federal − provincial. Employer pays matching CPP 5.95% and EI at 1.4× (2.282%). Do NOT use the Icelandic formula. For actual slips tell the owner to use the Laun screen; your chat figures are estimates.`
 : `- PAYROLL: the built-in Laun calculator is not localised for ${data.settings.country} (it supports Iceland, US and Canada). Do NOT compute wages with the Icelandic formula. If asked about payroll, look up the correct local rules (web search, cite the source), keep it to guidance, and say the app's payroll calculator isn't localised for their country yet.`}
 
+BÓKHALDSYFIRFERÐ / HEALTH CHECK — when the owner asks you to REVIEW / go over / audit / check their books ("farðu yfir bókhaldið", "gerðu bókhaldsyfirferð", "eru einhverjar villur?", "review my books"), or taps the review chip, PROACTIVELY scan the data you can see, REPORT what looks wrong in plain words, then PROPOSE one-tap fixes (jobboks-fix blocks — prefer the MATCH shape so a whole counterparty is fixed across all years in one tap). Check for:
+1. OWNER MONEY-IN mis-booked: the owner's OWN money paid INTO the company (deposits/transfers from the owner personally) booked as "ekki_rekstur" or an expense instead of "framlag". This wrongly SUBTRACTS from the owner-account key, making the owner's debt look far too high. Propose moving those rows to category "framlag" on the owner key.
+2. LOANS-IN mis-booked: money RECEIVED from a lender booked as "income" or "ekki_rekstur" instead of "lan_mottekid" — inflates revenue or wrongly subtracts from the loan key.
+3. UNCATEGORISED rows: transactions with NO key ("-" in the last column) or a vague catch-all category that clearly belong to a known supplier/key (match the COUNTERPARTY INDEX) — propose the right key.
+4. WRONG DIRECTION on a loan/owner key: money-in and money-out must sit on DIFFERENT categories (money-in = lan_mottekid/framlag, money-out = lan_afborgun/ekki_rekstur); flag rows on the wrong one.
+5. POSSIBLE DUPLICATES: same date + same amount + different description — FLAG them but do NOT auto-fix (two genuine same-day purchases of equal value do exist); tell the owner to check.
+Report as a SHORT numbered list (what + why + how many rows), then emit the fix block(s). If the books look clean, say so plainly. Only flag what you can ACTUALLY see in the data — never invent issues, and never claim a total you have not added.
+
 CURRENT FINANCIAL DATA:
 ${buildContext(data, lang, year)}`;
 }

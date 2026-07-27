@@ -898,15 +898,15 @@ export default function AIAssistant() {
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2 justify-center">
                     {(lang === 'is' ? [
+                      'Farðu yfir bókhaldið mitt',
                       'Hvernig líður rekstrinum?',
                       'Hverjar eru stærstu útgjaldirnar?',
                       'Eru einhverjar ógreiddar reikningar?',
-                      'Skrifaðu lýsingu á reikning fyrir vefsíðugerð',
                     ] : [
+                      'Review my books',
                       'How is the business doing?',
                       'What are my biggest expenses?',
                       'Any overdue invoices?',
-                      'Draft an invoice description for web design',
                     ]).map(suggestion => (
                       <button key={suggestion}
                         onClick={() => { setInput(suggestion); inputRef.current?.focus(); }}
