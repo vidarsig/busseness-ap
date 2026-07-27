@@ -339,6 +339,20 @@ export default function Settings() {
                 min={0} max={30} step="0.001" />
               <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Samsett hlutfall — breyttu ef þitt fylki er öðruvísi' : 'Combined rate — change it if your province differs'}</p>
             </div>
+            {/* PST provinces (BC/MB/SK): the PST portion is NOT reclaimable like GST.
+                Quebec's QST + all HST provinces are fully reclaimable, so no note there. */}
+            {(() => {
+              const p = CA_PROVINCES.find(pr => pr.name === form.caProvince);
+              if (!p || !p.type.includes('PST')) return null;
+              const pst = Math.round((p.rate - 5) * 1000) / 1000;
+              return (
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800">
+                  {lang === 'is'
+                    ? `${p.name}: ${p.rate}% = 5% GST + ${pst}% PST. GST er endurgreiðanlegt á innkaupum, en PST EKKI — bókaðu PST sem hluta af kostnaðinum. Þú rukkar samt fullt ${p.rate}% á sölu.`
+                    : `${p.name}: ${p.rate}% = 5% GST + ${pst}% PST. GST is reclaimable on purchases, but PST is NOT — book PST as part of the cost. You still charge the full ${p.rate}% on sales.`}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
