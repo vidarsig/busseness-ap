@@ -122,7 +122,7 @@ function dataAfterHeader(rows: string[][]): string[][] {
 const HEADINGS = {
   date: ['dagsetning', 'date', 'bókunardagur', 'bokunardagur', 'vinnsludagur', 'transaction date'],
   amount: ['upphæð', 'upphaed', 'amount', 'fjárhæð', 'fjarhaed', 'færsluupphæð'],
-  debit: ['debet', 'debit', 'úttekt', 'uttekt', 'gjöld', 'gjold', 'út', 'withdrawal', 'money out'],
+  debit: ['debet', 'debit', 'úttekt', 'uttekt', 'útborgun', 'utborgun', 'gjöld', 'gjold', 'út', 'withdrawal', 'money out'],
   credit: ['kredit', 'credit', 'innborgun', 'innlegg', 'inn', 'deposit', 'money in'],
   description: ['skýring', 'skyring', 'texti', 'lýsing', 'lysing', 'description', 'text', 'nafn', 'details'],
   reference: ['tilvísun', 'tilvisun', 'seðilnúmer', 'sedilnumer', 'reference', 'ref'],

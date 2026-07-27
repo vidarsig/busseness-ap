@@ -503,6 +503,11 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     if (bulkType) {
       changes.type = bulkType as TransactionType;
       if (bulkType === 'transfer') changes.vatRate = 0; // transfers never carry VAT
+      // Changing type but NOT category would leave rows typed one way and
+      // categorised the other (e.g. income-typed with an expense category), which
+      // then count as NEITHER revenue nor expense in the P&L. Mirror the single-row
+      // form: default the category to match the new type when none is picked.
+      if (!bulkCat) changes.category = bulkType === 'income' ? 'sala_thjonustu' : bulkType === 'transfer' ? 'ekki_rekstur' : 'adrir_rekstrargjold';
     }
     if (bulkCat) changes.category = bulkCat;
     if (bulkVat !== '') changes.vatRate = parseFloat(bulkVat);
