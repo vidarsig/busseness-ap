@@ -217,7 +217,13 @@ export default function AnnualAccounts() {
     [data.transactions, data.accounts, year]);
   // Current assets: the cash line shows the calculated (bank) cash for the selected
   // year; every other line keeps its static amount.
-  const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? (b.cashByYear?.[String(year)] ?? trackedCash) : b.amount;
+  // Cash for the year: a positive balance is an asset; a NEGATIVE balance is a bank
+  // overdraft (yfirdráttur), which is a short-term LIABILITY, not negative cash.
+  const cashLineItem = getSection('current_assets').find(isCashLine);
+  const cashRaw = cashLineItem ? (cashLineItem.cashByYear?.[String(year)] ?? trackedCash) : 0;
+  const cashAsset = Math.max(0, cashRaw);
+  const overdraft = Math.max(0, -cashRaw);
+  const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? cashAsset : b.amount;
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
@@ -238,7 +244,7 @@ export default function AnnualAccounts() {
   // the owner's own funds); it balances the property asset. Any residual (bsDiff) is
   // shown honestly — it means opening balances/loans aren't fully entered yet.
   const totalAssets = totalFixedAssets + totalCurrentAssets + posAssetKeys;
-  const totalLiabilities = posLiab + staticLongTerm + staticCurrentLiab;
+  const totalLiabilities = posLiab + staticLongTerm + staticCurrentLiab + overdraft;
   // Owner's equity in the properties = their book value MINUS the loans that finance
   // them (the liability keys). This balances the property asset against its mortgages
   // + this equity, so the properties don't inflate the sheet. Only when properties
@@ -298,8 +304,11 @@ export default function AnnualAccounts() {
     // acquired year), so each year's PDF shows that year's depreciated value.
     const fixedRowsY = getSection('fixed_assets').filter(i => assetVisible(i, y)).map(i => ({ i, v: assetBookValue(i, y) }));
     const totalFixedY = fixedRowsY.reduce((s, r) => s + r.v, 0);
-    // Current assets for THIS year: the cash line uses this year's calculated cash.
-    const currentAssetValY = (i: BalanceSheetItem) => isCashLine(i) ? (i.cashByYear?.[String(y)] ?? cash) : i.amount;
+    // Current assets for THIS year: positive cash is an asset; negative = overdraft (liability).
+    const cashRawY = cashLineItem ? (cashLineItem.cashByYear?.[String(y)] ?? cash) : cash;
+    const cashAssetY = Math.max(0, cashRawY);
+    const overdraftY = Math.max(0, -cashRawY);
+    const currentAssetValY = (i: BalanceSheetItem) => isCashLine(i) ? cashAssetY : i.amount;
     const totalCurrentAssetsY = getSection('current_assets').reduce((s, i) => s + currentAssetValY(i), 0);
     // Unified balance sheet for THIS year (mirrors the on-screen statement): pulls
     // the key balances (loans, owner account) + accumulated profit, and recognises
@@ -309,7 +318,7 @@ export default function AnnualAccounts() {
     const equityKeysY = bk.equity.reduce((s, r) => s + r.closing, 0);
     const totalAssetsY = totalFixedY + totalCurrentAssetsY + assetKeysY;
     const propertyEquityY = totalFixedY > 0 ? totalFixedY - liabKeysY : 0;
-    const totalLiabY = liabKeysY + staticLongTerm + staticCurrentLiab;
+    const totalLiabY = liabKeysY + staticLongTerm + staticCurrentLiab + overdraftY;
     const totalEquityY = staticEquity + equityKeysY + retained + propertyEquityY;
     const totalEquityAndLiabY = totalLiabY + totalEquityY;
     const bsDiffY = totalAssetsY - totalEquityAndLiabY;
@@ -665,7 +674,10 @@ export default function AnnualAccounts() {
                     <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
-                <BSRow label={t('currentLiabilities')} amount={staticCurrentLiab} bold />
+                {overdraft > 0 && (
+                  <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Yfirdráttur (skv. banka)' : 'Bank overdraft'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(overdraft)}</td></tr>
+                )}
+                <BSRow label={t('currentLiabilities')} amount={staticCurrentLiab + overdraft} bold />
                 <BSRow label={t('totalEquityAndLiabilities')} amount={totalEquityAndLiab} bold />
               </tbody>
             </table>
