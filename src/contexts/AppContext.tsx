@@ -16,12 +16,15 @@ const STORAGE_KEY = 'bokhalds_app_v2';
 // ── One-time owner data seeds ───────────────────────────────────────────────
 // The owner (Efra skrið ehf) bought three properties on real deeds. They belong
 // on the balance sheet as fixed assets at BOOK VALUE (building depreciates 2%/yr,
-// land never — see BalanceSheetItem). This seed adds them once, then records a
-// marker in `seededMigrations` so it never re-adds them (even if the owner later
-// edits or deletes one). It is gated to the owner's company only, so future users
-// (e.g. the US launch) never receive these rows. Land = 20% of cost (standard
-// split; adjustable in the app). Values from the afsöl/kaupsamningar on file.
-const EFRA_SEED_ID = 'efra-skrid-properties-v1';
+// land never — see BalanceSheetItem). This seed UPSERTS them by stable id once,
+// then records a marker in `seededMigrations` so it runs exactly once (later manual
+// edits/deletes by the owner are preserved). It is gated to the owner's company
+// only, so future users (e.g. the US launch) never receive these rows. Land = 15%
+// of cost — the owner's established basis (matches his prior book values: fixed-
+// asset totals 47,297,000 in 2025 and 46,447,000 in 2026); adjustable in the app.
+// Values from the afsöl/kaupsamningar on file. v2 corrects a v1 seeding that used
+// a 20% land split.
+const EFRA_SEED_ID = 'efra-skrid-properties-v2';
 const OWNER_KT = '6901201780'; // Efra skrið ehf
 const EFRA_PROPERTIES: BalanceSheetItem[] = [
   {
@@ -29,21 +32,21 @@ const EFRA_PROPERTIES: BalanceSheetItem[] = [
     name: 'Deildartún 4, efsta hæð (íbúð 01-0301), Akranesi',
     nameEn: 'Deildartún 4, top-floor flat (01-0301), Akranes',
     section: 'fixed_assets', amount: 9000000,
-    cost: 9000000, acquiredYear: 2021, landValue: 1800000, depreciationRate: 2,
+    cost: 9000000, acquiredYear: 2021, landValue: 1350000, depreciationRate: 2,
   },
   {
     id: 'bs-efra-deildartun4-0101',
     name: 'Deildartún 4, íbúð 01-0101, Akranesi',
     nameEn: 'Deildartún 4, flat 01-0101, Akranes',
     section: 'fixed_assets', amount: 30000000,
-    cost: 30000000, acquiredYear: 2022, landValue: 6000000, depreciationRate: 2,
+    cost: 30000000, acquiredYear: 2022, landValue: 4500000, depreciationRate: 2,
   },
   {
     id: 'bs-efra-akurgerdi13',
     name: 'Akurgerði 13 (01-0101), Akranesi',
     nameEn: 'Akurgerði 13 (01-0101), Akranes',
     section: 'fixed_assets', amount: 11000000,
-    cost: 11000000, acquiredYear: 2022, landValue: 2200000, depreciationRate: 2,
+    cost: 11000000, acquiredYear: 2022, landValue: 1650000, depreciationRate: 2,
   },
 ];
 
@@ -53,11 +56,13 @@ function applyOwnerSeeds(d: AppData): AppData {
   const isOwner = kt === OWNER_KT || name.includes('efra skrið') || name.includes('efra skrid');
   const done = d.seededMigrations ?? [];
   if (!isOwner || done.includes(EFRA_SEED_ID)) return d;
-  const existing = new Set(d.balanceSheetItems.map(b => b.id));
-  const toAdd = EFRA_PROPERTIES.filter(p => !existing.has(p.id));
+  // Upsert by stable id: drop any earlier copy (e.g. the v1 20%-land version) and
+  // re-add the corrected records, then mark done so this runs exactly once.
+  const seededIds = new Set(EFRA_PROPERTIES.map(p => p.id));
+  const kept = d.balanceSheetItems.filter(b => !seededIds.has(b.id));
   return {
     ...d,
-    balanceSheetItems: [...d.balanceSheetItems, ...toAdd],
+    balanceSheetItems: [...kept, ...EFRA_PROPERTIES],
     seededMigrations: [...done, EFRA_SEED_ID],
   };
 }
