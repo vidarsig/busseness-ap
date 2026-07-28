@@ -167,10 +167,13 @@ export default function AnnualAccounts() {
   const isCashLine = (b: BalanceSheetItem) =>
     b.computed === 'cash' || b.id === 'bs1' || (b.section === 'current_assets' && /handbært/i.test(b.name));
 
-  const totalEquity = getSection('equity').reduce((s, b) => s + b.amount, 0) + pl.netResult;
-  const totalLongTerm = getSection('long_term_liabilities').reduce((s, b) => s + b.amount, 0);
-  const totalCurrentLiab = getSection('current_liabilities').reduce((s, b) => s + b.amount, 0);
-  const totalEquityAndLiab = totalEquity + totalLongTerm + totalCurrentLiab;
+  // Static liability/equity lines the owner may have typed in manually (usually just
+  // share capital). The full liability/equity totals — which also pull the real key
+  // balances (loans, owner account) and accumulated profit — are computed below,
+  // once those key balances are known.
+  const staticEquity = getSection('equity').reduce((s, b) => s + b.amount, 0);
+  const staticLongTerm = getSection('long_term_liabilities').reduce((s, b) => s + b.amount, 0);
+  const staticCurrentLiab = getSection('current_liabilities').reduce((s, b) => s + b.amount, 0);
 
   // Carried key balances for the selected year: each balance-sheet key's closing
   // balance at year-end (opening + booked entries, principal-only for loans),
@@ -191,7 +194,6 @@ export default function AnnualAccounts() {
     return { asset: rowsFor('asset'), liability: rowsFor('liability'), equity: rowsFor('equity') };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.accounts, data.transactions, year]);
-  const hasKeyBalances = balanceKeys.asset.length + balanceKeys.liability.length + balanceKeys.equity.length > 0;
 
   // Cash-basis financial position at year-end that actually balances:
   //   Assets (tracked cash + asset keys) = Liabilities (liab keys) + Equity (equity keys + retained earnings).
@@ -217,18 +219,34 @@ export default function AnnualAccounts() {
   // year; every other line keeps its static amount.
   const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? trackedCash : b.amount;
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
-  const totalAssets = totalFixedAssets + totalCurrentAssets;
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
     return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
   }, [data.transactions, year, data.settings.corporateTaxRate]);
   const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
-  const posAssets = trackedCash + posAssetKeys;
   const posLiab = balanceKeys.liability.reduce((s, r) => s + r.closing, 0);
   const posEquityKeys = balanceKeys.equity.reduce((s, r) => s + r.closing, 0);
-  const posEquity = posEquityKeys + retainedEarnings;
-  const posDiff = posAssets - posLiab - posEquity;
-  const hasPosition = hasKeyBalances || Math.abs(trackedCash) > 0.5 || Math.abs(retainedEarnings) > 0.5;
+
+  // ── Unified balance sheet ────────────────────────────────────────────────
+  // ONE formal Efnahagsreikningur that pulls the real key balances (loans as
+  // liabilities, owner account + accumulated profit as equity) AND recognises the
+  // properties, instead of a static sheet + a separate calculated position box.
+  //   Assets      = fixed assets (properties, book value) + cash + other current + asset keys
+  //   Liabilities = loan/liability keys + any static liability lines
+  //   Equity      = share capital + owner/equity keys + accumulated profit + property equity
+  // Property equity = the properties' book value (financed by the mortgages above +
+  // the owner's own funds); it balances the property asset. Any residual (bsDiff) is
+  // shown honestly — it means opening balances/loans aren't fully entered yet.
+  const totalAssets = totalFixedAssets + totalCurrentAssets + posAssetKeys;
+  const totalLiabilities = posLiab + staticLongTerm + staticCurrentLiab;
+  // Owner's equity in the properties = their book value MINUS the loans that finance
+  // them (the liability keys). This balances the property asset against its mortgages
+  // + this equity, so the properties don't inflate the sheet. Only when properties
+  // exist; any residual (bsDiff) is then the honest operating gap (cash vs equity).
+  const propertyEquity = totalFixedAssets > 0 ? totalFixedAssets - posLiab : 0;
+  const totalEquityFull = staticEquity + posEquityKeys + retainedEarnings + propertyEquity;
+  const totalEquityAndLiab = totalLiabilities + totalEquityFull;
+  const bsDiff = totalAssets - totalEquityAndLiab;
 
   // Full year-end picture for ANY year, from the same pure engines as the on-screen
   // display — lets each year be exported as its OWN separate statement (the owner
@@ -275,11 +293,7 @@ export default function AnnualAccounts() {
     const nm = (i: BalanceSheetItem) => lang === 'is' ? i.name : (i.nameEn || i.name);
     const R = (label: string, amount: number): ExportRow => ({ label, amount: fmtISK(amount) });
     const SEC = (label: string): ExportRow => ({ label: label.toUpperCase(), amount: '' });
-    const { plY, otherOpY, bk, cash, retained, posAssets, posLiab, posEquity, posDiff, hasPosition } = computeYear(y);
-    // Equity totals depend on the year's own net result; the other manual balance-
-    // sheet totals are opening balances and don't vary by year.
-    const totalEquityY = getSection('equity').reduce((s, b) => s + b.amount, 0) + plY.netResult;
-    const totalEquityAndLiabY = totalEquityY + totalLongTerm + totalCurrentLiab;
+    const { plY, otherOpY, bk, cash, retained } = computeYear(y);
     // Fixed assets at their book value for THIS year (a property only from its
     // acquired year), so each year's PDF shows that year's depreciated value.
     const fixedRowsY = getSection('fixed_assets').filter(i => assetVisible(i, y)).map(i => ({ i, v: assetBookValue(i, y) }));
@@ -287,7 +301,19 @@ export default function AnnualAccounts() {
     // Current assets for THIS year: the cash line uses this year's calculated cash.
     const currentAssetValY = (i: BalanceSheetItem) => isCashLine(i) ? cash : i.amount;
     const totalCurrentAssetsY = getSection('current_assets').reduce((s, i) => s + currentAssetValY(i), 0);
-    const totalAssetsY = totalFixedY + totalCurrentAssetsY;
+    // Unified balance sheet for THIS year (mirrors the on-screen statement): pulls
+    // the key balances (loans, owner account) + accumulated profit, and recognises
+    // the properties' book value as equity.
+    const assetKeysY = bk.asset.reduce((s, r) => s + r.closing, 0);
+    const liabKeysY = bk.liability.reduce((s, r) => s + r.closing, 0);
+    const equityKeysY = bk.equity.reduce((s, r) => s + r.closing, 0);
+    const totalAssetsY = totalFixedY + totalCurrentAssetsY + assetKeysY;
+    const propertyEquityY = totalFixedY > 0 ? totalFixedY - liabKeysY : 0;
+    const totalLiabY = liabKeysY + staticLongTerm + staticCurrentLiab;
+    const totalEquityY = staticEquity + equityKeysY + retained + propertyEquityY;
+    const totalEquityAndLiabY = totalLiabY + totalEquityY;
+    const bsDiffY = totalAssetsY - totalEquityAndLiabY;
+    const keyLbl = (acc: Account) => `${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`;
     const rows: ExportRow[] = [];
     rows.push(SEC(t('incomeStatement')));
     rows.push(SEC(t('revenues')));
@@ -310,29 +336,21 @@ export default function AnnualAccounts() {
     rows.push(R(t('fixedAssets'), totalFixedY));
     getSection('current_assets').forEach(i => rows.push(R(nm(i), currentAssetValY(i))));
     rows.push(R(t('currentAssets'), totalCurrentAssetsY));
+    bk.asset.forEach(({ acc, closing }) => rows.push(R(keyLbl(acc), closing)));
     rows.push(R(t('totalAssets'), totalAssetsY));
     rows.push(SEC(t('equityAndLiabilities')));
     getSection('equity').forEach(i => rows.push(R(nm(i), i.amount)));
-    rows.push(R(lang === 'is' ? 'Hagnaður / tap árs' : 'Net result for year', plY.netResult));
+    bk.equity.forEach(({ acc, closing }) => rows.push(R(keyLbl(acc), closing)));
+    rows.push(R(lang === 'is' ? 'Uppsafnaður hagnaður' : 'Accumulated profit', retained));
+    if (totalFixedY > 0) rows.push(R(lang === 'is' ? 'Eigið fé í fasteignum (bókf. verð − áhvílandi lán)' : 'Equity in properties (book value − mortgages)', propertyEquityY));
     rows.push(R(t('totalEquity'), totalEquityY));
     getSection('long_term_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
-    rows.push(R(t('longTermLiabilities'), totalLongTerm));
+    bk.liability.forEach(({ acc, closing }) => rows.push(R(keyLbl(acc), closing)));
+    rows.push(R(t('longTermLiabilities'), staticLongTerm + liabKeysY));
     getSection('current_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
-    rows.push(R(t('currentLiabilities'), totalCurrentLiab));
+    rows.push(R(t('currentLiabilities'), staticCurrentLiab));
     rows.push(R(t('equityAndLiabilities'), totalEquityAndLiabY));
-    if (hasPosition) {
-      rows.push(SEC(lang === 'is' ? `Fjárhagsstaða í árslok ${y}` : `Financial position at year-end ${y}`));
-      rows.push(R(lang === 'is' ? 'Handbært fé (reiknað)' : 'Cash (calculated)', cash));
-      bk.asset.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
-      rows.push(R(t('totalAssets'), posAssets));
-      bk.liability.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
-      rows.push(R(lang === 'is' ? 'Skuldir samtals' : 'Total liabilities', posLiab));
-      bk.equity.forEach(({ acc, closing }) => rows.push(R(`  ${acc.number} ${lang === 'is' ? acc.name : (acc.nameEn || acc.name)}`, closing)));
-      rows.push(R(lang === 'is' ? 'Uppsafnaður hagnaður (fyrir skatt)' : 'Accumulated profit (before tax)', retained));
-      rows.push(R(t('totalEquity'), posEquity));
-      rows.push(R(lang === 'is' ? 'Skuldir og eigið fé' : 'Liabilities and equity', posLiab + posEquity));
-      if (Math.abs(posDiff) > 1) rows.push(R(lang === 'is' ? 'Mismunur (vantar opnunarstöður)' : 'Difference (opening balances incomplete)', posDiff));
-    }
+    if (Math.abs(bsDiffY) > 1) rows.push(R(lang === 'is' ? 'Mismunur (vantar lán/opnunarstöður)' : 'Difference (loans/opening balances incomplete)', bsDiffY));
     return {
       columns: [
         { header: t('description'), key: 'label', width: 120 },
@@ -570,6 +588,12 @@ export default function AnnualAccounts() {
                   </tr>
                 ))}
                 <BSRow label={t('currentAssets')} amount={totalCurrentAssets} bold />
+                {balanceKeys.asset.map(({ acc, closing }) => (
+                  <tr key={acc.id}>
+                    <td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td>
+                  </tr>
+                ))}
                 <BSRow label={t('totalAssets')} amount={totalAssets} bold />
               </tbody>
             </table>
@@ -599,8 +623,17 @@ export default function AnnualAccounts() {
                     <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
-                <BSRow label={lang === 'is' ? 'HagnaÃ°ur / tap Ã¡rs' : 'Net result for year'} amount={pl.netResult} indent />
-                <BSRow label={t('totalEquity')} amount={totalEquity} bold />
+                {balanceKeys.equity.map(({ acc, closing }) => (
+                  <tr key={acc.id}>
+                    <td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td>
+                  </tr>
+                ))}
+                <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Uppsafnaður hagnaður' : 'Accumulated profit'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(retainedEarnings)}</td></tr>
+                {totalFixedAssets > 0 && (
+                  <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Eigið fé í fasteignum (bókf. verð − áhvílandi lán)' : 'Equity in properties (book value − mortgages)'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(propertyEquity)}</td></tr>
+                )}
+                <BSRow label={t('totalEquity')} amount={totalEquityFull} bold />
 
                 <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('longTermLiabilities')}</td></tr>
                 {getSection('long_term_liabilities').map(item => (
@@ -613,7 +646,13 @@ export default function AnnualAccounts() {
                     <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
-                <BSRow label={t('longTermLiabilities')} amount={totalLongTerm} bold />
+                {balanceKeys.liability.map(({ acc, closing }) => (
+                  <tr key={acc.id}>
+                    <td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td>
+                  </tr>
+                ))}
+                <BSRow label={t('longTermLiabilities')} amount={staticLongTerm + posLiab} bold />
 
                 <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('currentLiabilities')}</td></tr>
                 {getSection('current_liabilities').map(item => (
@@ -626,61 +665,20 @@ export default function AnnualAccounts() {
                     <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
                   </tr>
                 ))}
-                <BSRow label={t('currentLiabilities')} amount={totalCurrentLiab} bold />
+                <BSRow label={t('currentLiabilities')} amount={staticCurrentLiab} bold />
                 <BSRow label={t('totalEquityAndLiabilities')} amount={totalEquityAndLiab} bold />
               </tbody>
             </table>
-            {Math.abs(totalAssets - totalEquityAndLiab) > 1 && (
-              <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-xs text-yellow-700">
+            {Math.abs(bsDiff) > 1 ? (
+              <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-xs text-yellow-800">
                 âš  {lang === 'is' ? 'Efnahagsreikningur jafnast ekki â€” uppfÃ¦rÃ°u opnunarstÃ¶Ã°ur' : 'Balance sheet does not balance â€” update opening balances'}
+              </div>
+            ) : (
+              <div className="px-4 py-2 bg-green-50 border-t border-green-200 text-xs text-green-700">
+                {lang === 'is' ? '✓ Efnahagur jafnast' : '✓ Balance sheet balances'}
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Per-year financial position from the keys + cash + retained earnings */}
-      {hasPosition && (activeTab === 'balance' || true) && (
-        <div className={`bg-white rounded-xl border border-gray-200 overflow-hidden mb-5 ${activeTab !== 'balance' ? 'hidden print-only' : ''}`}>
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h2 className="font-bold text-gray-900">{lang === 'is' ? `Fjárhagsstaða í árslok ${year}` : `Financial position at year-end ${year}`}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Reiknuð úr Bókhaldslyklum, handbæru fé og uppsöfnuðum hagnaði — flyst milli ára.' : 'From your keys, cash and accumulated profit — carried year to year.'}</p>
-          </div>
-          <table className="w-full">
-            <tbody className="divide-y divide-gray-50">
-              <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('assets')}</td></tr>
-              <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Handbært fé (reiknað)' : 'Cash (calculated)'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(trackedCash)}</td></tr>
-              {balanceKeys.asset.map(({ acc, closing }) => (
-                <tr key={acc.id}><td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td></tr>
-              ))}
-              <BSRow label={t('totalAssets')} amount={posAssets} bold />
-
-              <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{lang === 'is' ? 'Skuldir' : 'Liabilities'}</td></tr>
-              {balanceKeys.liability.map(({ acc, closing }) => (
-                <tr key={acc.id}><td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td></tr>
-              ))}
-              <BSRow label={lang === 'is' ? 'Skuldir samtals' : 'Total liabilities'} amount={posLiab} bold />
-
-              <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('equity')}</td></tr>
-              {balanceKeys.equity.map(({ acc, closing }) => (
-                <tr key={acc.id}><td className="px-4 py-1.5 text-sm pl-8">{acc.number} {lang === 'is' ? acc.name : (acc.nameEn || acc.name)}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td></tr>
-              ))}
-              <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Uppsafnaður hagnaður (fyrir skatt)' : 'Accumulated profit (before tax)'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(retainedEarnings)}</td></tr>
-              <BSRow label={t('totalEquity')} amount={posEquity} bold />
-              <BSRow label={lang === 'is' ? 'Skuldir og eigið fé' : 'Liabilities and equity'} amount={posLiab + posEquity} bold />
-            </tbody>
-          </table>
-          {Math.abs(posDiff) > 1 ? (
-            <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-xs text-yellow-800">
-              {lang === 'is'
-                ? `Mismunur ${fmtISK(posDiff)} — opnunarstöður vantar eða færsla er óflokkuð. Skráðu opnunarstöðu (t.d. eigið fé eða handbært fé á móti lánum) svo staðan jafnist.`
-                : `Off by ${fmtISK(posDiff)} — opening balances are incomplete or an entry is unclassified. Add the opening balance (e.g. equity or cash matching the loans) so it balances.`}
-            </div>
-          ) : (
-            <div className="px-4 py-2 bg-green-50 border-t border-green-200 text-xs text-green-700">
-              {lang === 'is' ? '✓ Efnahagur jafnast' : '✓ Balances'}
-            </div>
-          )}
         </div>
       )}
 
