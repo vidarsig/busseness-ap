@@ -161,8 +161,11 @@ export default function AnnualAccounts() {
     .filter(b => assetVisible(b, year))
     .map(b => ({ item: b, value: assetBookValue(b, year) }));
   const totalFixedAssets = fixedAssetRows.reduce((s, r) => s + r.value, 0);
-  const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + b.amount, 0);
-  const totalAssets = totalFixedAssets + totalCurrentAssets;
+  // The cash line ("Handbært fé") reflects the year-end CALCULATED cash (trackedCash,
+  // defined below) so it mirrors the reconciled bank balance rather than a static 0.
+  // totalCurrentAssets / totalAssets are computed after trackedCash (see below).
+  const isCashLine = (b: BalanceSheetItem) =>
+    b.computed === 'cash' || b.id === 'bs1' || (b.section === 'current_assets' && /handbært/i.test(b.name));
 
   const totalEquity = getSection('equity').reduce((s, b) => s + b.amount, 0) + pl.netResult;
   const totalLongTerm = getSection('long_term_liabilities').reduce((s, b) => s + b.amount, 0);
@@ -210,6 +213,11 @@ export default function AnnualAccounts() {
       .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [data.transactions, data.accounts, year]);
+  // Current assets: the cash line shows the calculated (bank) cash for the selected
+  // year; every other line keeps its static amount.
+  const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? trackedCash : b.amount;
+  const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
+  const totalAssets = totalFixedAssets + totalCurrentAssets;
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
     return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
@@ -276,7 +284,10 @@ export default function AnnualAccounts() {
     // acquired year), so each year's PDF shows that year's depreciated value.
     const fixedRowsY = getSection('fixed_assets').filter(i => assetVisible(i, y)).map(i => ({ i, v: assetBookValue(i, y) }));
     const totalFixedY = fixedRowsY.reduce((s, r) => s + r.v, 0);
-    const totalAssetsY = totalFixedY + totalCurrentAssets;
+    // Current assets for THIS year: the cash line uses this year's calculated cash.
+    const currentAssetValY = (i: BalanceSheetItem) => isCashLine(i) ? cash : i.amount;
+    const totalCurrentAssetsY = getSection('current_assets').reduce((s, i) => s + currentAssetValY(i), 0);
+    const totalAssetsY = totalFixedY + totalCurrentAssetsY;
     const rows: ExportRow[] = [];
     rows.push(SEC(t('incomeStatement')));
     rows.push(SEC(t('revenues')));
@@ -297,8 +308,8 @@ export default function AnnualAccounts() {
     rows.push(SEC(t('assets')));
     fixedRowsY.forEach(({ i, v }) => rows.push(R(nm(i), v)));
     rows.push(R(t('fixedAssets'), totalFixedY));
-    getSection('current_assets').forEach(i => rows.push(R(nm(i), i.amount)));
-    rows.push(R(t('currentAssets'), totalCurrentAssets));
+    getSection('current_assets').forEach(i => rows.push(R(nm(i), currentAssetValY(i))));
+    rows.push(R(t('currentAssets'), totalCurrentAssetsY));
     rows.push(R(t('totalAssets'), totalAssetsY));
     rows.push(SEC(t('equityAndLiabilities')));
     getSection('equity').forEach(i => rows.push(R(nm(i), i.amount)));
@@ -551,10 +562,11 @@ export default function AnnualAccounts() {
                   <tr key={item.id}>
                     <td className="px-4 py-1.5 text-sm pl-8 flex items-center gap-2">
                       {lang === 'is' ? item.name : (item.nameEn || item.name)}
-                      <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>
-                      <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>
+                      {isCashLine(item) && <span className="text-xs text-gray-400">({lang === 'is' ? 'skv. banka' : 'per bank'})</span>}
+                      {!isCashLine(item) && <button onClick={() => setBsModal({ open: true, item })} className="text-gray-300 hover:text-blue-500 no-print"><Pencil className="w-3 h-3" /></button>}
+                      {!isCashLine(item) && <button onClick={() => setDeleteId(item.id)} className="text-gray-300 hover:text-red-500 no-print"><Trash2 className="w-3 h-3" /></button>}
                     </td>
-                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(item.amount)}</td>
+                    <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(currentAssetValue(item))}</td>
                   </tr>
                 ))}
                 <BSRow label={t('currentAssets')} amount={totalCurrentAssets} bold />

@@ -118,6 +118,9 @@ export interface BalanceSheetItem {
   cost?: number;
   landValue?: number;       // non-depreciating portion (absolute, same currency as cost)
   depreciationRate?: number; // % per year on the building (cost − landValue)
+  // When 'cash', this line's value is the year-end CALCULATED cash (trackedCash) —
+  // i.e. it reflects the reconciled bank balance — instead of the static `amount`.
+  computed?: 'cash';
 }
 
 export interface Account {

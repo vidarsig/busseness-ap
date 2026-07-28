@@ -71,7 +71,7 @@ const defaultData: AppData = {
   transactions: [],
   categoryRules: [],
   balanceSheetItems: [
-    { id: 'bs1', name: 'Handbært fé og bankainnstæður', nameEn: 'Cash and bank balances', section: 'current_assets', amount: 0 },
+    { id: 'bs1', name: 'Handbært fé og bankainnstæður', nameEn: 'Cash and bank balances', section: 'current_assets', amount: 0, computed: 'cash' },
     { id: 'bs2', name: 'Viðskiptakröfur', nameEn: 'Trade receivables', section: 'current_assets', amount: 0 },
     { id: 'bs3', name: 'Aðrar skammtímaeignir', nameEn: 'Other current assets', section: 'current_assets', amount: 0 },
     { id: 'bs4', name: 'Varanlegir rekstrarfjármunir', nameEn: 'Tangible fixed assets', section: 'fixed_assets', amount: 0 },
