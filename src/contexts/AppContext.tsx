@@ -13,6 +13,55 @@ import { formatCurrency, formatISK } from '../utils/formatters';
 
 const STORAGE_KEY = 'bokhalds_app_v2';
 
+// ── One-time owner data seeds ───────────────────────────────────────────────
+// The owner (Efra skrið ehf) bought three properties on real deeds. They belong
+// on the balance sheet as fixed assets at BOOK VALUE (building depreciates 2%/yr,
+// land never — see BalanceSheetItem). This seed adds them once, then records a
+// marker in `seededMigrations` so it never re-adds them (even if the owner later
+// edits or deletes one). It is gated to the owner's company only, so future users
+// (e.g. the US launch) never receive these rows. Land = 20% of cost (standard
+// split; adjustable in the app). Values from the afsöl/kaupsamningar on file.
+const EFRA_SEED_ID = 'efra-skrid-properties-v1';
+const OWNER_KT = '6901201780'; // Efra skrið ehf
+const EFRA_PROPERTIES: BalanceSheetItem[] = [
+  {
+    id: 'bs-efra-deildartun4-0301',
+    name: 'Deildartún 4, efsta hæð (íbúð 01-0301), Akranesi',
+    nameEn: 'Deildartún 4, top-floor flat (01-0301), Akranes',
+    section: 'fixed_assets', amount: 9000000,
+    cost: 9000000, acquiredYear: 2021, landValue: 1800000, depreciationRate: 2,
+  },
+  {
+    id: 'bs-efra-deildartun4-0101',
+    name: 'Deildartún 4, íbúð 01-0101, Akranesi',
+    nameEn: 'Deildartún 4, flat 01-0101, Akranes',
+    section: 'fixed_assets', amount: 30000000,
+    cost: 30000000, acquiredYear: 2022, landValue: 6000000, depreciationRate: 2,
+  },
+  {
+    id: 'bs-efra-akurgerdi13',
+    name: 'Akurgerði 13 (01-0101), Akranesi',
+    nameEn: 'Akurgerði 13 (01-0101), Akranes',
+    section: 'fixed_assets', amount: 11000000,
+    cost: 11000000, acquiredYear: 2022, landValue: 2200000, depreciationRate: 2,
+  },
+];
+
+function applyOwnerSeeds(d: AppData): AppData {
+  const kt = (d.settings.company?.kennitala ?? '').replace(/\D/g, '');
+  const name = (d.settings.company?.name ?? '').toLowerCase();
+  const isOwner = kt === OWNER_KT || name.includes('efra skrið') || name.includes('efra skrid');
+  const done = d.seededMigrations ?? [];
+  if (!isOwner || done.includes(EFRA_SEED_ID)) return d;
+  const existing = new Set(d.balanceSheetItems.map(b => b.id));
+  const toAdd = EFRA_PROPERTIES.filter(p => !existing.has(p.id));
+  return {
+    ...d,
+    balanceSheetItems: [...d.balanceSheetItems, ...toAdd],
+    seededMigrations: [...done, EFRA_SEED_ID],
+  };
+}
+
 const defaultData: AppData = {
   transactions: [],
   categoryRules: [],
@@ -223,9 +272,10 @@ const AppContext = createContext<AppContextValue | null>(null);
 const SYNC_TS_KEY = 'bokhalds_sync_ts';
 
 function migrateData(parsed: Partial<AppData>): AppData {
-  return {
+  return applyOwnerSeeds({
     ...defaultData,
     ...parsed,
+    seededMigrations: parsed.seededMigrations ?? [],
     accounts: parsed.accounts?.length ? parsed.accounts : DEFAULT_ACCOUNTS,
     invoices: (parsed.invoices ?? []).map((inv: Invoice) => ({ ...inv, type: inv.type ?? 'invoice' as const })),
     recurringTransactions: parsed.recurringTransactions ?? [],
@@ -263,7 +313,7 @@ function migrateData(parsed: Partial<AppData>): AppData {
       companyIdLabel: parsed.settings?.companyIdLabel ?? '',
       vatNumberLabel: parsed.settings?.vatNumberLabel ?? '',
     },
-  };
+  });
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {

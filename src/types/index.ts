@@ -483,6 +483,7 @@ export interface AppData {
   appUsers: AppUser[];
   aiChat?: { role: 'user' | 'assistant'; content: string }[]; // persisted AI assistant conversation
   aiMemory?: string;                                           // facts the AI should always remember
+  seededMigrations?: string[];                                 // one-time data seeds already applied (idempotency markers)
   settings: AppSettings;
 }
 
