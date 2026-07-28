@@ -80,6 +80,21 @@ function AccountModal({ initial, onSave, onClose }: {
               <p className="text-[11px] text-gray-400 mt-1">
                 {lang === 'is' ? 'Staða flyst milli ára — lokastaða hvers árs verður opnunarstaða þess næsta.' : 'This balance carries across years — each year’s closing becomes the next year’s opening.'}
               </p>
+              {form.type === 'liability' && (
+                <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                  <input type="checkbox" className="mt-0.5"
+                    checked={!!form.isPropertyMortgage}
+                    onChange={e => set('isPropertyMortgage', e.target.checked || undefined)} />
+                  <span className="text-sm text-gray-700">
+                    {lang === 'is' ? 'Veðlán á fasteign' : 'Property mortgage'}
+                    <span className="block text-[11px] text-gray-400">
+                      {lang === 'is'
+                        ? 'Lán sem fjármagnaði fasteign — dregst frá bókfærðu verði eignarinnar í eigin fé. Ekki fyrir fjölskyldu-/rekstrarlán.'
+                        : 'A loan that financed a property — nets against the property’s book value in equity. Not for family/working-capital loans.'}
+                    </span>
+                  </span>
+                </label>
+              )}
             </div>
           )}
           {form.isSystem && (

@@ -141,6 +141,11 @@ export interface Account {
   // revenue/expense (P&L) accounts, which reset each year.
   openingBalance?: number;
   openingYear?: number;
+  // A liability key that is a MORTGAGE financing the fixed assets (properties):
+  // only these net against property book value when computing equity-in-properties.
+  // Non-mortgage debt (family/working-capital loans) stays as a normal liability,
+  // offset by the cash/asset it produced. Undefined = not a property mortgage.
+  isPropertyMortgage?: boolean;
 }
 
 export interface InvoiceLine {

@@ -228,7 +228,7 @@ export default function AnnualAccounts() {
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
     return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
-  }, [data.transactions, year, data.settings.corporateTaxRate]);
+  }, [data.transactions, year, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT]);
   const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
   const posLiab = balanceKeys.liability.reduce((s, r) => s + r.closing, 0);
   const posEquityKeys = balanceKeys.equity.reduce((s, r) => s + r.closing, 0);
@@ -249,7 +249,11 @@ export default function AnnualAccounts() {
   // them (the liability keys). This balances the property asset against its mortgages
   // + this equity, so the properties don't inflate the sheet. Only when properties
   // exist; any residual (bsDiff) is then the honest operating gap (cash vs equity).
-  const propertyEquity = totalFixedAssets > 0 ? totalFixedAssets - posLiab : 0;
+  // Only MORTGAGE keys (loans that financed the properties) net against property book
+  // value. Non-mortgage debt (family/working-capital loans) stays in liabilities,
+  // offset by the cash/asset it produced — so the sheet balances by construction.
+  const mortgageLiab = balanceKeys.liability.reduce((s, r) => s + (r.acc.isPropertyMortgage ? r.closing : 0), 0);
+  const propertyEquity = totalFixedAssets > 0 ? totalFixedAssets - mortgageLiab : 0;
   const totalEquityFull = staticEquity + posEquityKeys + retainedEarnings + propertyEquity;
   const totalEquityAndLiab = totalLiabilities + totalEquityFull;
   const bsDiff = totalAssets - totalEquityAndLiab;
@@ -317,7 +321,10 @@ export default function AnnualAccounts() {
     const liabKeysY = bk.liability.reduce((s, r) => s + r.closing, 0);
     const equityKeysY = bk.equity.reduce((s, r) => s + r.closing, 0);
     const totalAssetsY = totalFixedY + totalCurrentAssetsY + assetKeysY;
-    const propertyEquityY = totalFixedY > 0 ? totalFixedY - liabKeysY : 0;
+    // Only MORTGAGE keys net against the properties (mirrors the on-screen calc);
+    // non-mortgage debt stays a normal liability offset by the cash it produced.
+    const mortgageLiabY = bk.liability.reduce((s, r) => s + (r.acc.isPropertyMortgage ? r.closing : 0), 0);
+    const propertyEquityY = totalFixedY > 0 ? totalFixedY - mortgageLiabY : 0;
     const totalLiabY = liabKeysY + staticLongTerm + staticCurrentLiab + overdraftY;
     const totalEquityY = staticEquity + equityKeysY + retained + propertyEquityY;
     const totalEquityAndLiabY = totalLiabY + totalEquityY;
