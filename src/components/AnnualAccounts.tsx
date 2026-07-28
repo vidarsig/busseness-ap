@@ -217,7 +217,7 @@ export default function AnnualAccounts() {
     [data.transactions, data.accounts, year]);
   // Current assets: the cash line shows the calculated (bank) cash for the selected
   // year; every other line keeps its static amount.
-  const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? trackedCash : b.amount;
+  const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? (b.cashByYear?.[String(year)] ?? trackedCash) : b.amount;
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
@@ -299,7 +299,7 @@ export default function AnnualAccounts() {
     const fixedRowsY = getSection('fixed_assets').filter(i => assetVisible(i, y)).map(i => ({ i, v: assetBookValue(i, y) }));
     const totalFixedY = fixedRowsY.reduce((s, r) => s + r.v, 0);
     // Current assets for THIS year: the cash line uses this year's calculated cash.
-    const currentAssetValY = (i: BalanceSheetItem) => isCashLine(i) ? cash : i.amount;
+    const currentAssetValY = (i: BalanceSheetItem) => isCashLine(i) ? (i.cashByYear?.[String(y)] ?? cash) : i.amount;
     const totalCurrentAssetsY = getSection('current_assets').reduce((s, i) => s + currentAssetValY(i), 0);
     // Unified balance sheet for THIS year (mirrors the on-screen statement): pulls
     // the key balances (loans, owner account) + accumulated profit, and recognises

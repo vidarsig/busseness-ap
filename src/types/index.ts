@@ -121,6 +121,10 @@ export interface BalanceSheetItem {
   // When 'cash', this line's value is the year-end CALCULATED cash (trackedCash) —
   // i.e. it reflects the reconciled bank balance — instead of the static `amount`.
   computed?: 'cash';
+  // Optional per-year REAL bank balance override (keyed by year). When set for a year,
+  // the cash line uses this actual reconciled figure instead of the calculated cash —
+  // for when the computed cash is polluted (e.g. mixed personal/company entries).
+  cashByYear?: Record<string, number>;
 }
 
 export interface Account {

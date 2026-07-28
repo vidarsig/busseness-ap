@@ -50,21 +50,40 @@ const EFRA_PROPERTIES: BalanceSheetItem[] = [
   },
 ];
 
+// The owner's REAL company cash = the Arion account 0370-26-690127 year-end balances
+// (his Landsbankinn account is PRIVATE, used only for framlag). The app's calculated
+// cash is polluted by mixed personal/framlag entries ("the mess", not cleaned yet), so
+// the balance-sheet cash line uses these actual reconciled figures instead. 2026 is the
+// current partial-year balance (all loans settled 2026 → big outflows); owner updates at
+// year-end. Computed by cumsum of the full Arion export.
+const EFRA_CASH_SEED_ID = 'efra-cash-arion-v1';
+const ARION_CASH_BY_YEAR: Record<string, number> = {
+  '2020': 15112, '2021': 2827298, '2022': 600, '2023': 3542,
+  '2024': 505063, '2025': 206489, '2026': -5528872,
+};
+const isCashLineItem = (b: BalanceSheetItem) =>
+  b.computed === 'cash' || b.id === 'bs1' || (b.section === 'current_assets' && /handbært/i.test(b.name));
+
 function applyOwnerSeeds(d: AppData): AppData {
   const kt = (d.settings.company?.kennitala ?? '').replace(/\D/g, '');
   const name = (d.settings.company?.name ?? '').toLowerCase();
   const isOwner = kt === OWNER_KT || name.includes('efra skrið') || name.includes('efra skrid');
-  const done = d.seededMigrations ?? [];
-  if (!isOwner || done.includes(EFRA_SEED_ID)) return d;
-  // Upsert by stable id: drop any earlier copy (e.g. the v1 20%-land version) and
-  // re-add the corrected records, then mark done so this runs exactly once.
-  const seededIds = new Set(EFRA_PROPERTIES.map(p => p.id));
-  const kept = d.balanceSheetItems.filter(b => !seededIds.has(b.id));
-  return {
-    ...d,
-    balanceSheetItems: [...kept, ...EFRA_PROPERTIES],
-    seededMigrations: [...done, EFRA_SEED_ID],
-  };
+  if (!isOwner) return d;
+  const done = [...(d.seededMigrations ?? [])];
+  let items = d.balanceSheetItems;
+  let changed = false;
+  // Seed 1: the 3 properties as fixed assets (upsert by stable id).
+  if (!done.includes(EFRA_SEED_ID)) {
+    const seededIds = new Set(EFRA_PROPERTIES.map(p => p.id));
+    items = [...items.filter(b => !seededIds.has(b.id)), ...EFRA_PROPERTIES];
+    done.push(EFRA_SEED_ID); changed = true;
+  }
+  // Seed 2: the real Arion per-year cash on the cash line (overrides the polluted calc).
+  if (!done.includes(EFRA_CASH_SEED_ID)) {
+    items = items.map(b => isCashLineItem(b) ? { ...b, cashByYear: { ...(b.cashByYear ?? {}), ...ARION_CASH_BY_YEAR } } : b);
+    done.push(EFRA_CASH_SEED_ID); changed = true;
+  }
+  return changed ? { ...d, balanceSheetItems: items, seededMigrations: done } : d;
 }
 
 const defaultData: AppData = {
