@@ -110,7 +110,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
   function handleTypeChange(newType: TransactionType) {
     const defaultCat = newType === 'income' ? 'sala_thjonustu' : newType === 'transfer' ? 'ekki_rekstur' : 'adrir_rekstrargjold';
     // An invoice link only makes sense on income — drop it when leaving income.
-    setForm(f => ({ ...f, type: newType, category: defaultCat, vatRate: newType === 'transfer' ? 0 : f.vatRate, invoiceId: newType === 'income' ? f.invoiceId : undefined }));
+    setForm(f => ({ ...f, type: newType, category: defaultCat, vatRate: newType === 'transfer' ? 0 : f.vatRate, invoiceId: newType === 'income' ? f.invoiceId : undefined, vatExempt: newType === 'income' ? f.vatExempt : undefined }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -315,11 +315,24 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               </div>
             ) : (
               <select className={inputCls} value={form.vatRate}
-                onChange={e => set('vatRate', parseFloat(e.target.value))}>
+                onChange={e => set('vatRate', parseFloat(e.target.value))}
+                disabled={!!form.vatExempt}>
                 {(cc.isUSA ? [data.settings.salesTaxRate, 0] : cc.vatRates)
                   .filter((r, i, arr) => arr.indexOf(r) === i)
                   .map(r => <option key={r} value={r}>{r}%</option>)}
               </select>
+            )}
+            {form.type === 'income' && !cc.isUSA && (
+              <label className="flex items-start gap-2 mt-2 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={!!form.vatExempt}
+                  onChange={e => set('vatExempt', e.target.checked || undefined)} />
+                <span className="text-sm text-gray-700">
+                  {lang === 'is' ? 'Undanþegið VSK (t.d. húsaleiga)' : `Exempt from ${cc.vatTerm} (e.g. rent)`}
+                  <span className="block text-[11px] text-gray-400">
+                    {lang === 'is' ? 'Sýnist sem „velta án VSK“ — utan skattskyldrar veltu, enginn útskattr.' : `Shown as turnover with no ${cc.vatTerm} — outside taxable turnover.`}
+                  </span>
+                </span>
+              </label>
             )}
           </div>
 

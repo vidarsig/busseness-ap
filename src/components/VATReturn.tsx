@@ -96,6 +96,9 @@ export default function VATReturn() {
   const vatRows = isUS ? usRows : [
     ...outputRateRows,
     { field: '',   label: lang === 'is' ? 'Samtals útskattr' : `Total output ${vatTerm}`, value: vat.totalOutput },
+    // Exempt turnover (undanþegin — e.g. residential rent): reported "án VSK", outside
+    // taxable turnover, carries no VAT. Only shown when there is any.
+    ...(vat.exemptTurnover > 0 ? [{ field: '', label: lang === 'is' ? 'Velta án VSK (undanþegin)' : `Exempt turnover (no ${vatTerm})`, value: vat.exemptTurnover }] : []),
     ...inputRateRows,
     { field: '',   label: lang === 'is' ? 'Samtals innskattr' : `Total input ${vatTerm}`, value: vat.totalInput },
     { field: vat.netVAT >= 0 ? netField : String(parseInt(netField) + 1),

@@ -118,6 +118,7 @@ export interface VATSummary {
   totalOutput: number;
   totalInput: number;
   netVAT: number;
+  exemptTurnover: number; // undanþegin velta (e.g. residential rent) — reported "án VSK", outside taxable turnover
 }
 
 export function calcVATSummary(transactions: Transaction[], rates: number[] = [24, 11, 0], pricesInclVat = false): VATSummary {
@@ -125,10 +126,13 @@ export function calcVATSummary(transactions: Transaction[], rates: number[] = [2
   // return — that would UNDER-state turnover on an official (RSK) filing. Treat it
   // as 0% so its turnover still shows (visible, no invented VAT) rather than dropping.
   const rateOf = (t: Transaction) => (typeof t.vatRate === 'number' && !Number.isNaN(t.vatRate)) ? t.vatRate : 0;
+  // VAT-exempt turnover (undanþegin) is OUTSIDE the taxable buckets: no output VAT,
+  // and it must not inflate skattskyld velta. Reported separately as "Velta án VSK".
+  const taxable = (t: Transaction) => !t.vatExempt;
 
   const outputByRate = rates.map(rate => {
     const filtered = transactions.filter(
-      t => t.type === 'income' && rateOf(t) === rate
+      t => t.type === 'income' && taxable(t) && rateOf(t) === rate
     );
     const baseAmount = filtered.reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
     const vatAmount = filtered.reduce((sum, t) => sum + getVATAmountISK(t, pricesInclVat), 0);
@@ -137,17 +141,20 @@ export function calcVATSummary(transactions: Transaction[], rates: number[] = [2
 
   const inputByRate = rates.map(rate => {
     const filtered = transactions.filter(
-      t => t.type === 'expense' && rateOf(t) === rate
+      t => t.type === 'expense' && taxable(t) && rateOf(t) === rate
     );
     const baseAmount = filtered.reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
     const vatAmount = filtered.reduce((sum, t) => sum + getVATAmountISK(t, pricesInclVat), 0);
     return { rate, baseAmount, vatAmount, totalAmount: baseAmount + vatAmount };
   });
 
+  const exemptTurnover = transactions
+    .filter(t => t.type === 'income' && t.vatExempt)
+    .reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
   const totalOutput = outputByRate.reduce((s, r) => s + r.vatAmount, 0);
   const totalInput = inputByRate.reduce((s, r) => s + r.vatAmount, 0);
 
-  return { outputByRate, inputByRate, totalOutput, totalInput, netVAT: totalOutput - totalInput };
+  return { outputByRate, inputByRate, totalOutput, totalInput, netVAT: totalOutput - totalInput, exemptTurnover };
 }
 
 export interface ProfitLoss {

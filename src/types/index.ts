@@ -99,6 +99,7 @@ export interface Transaction {
   invoiceId?: string;    // optional: link an income deposit to the Reikningur it pays — the invoice's VAT rate is authoritative (R9-6), so the VSK report never uses a guessed rate on that row
   accountId?: string;    // optional: book this entry onto a chart-of-accounts key (Bókhaldslyklar / data.accounts)
   interestAmount?: number; // optional: for a loan payment, the interest portion (a financial expense). Only the principal (amount − interest) reduces the loan balance; interest hits the P&L.
+  vatExempt?: boolean;   // optional: turnover EXEMPT from VAT (undanþegin — e.g. residential rent). Shown on the VAT return as "Velta án VSK", OUTSIDE taxable turnover; no output VAT, and (unlike 0%-rated) no input-VAT reclaim on related costs. Still revenue in the P&L.
 }
 
 export interface BalanceSheetItem {
