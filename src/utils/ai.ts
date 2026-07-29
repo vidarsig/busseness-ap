@@ -399,6 +399,7 @@ rows: if asked for a specific old row, say the owner needs to switch to that yea
 
 ` : ''}COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
+TAX SETTINGS: ${data.settings.vatTerm || 'tax'} rate ${data.settings.salesTaxRate ?? data.settings.standardRate ?? 0}%${data.settings.usState ? ` · state ${data.settings.usState}` : ''}${data.settings.caProvince ? ` · province ${data.settings.caProvince}` : ''} | prices include tax: ${data.settings.pricesIncludeVAT ? 'yes' : 'no'}
 FISCAL YEAR (default): ${data.settings.fiscalYear} | CORPORATE TAX RATE: ${data.settings.corporateTaxRate}%
 LANGUAGE: ${lang === 'is' ? 'Icelandic' : 'English'}
 YEARS WITH DATA: ${years.join(', ') || 'none'}
@@ -561,6 +562,14 @@ You can GUIDE the user through SETTINGS in plain words — explain what any sett
 {"set":{"companyEmail":"me@site.com","invoicePrefix":"R","paymentsEnabled":true}}
 \`\`\`
 Only these keys can be changed (anything else is ignored for safety): companyName, companyEmail, companyPhone, companyAddress, companyId (${data.settings.companyIdLabel || 'company ID'}), invoicePrefix, pricesIncludeVAT (true/false), paymentsEnabled (true/false), defaultCurrency, salesTaxRate (number), fiscalYear (number). Include ONLY the keys the user actually wants changed. Write ONE short plain-language line before the block ("I'll turn on online payments."). NEVER touch API keys, Supabase, plan or permissions — you cannot and must not. The owner sees a preview and taps "Apply" — you propose, the owner confirms.
+
+SPOT & FIX A WRONG SETTING FROM A COMPLAINT. When the user describes a PROBLEM (not an explicit settings request) — "customers are charged too much tax", "it shows the wrong currency", "the total is wrong" — FIRST check whether a wrong setting explains it (compare the complaint against the TAX SETTINGS / CURRENCY / COUNTRY above). If it does, say what's wrong in one plain sentence and PROPOSE the corrected value with a jobboks-settings block. Common symptom → fix:
+- Charging sales tax but they're in a no-sales-tax US state (Oregon, Montana, New Hampshire, Delaware, Alaska) → salesTaxRate 0.
+- Tax/total too high or too low → salesTaxRate doesn't match their state's base rate.
+- Totals show the wrong currency (e.g. "kr"/krónur for a US contractor) → defaultCurrency wrong for their country.
+- App adds tax on top but their prices already include it (or vice-versa) → flip pricesIncludeVAT.
+- Invoice numbers start with the wrong letter → invoicePrefix.
+Only propose a fix you're confident about, and only for the settable keys above. If the complaint is NOT a settings issue but a genuine app bug, say so plainly and do NOT invent a settings change — tell them it's been noted for the team (their comment is what gets it fixed).
 
 When the user describes a JOB or a SITE VISIT to log (e.g. "new job at 23 Oak Street, roof for John", "book a site visit for Mrs Green Tuesday"), record it by ending your reply with ONE fenced code block tagged jobboks-job containing ONLY JSON of this shape:
 \`\`\`jobboks-job
