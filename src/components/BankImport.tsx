@@ -37,18 +37,28 @@ function parseCsv(text: string): string[][] {
   });
 }
 
-function parseDate(raw: string): string {
+// preferMonthFirst: when a d/m/y date is genuinely ambiguous (both numbers ≤ 12),
+// which order to assume. US & Canadian bank files write MM/DD/YYYY, Icelandic and
+// most European ones DD/MM/YYYY. An unambiguous token (a number > 12) always wins
+// over this preference, so a stray DD/MM row in a US file still reads correctly.
+function parseDate(raw: string, preferMonthFirst = false): string {
   if (raw == null || raw === '') return todayISO();
   // Strip quotes/whitespace only — keep the . / - separators (Arion uses dots).
   const cleaned = String(raw).replace(/['"]/g, '').trim();
   // yyyy-mm-dd / yyyy.mm.dd / yyyy/mm/dd  (ISO-ish, year first)
   const iso = cleaned.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
   if (iso) return `${iso[1]}-${iso[2].padStart(2,'0')}-${iso[3].padStart(2,'0')}`;
-  // dd.mm.yyyy / dd/mm/yyyy / dd-mm-yyyy  (day first — Icelandic banks)
-  const dd = cleaned.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-  if (dd) {
-    const y = dd[3].length === 2 ? `20${dd[3]}` : dd[3];
-    return `${y}-${dd[2].padStart(2,'0')}-${dd[1].padStart(2,'0')}`;
+  // dd.mm.yyyy / mm.dd.yyyy and / or - separators. First two numbers are day & month
+  // in SOME order; disambiguate by value first, then by the country preference.
+  const dm = cleaned.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if (dm) {
+    const a = parseInt(dm[1], 10), b = parseInt(dm[2], 10);
+    const y = dm[3].length === 2 ? `20${dm[3]}` : dm[3];
+    let day: number, month: number;
+    if (a > 12)      { day = a; month = b; }   // first can't be a month → day-first
+    else if (b > 12) { month = a; day = b; }   // second can't be a month → month-first
+    else             { if (preferMonthFirst) { month = a; day = b; } else { day = a; month = b; } }
+    return `${y}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
   }
   // Excel serial date (days since 1899-12-30) — safety net if a cell comes raw.
   if (/^\d+(\.\d+)?$/.test(cleaned)) {
@@ -165,10 +175,10 @@ export function findHeaderMap(rows: string[][]): ImportColumnMap | null {
   return null;
 }
 
-export function parseBank(rows: string[][], format: BankFormat): ParsedRow[] {
+export function parseBank(rows: string[][], format: BankFormat, preferMonthFirst = false): ParsedRow[] {
   // Whatever the user picked, trust real headings over assumed positions.
   const byHeader = findHeaderMap(rows);
-  if (byHeader) return parseWithMap(rows, byHeader);
+  if (byHeader) return parseWithMap(rows, byHeader, preferMonthFirst);
 
   const dataRows = dataAfterHeader(rows);
   switch (format) {
@@ -178,31 +188,31 @@ export function parseBank(rows: string[][], format: BankFormat): ParsedRow[] {
       return dataRows.map(r => {
         const amt = parseAmount(r[1] ?? '');
         const desc = (r[3] || r[13] || r[6] || '').toString().trim();
-        return { date: parseDate(r[0] ?? ''), description: desc, reference: (r[5] || r[4] || '').toString().trim(), amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
+        return { date: parseDate(r[0] ?? '', preferMonthFirst), description: desc, reference: (r[5] || r[4] || '').toString().trim(), amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
       }).filter(r => r.amount > 0);
     case 'islandsbanki':
       return dataRows.map(r => {
         const credit = parseAmount(r[3] ?? '');
         const debit = parseAmount(r[4] ?? '');
         const amt = credit > 0 ? credit : -debit;
-        return { date: parseDate(r[0] ?? ''), description: r[1] ?? '', reference: r[2] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
+        return { date: parseDate(r[0] ?? '', preferMonthFirst), description: r[1] ?? '', reference: r[2] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
       }).filter(r => r.amount > 0);
     case 'landsbankinn':
       return dataRows.map(r => {
         const amt = parseAmount(r[2] ?? '');
-        return { date: parseDate(r[0] ?? ''), description: r[1] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
+        return { date: parseDate(r[0] ?? '', preferMonthFirst), description: r[1] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
       }).filter(r => r.amount > 0);
     case 'generic':
     default:
       return dataRows.map(r => {
         const amt = parseAmount(r[2] ?? r[1] ?? '');
-        return { date: parseDate(r[0] ?? ''), description: r[1] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
+        return { date: parseDate(r[0] ?? '', preferMonthFirst), description: r[1] ?? '', amount: Math.abs(amt), type: (amt >= 0 ? 'income' : 'expense') as 'income' | 'expense' };
       }).filter(r => r.amount > 0);
   }
 }
 
 // Migration: parse rows using an AI-detected column map (any program's layout).
-function parseWithMap(rows: string[][], map: ImportColumnMap): ParsedRow[] {
+function parseWithMap(rows: string[][], map: ImportColumnMap, preferMonthFirst = false): ParsedRow[] {
   const dataRows = rows.slice(map.headerRows).filter(r => r.length && String(r[map.date] ?? '').trim());
   return dataRows.map(r => {
     let amt: number;
@@ -215,7 +225,7 @@ function parseWithMap(rows: string[][], map: ImportColumnMap): ParsedRow[] {
     }
     const ref = map.reference != null ? String(r[map.reference] ?? '').trim() : '';
     return {
-      date: parseDate(String(r[map.date] ?? '')),
+      date: parseDate(String(r[map.date] ?? ''), preferMonthFirst),
       description: String(r[map.description] ?? '').trim(),
       reference: ref,
       amount: Math.abs(amt),
@@ -451,12 +461,14 @@ export default function BankImport() {
 
   async function handleParsedGrid(raw: string[][]) {
     if (raw.length < 2) { setError(lang === 'is' ? 'Skráin lítur út fyrir að vera tóm' : 'File appears to be empty'); return; }
+    // US & Canadian bank files date as MM/DD/YYYY; Iceland/EU as DD/MM/YYYY.
+    const preferMonthFirst = cc.code === 'US' || cc.code === 'CA';
     let parsed: ParsedRow[];
     if (format === 'auto') {
       setAiLoading(true);
       try {
         const map = await detectImportColumns(raw, lang);
-        parsed = parseWithMap(raw, map);
+        parsed = parseWithMap(raw, map, preferMonthFirst);
       } catch {
         setAiLoading(false);
         setError(lang === 'is' ? 'AI náði ekki að lesa dálkana — prófaðu annað snið eða CSV/Excel útflutning' : "AI couldn't read the columns — try another format or a CSV/Excel export");
@@ -464,7 +476,7 @@ export default function BankImport() {
       }
       setAiLoading(false);
     } else {
-      parsed = parseBank(raw, format);
+      parsed = parseBank(raw, format, preferMonthFirst);
     }
     if (parsed.length === 0) { setError(lang === 'is' ? 'Engar færslur fundust — prófaðu annað snið' : 'No rows parsed — try a different format'); return; }
     setRows(applyRulesToRows(parsed));
