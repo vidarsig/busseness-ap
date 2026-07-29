@@ -501,7 +501,7 @@ export default function AnnualAccounts() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-3 mb-5 flex flex-wrap gap-4 text-sm no-print">
           <span className="font-semibold text-blue-900">{company.name}</span>
           {company.kennitala && <span className="text-blue-700">{t('companyKennitala')}: {company.kennitala}</span>}
-          {company.vskNumber && <span className="text-blue-700">VSK: {company.vskNumber}</span>}
+          {company.vskNumber && <span className="text-blue-700">{cc.vatNumberLabel}: {company.vskNumber}</span>}
           <span className="text-blue-700">{t('fiscalYear')}: {year}</span>
         </div>
       )}
@@ -723,7 +723,7 @@ export default function AnnualAccounts() {
             <h3 className="font-semibold text-gray-800 mb-1">2. {t('note2Title')}</h3>
             <p className="text-sm text-gray-600 leading-relaxed">{t('note2Text')}</p>
             {company.vskNumber && (
-              <p className="text-sm text-gray-600 mt-1">{t('vatInfo')}: {company.vskNumber}</p>
+              <p className="text-sm text-gray-600 mt-1">{cc.vatNumberLabel}: {company.vskNumber}</p>
             )}
           </div>
 

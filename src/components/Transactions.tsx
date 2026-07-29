@@ -1064,7 +1064,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
       {/* Add/Edit Modal */}
       {modal.open && (
         <TransactionModal
-          initial={modal.tx ?? { ...EMPTY_FORM, currency: data.settings.defaultCurrency, eurToIskRate: data.settings.exchangeRates.EUR }}
+          initial={modal.tx ?? { ...EMPTY_FORM, currency: data.settings.defaultCurrency, eurToIskRate: data.settings.exchangeRates.EUR, vatRate: cc.isUSA ? (data.settings.salesTaxRate ?? 0) : cc.standardRate }}
           onSave={handleSave}
           onClose={() => setModal({ open: false })}
         />

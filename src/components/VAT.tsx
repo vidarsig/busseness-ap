@@ -45,7 +45,11 @@ export default function VAT() {
   else if (periodType === 'quarter') filtered = filterByQuarter(filtered, year, quarter);
   else filtered = filterByMonth(filtered, year, month);
 
-  const vat = calcVATSummary(filtered, cc.vatRates, data.settings.pricesIncludeVAT);
+  // For the US the taxable rate is the contractor's state sales-tax rate — the country
+  // config's vatRates is just [0] until a state is picked, which would hide the tax they
+  // actually collect at 8% (the default). Mirrors the Sales Tax Return (VATReturn.tsx).
+  const rates = isUS ? [data.settings.salesTaxRate, 0] : cc.vatRates;
+  const vat = calcVATSummary(filtered, rates, data.settings.pricesIncludeVAT);
 
   const SectionTable = ({
     title, rows, total, color,
