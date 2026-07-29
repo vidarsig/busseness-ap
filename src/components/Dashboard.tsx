@@ -1,17 +1,27 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare,
   AlertTriangle, Circle, Download, Check, HardHat, MapPin, Camera, ClipboardCheck,
   Send, ArrowDownLeft, Search,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, getTransactionISK, calcVATSummary, yearOf } from '../utils/calculations';
+import { getTransactionISK, calcVATSummary } from '../utils/calculations';
 import { invoiceTotals } from '../utils/invoiceMath';
 import { formatDate } from '../utils/formatters';
 import { View, UserPermissions, JobStatus, Currency } from '../types';
 import SettingsHealthBanner from './SettingsHealthBanner';
 
 interface Props { setView: (v: View) => void; perms?: UserPermissions | null; }
+
+// The money boxes are a short-term pulse; the full/historical figures live in the
+// books (Reports & Annual accounts). The toggle picks how far back the pulse looks.
+type Period = 'day' | 'week' | 'month' | 'year';
+const PERIODS: { key: Period; is: string; en: string }[] = [
+  { key: 'day',   is: 'Dagur',   en: 'Day' },
+  { key: 'week',  is: 'Vika',    en: 'Week' },
+  { key: 'month', is: 'Mánuður', en: 'Month' },
+  { key: 'year',  is: 'Ár',      en: 'Year' },
+];
 
 // Full pipeline shown on the front page (cancelled left off), in the order the
 // foreman works them. Labels/colours mirror the Jobs screen so they never disagree.
@@ -38,12 +48,7 @@ export default function Dashboard({ setView, perms }: Props) {
   const [lastBackup, setLastBackup] = useState<string | null>(
     () => localStorage.getItem('jobboks_last_backup'),
   );
-  const [year, setYear] = useState(data.settings.fiscalYear);
-  const availableYears = useMemo(() => {
-    const ys = new Set<number>(data.transactions.map(tx => yearOf(tx.date)));
-    ys.add(data.settings.fiscalYear);
-    return Array.from(ys).sort((a, b) => b - a);
-  }, [data.transactions, data.settings.fiscalYear]);
+  const [period, setPeriod] = useState<Period>('month');
 
   // Getting-started checklist — the visual half of the concierge: three steps to
   // first value on the blank page. Shows only for a NEW account (few transactions)
@@ -77,12 +82,27 @@ export default function Dashboard({ setView, perms }: Props) {
     setBackedUp(true);
     setTimeout(() => setBackedUp(false), 3000);
   }
-  const yearly = filterByYear(data.transactions, year);
+  // Transactions inside the selected pulse window (period-start → today).
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const periodStart = (p: Period): string => {
+    if (p === 'day') return todayStr;
+    if (p === 'week') {
+      const d = new Date(now);
+      const dow = (d.getDay() + 6) % 7; // 0 = Monday
+      d.setDate(d.getDate() - dow);
+      return d.toISOString().split('T')[0];
+    }
+    if (p === 'month') return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    return `${now.getFullYear()}-01-01`; // year-to-date
+  };
+  const pStart = periodStart(period);
+  const periodTx = data.transactions.filter(tx => tx.date >= pStart && tx.date <= todayStr);
 
-  const totalIncome = yearly.filter(t => t.type === 'income').reduce((s, t) => s + getTransactionISK(t), 0);
-  const totalExpenses = yearly.filter(t => t.type === 'expense').reduce((s, t) => s + getTransactionISK(t), 0);
+  const totalIncome = periodTx.filter(t => t.type === 'income').reduce((s, t) => s + getTransactionISK(t), 0);
+  const totalExpenses = periodTx.filter(t => t.type === 'expense').reduce((s, t) => s + getTransactionISK(t), 0);
   const netProfit = totalIncome - totalExpenses;
-  const vat = calcVATSummary(yearly, cc.vatRates, data.settings.pricesIncludeVAT);
+  const vat = calcVATSummary(periodTx, cc.vatRates, data.settings.pricesIncludeVAT);
 
   // ── Field / work data for the front page ──
   const jobs = data.jobs ?? [];
@@ -167,12 +187,15 @@ export default function Dashboard({ setView, perms }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('dashboard')}</h1>
           {canViewFinancials && (
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-sm text-gray-500">{t('thisYear')}:</span>
-              <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-                className="text-sm font-semibold text-gray-800 border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+            <div className="mt-2 inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+              {PERIODS.map(p => (
+                <button key={p.key} onClick={() => setPeriod(p.key)}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                    period === p.key ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}>
+                  {L(p.is, p.en)}
+                </button>
+              ))}
             </div>
           )}
         </div>

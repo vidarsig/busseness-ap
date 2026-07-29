@@ -3,7 +3,7 @@ export type TranslationKey = keyof typeof is;
 const is = {
   // Nav
   appName: 'Jobboks',
-  dashboard: 'Yfirlit',
+  dashboard: 'Stjórnstöð',
   transactions: 'Færslur',
   recurring: 'Endurteknar',
   bankimport: 'Bankaimport',
@@ -451,7 +451,7 @@ const is = {
 } as const;
 
 const en: Record<keyof typeof is, string> = {
-  appName: 'Accounting', dashboard: 'Dashboard', transactions: 'Transactions',
+  appName: 'Accounting', dashboard: 'Command Center', transactions: 'Transactions',
   recurring: 'Recurring', bankimport: 'Bank Import', invoices: 'Invoices',
   accounts: 'Chart of Accounts', budget: 'Budget', payroll: 'Payroll',
   vat: 'VAT', vatreturn: 'VAT Return', reports: 'Reports',
@@ -660,7 +660,7 @@ const en: Record<keyof typeof is, string> = {
 };
 
 const de: Record<keyof typeof is, string> = {
-  appName:'Buchhaltung', dashboard:'Übersicht', transactions:'Buchungen', recurring:'Wiederkehrend',
+  appName:'Buchhaltung', dashboard:'Kommandozentrale', transactions:'Buchungen', recurring:'Wiederkehrend',
   bankimport:'Bankimport', invoices:'Rechnungen', accounts:'Kontenplan', budget:'Budget',
   payroll:'Lohnabrechnung', vat:'MwSt', vatreturn:'MwSt-Meldung', reports:'Berichte',
   annual:'Jahresabschluss', settings:'Einstellungen',
@@ -805,7 +805,7 @@ const de: Record<keyof typeof is, string> = {
 };
 
 const fr: Record<keyof typeof is, string> = {
-  appName:'Comptabilité', dashboard:'Tableau de bord', transactions:'Transactions', recurring:'Récurrentes',
+  appName:'Comptabilité', dashboard:'Centre de commande', transactions:'Transactions', recurring:'Récurrentes',
   bankimport:'Import bancaire', invoices:'Factures', accounts:'Plan comptable', budget:'Budget',
   payroll:'Paie', vat:'TVA', vatreturn:'Déclaration TVA', reports:'Rapports',
   annual:'Comptes annuels', settings:'Paramètres',
@@ -951,7 +951,7 @@ const fr: Record<keyof typeof is, string> = {
 };
 
 const nl: Record<keyof typeof is, string> = {
-  appName:'Boekhouding', dashboard:'Overzicht', transactions:'Boekingen', recurring:'Terugkerend',
+  appName:'Boekhouding', dashboard:'Commandocentrum', transactions:'Boekingen', recurring:'Terugkerend',
   bankimport:'Bankimport', invoices:'Facturen', accounts:'Rekeningschema', budget:'Begroting',
   payroll:'Salarisadministratie', vat:'BTW', vatreturn:'BTW-aangifte', reports:'Rapporten',
   annual:'Jaarrekening', settings:'Instellingen',
@@ -1096,7 +1096,7 @@ const nl: Record<keyof typeof is, string> = {
 };
 
 const no: Record<keyof typeof is, string> = {
-  appName:'Regnskap', dashboard:'Oversikt', transactions:'Transaksjoner', recurring:'Gjentakende',
+  appName:'Regnskap', dashboard:'Kommandosentral', transactions:'Transaksjoner', recurring:'Gjentakende',
   bankimport:'Bankimport', invoices:'Fakturaer', accounts:'Kontoplan', budget:'Budsjett',
   payroll:'Lønn', vat:'MVA', vatreturn:'MVA-melding', reports:'Rapporter',
   annual:'Årsregnskap', settings:'Innstillinger',
@@ -1241,7 +1241,7 @@ const no: Record<keyof typeof is, string> = {
 };
 
 const da: Record<keyof typeof is, string> = {
-  appName:'Regnskab', dashboard:'Oversigt', transactions:'Transaktioner', recurring:'Gentagne',
+  appName:'Regnskab', dashboard:'Kommandocentral', transactions:'Transaktioner', recurring:'Gentagne',
   bankimport:'Bankimport', invoices:'Fakturaer', accounts:'Kontoplan', budget:'Budget',
   payroll:'Løn', vat:'MOMS', vatreturn:'Momsangivelse', reports:'Rapporter',
   annual:'Årsregnskab', settings:'Indstillinger',
@@ -1386,7 +1386,7 @@ const da: Record<keyof typeof is, string> = {
 };
 
 const sv: Record<keyof typeof is, string> = {
-  appName:'Bokföring', dashboard:'Översikt', transactions:'Transaktioner', recurring:'Återkommande',
+  appName:'Bokföring', dashboard:'Kommandocentral', transactions:'Transaktioner', recurring:'Återkommande',
   bankimport:'Bankimport', invoices:'Fakturor', accounts:'Kontoplan', budget:'Budget',
   payroll:'Löner', vat:'MOMS', vatreturn:'Momsredovisning', reports:'Rapporter',
   annual:'Årsredovisning', settings:'Inställningar',
