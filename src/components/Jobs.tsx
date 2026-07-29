@@ -475,6 +475,19 @@ export default function Jobs({ sessionUser }: JobsProps) {
     setTimeout(() => setInvoiceSuccess(null), 4000);
   }
 
+  // Owner/manager one-tap: approve the report (if it isn't already) and convert to
+  // an invoice in a single step — no Submit→Approve→Convert ceremony for the person
+  // who'd be approving it anyway. Workers never reach this (canApprove is false for
+  // them), so the "no invoice without approval" rule stays intact for the crew.
+  function moveToInvoice(job: Job) {
+    if (!canApprove) return;
+    const ready: Job = reportStatusOf(job) === 'approved'
+      ? job
+      : { ...job, reportStatus: 'approved', approvedBy: currentUserName, approvedAt: nowISO(), updatedAt: nowISO() };
+    if (ready !== job) dispatch({ type: 'UPDATE_JOB', payload: ready });
+    convertToInvoice(ready);
+  }
+
   // ── make an offer (quote) straight from the job ───────────
   // After a site visit the foreman can create an offer in one tap. The quote
   // itself lives in Invoices (type:'quote'); we just prefill the customer and,
@@ -948,8 +961,8 @@ export default function Jobs({ sessionUser }: JobsProps) {
                                   </p>
                                 )}
 
-                                {/* Worker action: submit for approval */}
-                                {rs === 'draft' && (
+                                {/* Worker action: submit for approval (approvers skip this — they use Move to invoice) */}
+                                {rs === 'draft' && !canApprove && (
                                   <button onClick={() => submitReport(job)}
                                     className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
                                     <FileText className="w-4 h-4" />
@@ -979,13 +992,13 @@ export default function Jobs({ sessionUser }: JobsProps) {
                                   )
                                 )}
 
-                                {/* Convert to Invoice — only after approval, and only for
-                                    someone who can approve/invoice (a plain worker can't). */}
-                                {rs === 'approved' && canApprove ? (
-                                  <button onClick={() => convertToInvoice(job)}
+                                {/* Move to invoice — an approver gets one tap (approves + converts);
+                                    a plain worker sees it disabled until a manager approves. */}
+                                {canApprove ? (
+                                  <button onClick={() => moveToInvoice(job)}
                                     className="w-full flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-sm transition shadow-sm">
                                     <Receipt className="w-4 h-4" />
-                                    {t('Breyta í reikning', 'Convert to Invoice')}
+                                    {rs === 'approved' ? t('Breyta í reikning', 'Convert to Invoice') : t('Færa í reikning', 'Move to invoice')}
                                   </button>
                                 ) : (
                                   <button disabled
