@@ -80,20 +80,24 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
   return rows;
 }
 
+// A missing/invalid vatRate is treated as 0% so the VAT math never yields NaN
+// (which would corrupt totals on the return). Guards imported/legacy rows.
+const safeRate = (t: Transaction) => (typeof t.vatRate === 'number' && !Number.isNaN(t.vatRate)) ? t.vatRate : 0;
+
 // Net (ex-VAT) amount of a transaction. When pricesInclVat is true the stored
 // amount is GROSS (the 24% is already inside it, e.g. an Icelandic bank deposit)
 // so the VAT is EXTRACTED: net = gross ÷ (1 + rate). When false (legacy) the
 // stored amount already IS the net.
 export function getNetISK(t: Transaction, pricesInclVat = false): number {
   const isk = getTransactionISK(t);
-  return pricesInclVat ? isk / (1 + t.vatRate / 100) : isk;
+  return pricesInclVat ? isk / (1 + safeRate(t) / 100) : isk;
 }
 
 export function getVATAmountISK(t: Transaction, pricesInclVat = false): number {
   const isk = getTransactionISK(t);
   // Inclusive: VAT is the part already inside the gross amount (gross − net).
   // Legacy: VAT is added on top of the (net) amount.
-  return pricesInclVat ? isk - isk / (1 + t.vatRate / 100) : calcVAT(isk, t.vatRate);
+  return pricesInclVat ? isk - isk / (1 + safeRate(t) / 100) : calcVAT(isk, safeRate(t));
 }
 
 export function getTotalISK(t: Transaction, pricesInclVat = false): number {
@@ -117,10 +121,14 @@ export interface VATSummary {
 }
 
 export function calcVATSummary(transactions: Transaction[], rates: number[] = [24, 11, 0], pricesInclVat = false): VATSummary {
+  // A transaction with a missing/invalid vatRate must not silently vanish from the
+  // return — that would UNDER-state turnover on an official (RSK) filing. Treat it
+  // as 0% so its turnover still shows (visible, no invented VAT) rather than dropping.
+  const rateOf = (t: Transaction) => (typeof t.vatRate === 'number' && !Number.isNaN(t.vatRate)) ? t.vatRate : 0;
 
   const outputByRate = rates.map(rate => {
     const filtered = transactions.filter(
-      t => t.type === 'income' && t.vatRate === rate
+      t => t.type === 'income' && rateOf(t) === rate
     );
     const baseAmount = filtered.reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
     const vatAmount = filtered.reduce((sum, t) => sum + getVATAmountISK(t, pricesInclVat), 0);
@@ -129,7 +137,7 @@ export function calcVATSummary(transactions: Transaction[], rates: number[] = [2
 
   const inputByRate = rates.map(rate => {
     const filtered = transactions.filter(
-      t => t.type === 'expense' && t.vatRate === rate
+      t => t.type === 'expense' && rateOf(t) === rate
     );
     const baseAmount = filtered.reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
     const vatAmount = filtered.reduce((sum, t) => sum + getVATAmountISK(t, pricesInclVat), 0);
