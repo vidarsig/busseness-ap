@@ -148,9 +148,11 @@ export function calcVATSummary(transactions: Transaction[], rates: number[] = [2
     return { rate, baseAmount, vatAmount, totalAmount: baseAmount + vatAmount };
   });
 
+  // Exempt turnover carries NO VAT, so the turnover IS the gross amount — never extract
+  // VAT from it (that would understate the reported "velta án VSK").
   const exemptTurnover = transactions
     .filter(t => t.type === 'income' && t.vatExempt)
-    .reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
+    .reduce((sum, t) => sum + getTransactionISK(t), 0);
   const totalOutput = outputByRate.reduce((s, r) => s + r.vatAmount, 0);
   const totalInput = inputByRate.reduce((s, r) => s + r.vatAmount, 0);
 

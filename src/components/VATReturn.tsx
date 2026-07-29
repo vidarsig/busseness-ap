@@ -27,8 +27,10 @@ export default function VATReturn() {
   const [freqQuarter, setFreqQuarter] = useState<number>(() => Math.floor(new Date().getMonth() / 3) + 1);
 
   const months = PERIOD_MONTHS[period] ?? [1, 2];
+  // period 0 = "Allt árið" (whole year) — input VAT on tools/materials is spread across
+  // invoices all year, so an annual view lets it net against the year's output.
   const periodTx = useMemo(() => {
-    if (!filingByFreq) return months.flatMap(m => filterByMonth(data.transactions, year, m));
+    if (!filingByFreq) return period === 0 ? filterByYear(data.transactions, year) : months.flatMap(m => filterByMonth(data.transactions, year, m));
     if (freq === 'year') return filterByYear(data.transactions, year);
     if (freq === 'quarter') return filterByQuarter(data.transactions, year, freqQuarter);
     return filterByMonth(data.transactions, year, freqMonth);
@@ -118,14 +120,16 @@ export default function VATReturn() {
       label: lang === 'is' ? (vat.netVAT >= 0 ? `${vatTerm} til greiðslu` : `${vatTerm} til endurgreiðslu`) : (vat.netVAT >= 0 ? `${vatTerm} to pay` : `${vatTerm} refund`),
       value: Math.abs(vat.netVAT) },
   ];
-  const periodText = filingByFreq ? freqLabel : `${year} · ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`;
+  const periodDisp = period === 0 ? (lang === 'is' ? 'Allt árið' : 'Whole year')
+    : `${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`;
+  const periodText = filingByFreq ? freqLabel : `${year} · ${periodDisp}`;
   const vatTitle = isUS
     ? `Sales Tax Report — ${usState ? usState + ' · ' : ''}${freqLabel}`
     : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'Return'} — ${periodText}`;
 
   const fileTag = isUS ? `salestax_${freqLabel.replace(/\s+/g, '_')}`
     : filingByFreq ? `tax_${freqLabel.replace(/[\s/]+/g, '_')}`
-    : `vsk_${year}_${period}`;
+    : `vsk_${year}_${period === 0 ? 'ar' : period}`;
   function exportToPDF() {
     exportPDF(vatTitle, data.settings.company.name || '', vatCols, vatRows, `${fileTag}.pdf`);
   }
@@ -198,6 +202,7 @@ export default function VATReturn() {
             <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={period} onChange={e => setPeriod(parseInt(e.target.value))}>
               {[1,2,3,4,5,6].map(p => <option key={p} value={p}>{p}. {lang === 'is' ? 'tímabil' : 'period'} ({periodLabel(p)})</option>)}
+              <option value={0}>{lang === 'is' ? 'Allt árið (samtals)' : 'Whole year (total)'}</option>
             </select>
           </div>
         )}
@@ -232,7 +237,7 @@ export default function VATReturn() {
       <div className="print-only mb-6">
         <h2 className="text-xl font-bold">{isUS ? 'Sales Tax Report' : `${vatTerm} ${lang === 'is' ? 'skýrsla' : 'return'}`}</h2>
         <p className="text-sm">{data.settings.company.name} — {data.settings.company.kennitala}</p>
-        <p className="text-sm">{filingByFreq ? freqLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} (${periodLabel(period)})`}</p>
+        <p className="text-sm">{filingByFreq ? freqLabel : `${year} — ${periodDisp}`}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -241,7 +246,7 @@ export default function VATReturn() {
             {data.settings.company.name || (lang === 'is' ? 'Fyrirtæki' : 'Company')}
             {data.settings.company.vskNumber && <span className="ml-2 text-sm font-normal text-gray-500">{cc.vatNumberLabel}: {data.settings.company.vskNumber}</span>}
           </h2>
-          <p className="text-xs text-gray-500">{filingByFreq ? freqLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} · ${periodLabel(period)}`}</p>
+          <p className="text-xs text-gray-500">{filingByFreq ? freqLabel : `${year} — ${periodDisp}`}</p>
         </div>
 
         {isIS ? (
