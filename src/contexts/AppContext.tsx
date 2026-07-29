@@ -71,6 +71,16 @@ const isCashLineItem = (b: BalanceSheetItem) =>
 const EFRA_MORTGAGE_SEED_ID = 'efra-mortgages-v1';
 const EFRA_MORTGAGE_NUMBERS = new Set(['20301', '20302', '20303', '20304', '20305']);
 
+// Owner's amounts are GROSS (VAT inside). Contracting/work income is 24% VSK; RENT is
+// exempt (0%); insurance payouts (adrar_tekjur) + loans/framlag are outside VAT.
+const EFRA_WORK_VAT_SEED_ID = 'efra-work-vat-v1';
+const efraFold = (s: string) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const EFRA_RENT_RE = /victor|janeks|olajumoke|oleksandr|johann|leiga|husaleig/;
+const EFRA_NONWORK_RE = /vordur|trygg|framlag|vidar sig|heida|jane/;
+const isEfraWorkIncome = (t: Transaction) =>
+  t.type === 'income' && t.category !== 'adrar_tekjur' && t.category !== 'framlag' && t.category !== 'lan_mottekid'
+  && !EFRA_RENT_RE.test(efraFold(t.description)) && !EFRA_NONWORK_RE.test(efraFold(t.description));
+
 function applyOwnerSeeds(d: AppData): AppData {
   const kt = (d.settings.company?.kennitala ?? '').replace(/\D/g, '');
   const name = (d.settings.company?.name ?? '').toLowerCase();
@@ -79,6 +89,8 @@ function applyOwnerSeeds(d: AppData): AppData {
   const done = [...(d.seededMigrations ?? [])];
   let items = d.balanceSheetItems;
   let accounts = d.accounts;
+  let transactions = d.transactions;
+  let settings = d.settings;
   let changed = false;
   // Seed 1: the 3 properties as fixed assets (upsert by stable id).
   if (!done.includes(EFRA_SEED_ID)) {
@@ -97,7 +109,15 @@ function applyOwnerSeeds(d: AppData): AppData {
     accounts = accounts.map(a => EFRA_MORTGAGE_NUMBERS.has(a.number) ? { ...a, isPropertyMortgage: true } : a);
     done.push(EFRA_MORTGAGE_SEED_ID); changed = true;
   }
-  return changed ? { ...d, balanceSheetItems: items, accounts, seededMigrations: done } : d;
+  // Seed 4: work income → 24% VSK (amounts are gross, so turn on pricesIncludeVAT to
+  // EXTRACT the VAT), rent stays 0% (exempt). So the VSK return shows work under A
+  // (skattskyld velta 24%) with útskattur, rent under C (undanþegin). Idempotent.
+  if (!done.includes(EFRA_WORK_VAT_SEED_ID)) {
+    transactions = transactions.map(t => isEfraWorkIncome(t) && t.vatRate !== 24 ? { ...t, vatRate: 24 as typeof t.vatRate } : t);
+    settings = { ...settings, pricesIncludeVAT: true };
+    done.push(EFRA_WORK_VAT_SEED_ID); changed = true;
+  }
+  return changed ? { ...d, balanceSheetItems: items, accounts, transactions, settings, seededMigrations: done } : d;
 }
 
 const defaultData: AppData = {
