@@ -18,6 +18,7 @@ export default function VATReturn() {
   //    Iceland's bi-monthly, so both get a filing-frequency picker.
   const isUS = cc.isUSA;
   const isCA = cc.code === 'CA';
+  const isIS = cc.code === 'IS';
   const filingByFreq = isUS || isCA;
   const [year, setYear] = useState(data.settings.fiscalYear);
   const [period, setPeriod] = useState<number>(() => Math.floor(new Date().getMonth() / 2) + 1);
@@ -93,7 +94,19 @@ export default function VATReturn() {
     ]),
     { field: '', label: 'Total sales tax to remit', value: vat.totalOutput },
   ];
-  const vatRows = isUS ? usRows : [
+  // Official RSK virðisaukaskattsskýrsla — fields A–F. Zero-rated AND exempt turnover
+  // BOTH go under C (Undanþegin velta); the RSK form has no separate 0% taxable line.
+  const baseAt = (r: number) => vat.outputByRate.find(x => x.rate === r)?.baseAmount ?? 0;
+  const undanthegin = vat.outputByRate.filter(x => x.rate !== 24 && x.rate !== 11).reduce((s, x) => s + x.baseAmount, 0) + vat.exemptTurnover;
+  const rskRows = [
+    { field: 'A', label: 'Skattskyld velta án VSK í 24% þrepi', value: baseAt(24) },
+    { field: 'B', label: 'Skattskyld velta án VSK í 11% þrepi', value: baseAt(11) },
+    { field: 'C', label: 'Undanþegin velta (t.d. húsaleiga, útflutningur)', value: undanthegin },
+    { field: 'D', label: 'Útskattur', value: vat.totalOutput },
+    { field: 'E', label: 'Innskattur', value: vat.totalInput },
+    { field: 'F', label: vat.netVAT >= 0 ? 'Álagning — VSK til greiðslu (D − E)' : 'Álagning — VSK til endurgreiðslu (D − E)', value: Math.abs(vat.netVAT) },
+  ];
+  const vatRows = isUS ? usRows : isIS ? rskRows : [
     ...outputRateRows,
     { field: '',   label: lang === 'is' ? 'Samtals útskattr' : `Total output ${vatTerm}`, value: vat.totalOutput },
     // Exempt turnover (undanþegin — e.g. residential rent): reported "án VSK", outside
@@ -231,12 +244,24 @@ export default function VATReturn() {
           <p className="text-xs text-gray-500">{filingByFreq ? freqLabel : `${year} — ${period}. ${lang === 'is' ? 'tímabil' : 'period'} · ${periodLabel(period)}`}</p>
         </div>
 
+        {isIS ? (
+          /* Official RSK virðisaukaskattsskýrsla — fields A–F, exactly as filed. */
+          <>
+            {rskRows.slice(0, 3).map(r => <div key={r.field}>{field(r.field, r.label, r.value)}</div>)}
+            <div className="border-t border-gray-200" />
+            {rskRows.slice(3, 5).map(r => <div key={r.field}>{field(r.field, r.label, r.value)}</div>)}
+            <div className="border-t-2 border-blue-200">
+              {field('F', rskRows[5].label, rskRows[5].value, true)}
+            </div>
+          </>
+        ) : (
+        <>
         <div className="px-4 py-2 bg-green-50 border-b border-green-100">
-          <p className="text-xs font-bold text-green-700 uppercase">{isUS ? 'Sales tax collected on sales' : lang === 'is' ? `Útskattr — ${vatTerm} á sölu` : `Output ${vatTerm} — ${vatTerm} on sales`}</p>
+          <p className="text-xs font-bold text-green-700 uppercase">{isUS ? 'Sales tax collected on sales' : `Output ${vatTerm} — ${vatTerm} on sales`}</p>
         </div>
         {vat.outputByRate.map((row, idx) => (
           <div key={row.rate}>
-            {field(String(idx * 2 + 1), `${isUS ? 'Taxable sales' : lang === 'is' ? 'Skattskyld velta' : 'Taxable turnover'} ${row.rate}%`, row.baseAmount)}
+            {field(String(idx * 2 + 1), `${isUS ? 'Taxable sales' : 'Taxable turnover'} ${row.rate}%`, row.baseAmount)}
             {field(`${idx * 2 + 1}a`, `${isUS ? 'Sales tax' : vatTerm} ${row.rate}%`, row.vatAmount)}
           </div>
         ))}
@@ -247,26 +272,28 @@ export default function VATReturn() {
           </div>
         ) : (
           <>
-            {field(null, lang === 'is' ? 'Samtals útskattr' : `Total output ${vatTerm}`, vat.totalOutput)}
+            {field(null, `Total output ${vatTerm}`, vat.totalOutput)}
 
             <div className="px-4 py-2 bg-red-50 border-b border-red-100 border-t border-gray-100">
-              <p className="text-xs font-bold text-red-700 uppercase">{lang === 'is' ? `Innskattr — ${vatTerm} á kaupum` : `Input ${vatTerm} — ${vatTerm} on purchases`}</p>
+              <p className="text-xs font-bold text-red-700 uppercase">{`Input ${vatTerm} — ${vatTerm} on purchases`}</p>
             </div>
             {vat.inputByRate.map((row, idx) => (
               <div key={row.rate}>
-                {field(String(outputRateRows.length + idx * 2 + 1), `${lang === 'is' ? 'Skattskyld innkaup' : 'Taxable purchases'} ${row.rate}%`, row.baseAmount)}
+                {field(String(outputRateRows.length + idx * 2 + 1), `Taxable purchases ${row.rate}%`, row.baseAmount)}
                 {field(`${outputRateRows.length + idx * 2 + 1}a`, `${vatTerm} ${row.rate}%`, row.vatAmount)}
               </div>
             ))}
-            {field(null, lang === 'is' ? 'Samtals innskattr' : `Total input ${vatTerm}`, vat.totalInput)}
+            {field(null, `Total input ${vatTerm}`, vat.totalInput)}
 
             <div className="border-t-2 border-blue-200">
               {vat.netVAT >= 0
-                ? field(netField, lang === 'is' ? `${vatTerm} til greiðslu (útskattr − innskattr)` : `${vatTerm} to pay (output − input)`, vat.netVAT, true)
-                : field(String(parseInt(netField) + 1), lang === 'is' ? `${vatTerm} til endurgreiðslu (innskattr > útskattr)` : `${vatTerm} refund (input > output)`, Math.abs(vat.netVAT), true)
+                ? field(netField, `${vatTerm} to pay (output − input)`, vat.netVAT, true)
+                : field(String(parseInt(netField) + 1), `${vatTerm} refund (input > output)`, Math.abs(vat.netVAT), true)
               }
             </div>
           </>
+        )}
+        </>
         )}
       </div>
 
