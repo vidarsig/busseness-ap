@@ -333,7 +333,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
                 <span>{t('invoiceTotal')}</span>
                 <span className="font-mono">{formatCurrency(totals.total, form.currency)}</span>
               </div>
-              {form.currency !== 'ISK' && (
+              {form.currency !== 'ISK' && (data.settings.defaultCurrency || 'ISK') === 'ISK' && (
                 <div className="flex justify-between text-blue-600 text-xs">
                   <span>ISK</span>
                   <span className="font-mono">{formatISK(totals.total * (data.settings.exchangeRates[form.currency as 'EUR'] ?? 1))}</span>
@@ -492,7 +492,11 @@ function buildInvoiceEmail(inv: Invoice, companyName: string, lang: string) {
 }
 
 export default function Invoices() {
-  const { data, dispatch, t, lang, cc } = useApp();
+  const { data, dispatch, t, lang, cc, fmtISK } = useApp();
+  // Balances/statement totals are ISK-normalised internally; fmtISK renders them in
+  // the company's own currency so a US/CA company (and the statements it sends to
+  // customers) never shows "kr.". baseCur gates the ISK-equivalent helper lines.
+  const baseCur = (data.settings.defaultCurrency || 'ISK');
   const [modal, setModal] = useState<{ open: boolean; inv?: Invoice; defaultType?: 'invoice' | 'quote'; autoCamera?: boolean }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
   const [printInv, setPrintInv] = useState<Invoice | null>(null);
@@ -592,14 +596,14 @@ export default function Invoices() {
         dueDate: formatDate(inv.dueDate, lang),
         status: t(inv.status),
         total: formatCurrency(tot, inv.currency),
-        outstanding: payState(inv).outstandingISK <= 0 ? '—' : formatISK(payState(inv).outstandingISK, lang),
+        outstanding: payState(inv).outstandingISK <= 0 ? '—' : fmtISK(payState(inv).outstandingISK),
       };
     });
     rows.push({
       number: '', date: '', dueDate: '',
-      status: lang === 'is' ? 'Staða (ISK)' : 'Balance (ISK)',
-      total: formatISK(stTotals.invoiced, lang),
-      outstanding: formatISK(stTotals.outstanding, lang),
+      status: lang === 'is' ? `Staða (${baseCur})` : `Balance (${baseCur})`,
+      total: fmtISK(stTotals.invoiced),
+      outstanding: fmtISK(stTotals.outstanding),
     });
     const title = lang === 'is' ? 'Viðskiptamannayfirlit' : 'Customer statement';
     exportPDF(title, statementCustomer, cols, rows, `statement_${statementCustomer.replace(/\s+/g, '_')}.pdf`);
@@ -622,9 +626,9 @@ export default function Invoices() {
         return `  ${inv.number}  ${formatDate(inv.date, lang)}  ${tot}  (${paid})`;
       }),
       '',
-      `${lang === 'is' ? 'Heildarupphæð' : 'Total invoiced'}: ${formatISK(stTotals.invoiced, lang)}`,
-      `${lang === 'is' ? 'Greitt' : 'Paid'}: ${formatISK(stTotals.paid, lang)}`,
-      `${lang === 'is' ? 'Ógreidd staða' : 'Outstanding balance'}: ${formatISK(stTotals.outstanding, lang)}`,
+      `${lang === 'is' ? 'Heildarupphæð' : 'Total invoiced'}: ${fmtISK(stTotals.invoiced)}`,
+      `${lang === 'is' ? 'Greitt' : 'Paid'}: ${fmtISK(stTotals.paid)}`,
+      `${lang === 'is' ? 'Ógreidd staða' : 'Outstanding balance'}: ${fmtISK(stTotals.outstanding)}`,
       '',
       lang === 'is' ? 'Með kveðju,' : 'Kind regards,',
       company,
@@ -871,7 +875,7 @@ export default function Invoices() {
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('invoices')}</h1>
           {unpaidTotal > 0 && (
-            <p className="text-xs text-orange-600 mt-0.5">{t('unpaidInvoices')}: {formatISK(unpaidTotal, lang)}</p>
+            <p className="text-xs text-orange-600 mt-0.5">{t('unpaidInvoices')}: {fmtISK(unpaidTotal)}</p>
           )}
         </div>
         <div className="flex gap-2">
@@ -936,15 +940,15 @@ export default function Invoices() {
           <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="bg-gray-50 rounded-xl p-3 text-center">
               <p className="text-[10px] uppercase tracking-wide text-gray-400">{lang === 'is' ? 'Reikningsfært' : 'Invoiced'}</p>
-              <p className="font-bold text-gray-800 text-sm mt-0.5">{formatISK(stTotals.invoiced, lang)}</p>
+              <p className="font-bold text-gray-800 text-sm mt-0.5">{fmtISK(stTotals.invoiced)}</p>
             </div>
             <div className="bg-green-50 rounded-xl p-3 text-center">
               <p className="text-[10px] uppercase tracking-wide text-green-600">{lang === 'is' ? 'Greitt' : 'Paid'}</p>
-              <p className="font-bold text-green-700 text-sm mt-0.5">{formatISK(stTotals.paid, lang)}</p>
+              <p className="font-bold text-green-700 text-sm mt-0.5">{fmtISK(stTotals.paid)}</p>
             </div>
             <div className="bg-orange-50 rounded-xl p-3 text-center">
               <p className="text-[10px] uppercase tracking-wide text-orange-600">{lang === 'is' ? 'Ógreitt' : 'Outstanding'}</p>
-              <p className="font-bold text-orange-700 text-sm mt-0.5">{formatISK(stTotals.outstanding, lang)}</p>
+              <p className="font-bold text-orange-700 text-sm mt-0.5">{fmtISK(stTotals.outstanding)}</p>
             </div>
           </div>
 
@@ -1029,14 +1033,14 @@ export default function Invoices() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className="font-bold text-gray-900">{formatCurrency(total, inv.currency, lang)}</div>
-                    {inv.currency !== 'ISK' && (
+                    {inv.currency !== 'ISK' && baseCur === 'ISK' && (
                       <div className="text-xs text-gray-400">{formatISK(total * (data.settings.exchangeRates[inv.currency as 'EUR'] ?? 1), lang)}</div>
                     )}
                     {/* R9-6: paid / part-paid state derived from the deposits linked to this invoice */}
                     {!isQuote && (() => { const ps = payState(inv); if (!ps.hasPayments && !ps.fullyPaid) return null;
                       return ps.outstandingISK <= 0
                         ? <div className="text-xs font-medium text-green-600 mt-0.5">{lang === 'is' ? 'Greitt ✓' : 'Paid ✓'}</div>
-                        : <div className="text-xs font-medium text-amber-600 mt-0.5">{lang === 'is' ? `Eftir ${formatISK(ps.outstandingISK, lang)}` : `${formatISK(ps.outstandingISK, lang)} left`}</div>;
+                        : <div className="text-xs font-medium text-amber-600 mt-0.5">{lang === 'is' ? `Eftir ${fmtISK(ps.outstandingISK)}` : `${fmtISK(ps.outstandingISK)} left`}</div>;
                     })()}
                   </div>
                 </div>
