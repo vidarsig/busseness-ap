@@ -5,7 +5,7 @@ import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
 import { COUNTRY_LIST, CA_PROVINCES, US_STATES } from '../data/countries';
 import { isOperatorAccount } from '../utils/access';
-import { checkSettingsHealth } from '../utils/settingsHealth';
+import SettingsHealthBanner from './SettingsHealthBanner';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
@@ -299,14 +299,6 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2500);
   }
 
-  // Proactive settings health check: spot high-confidence misconfigurations (wrong
-  // sales tax for the state, wrong currency for the country) before a customer ever
-  // hits them, and let the user fix each in one tap. Runs against the SAVED settings.
-  const healthIssues = checkSettingsHealth(data.settings);
-  function applyHealthFix(fix: Partial<AppSettings>) {
-    dispatch({ type: 'UPDATE_SETTINGS', payload: fix });
-    setForm(f => ({ ...f, ...fix })); // keep the on-screen form in sync
-  }
 
   const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const labelCls = 'block text-xs font-medium text-gray-600 mb-1';
@@ -325,25 +317,7 @@ export default function Settings() {
       </div>
 
       {/* Proactive health check — flags likely-wrong settings before a customer hits them */}
-      {healthIssues.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-            <h2 className="text-sm font-bold text-amber-900">{lang === 'is' ? 'Athugaðu þessar stillingar' : 'Check these settings'}</h2>
-          </div>
-          {healthIssues.map(issue => (
-            <div key={issue.id} className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
-              <p className="text-xs text-amber-800 flex-1">{issue.message}</p>
-              {Object.keys(issue.fix).length > 0 && (
-                <button type="button" onClick={() => applyHealthFix(issue.fix)}
-                  className="self-start sm:self-auto flex-shrink-0 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium hover:bg-amber-700">
-                  {issue.fixLabel}
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <SettingsHealthBanner onFixed={fix => setForm(f => ({ ...f, ...fix }))} />
 
       {/* Country / Jurisdiction */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">

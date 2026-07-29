@@ -7,6 +7,7 @@ import { useApp } from '../contexts/AppContext';
 import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary, yearOf } from '../utils/calculations';
 import { formatDate } from '../utils/formatters';
 import { View, UserPermissions } from '../types';
+import SettingsHealthBanner from './SettingsHealthBanner';
 
 interface Props { setView: (v: View) => void; perms?: UserPermissions | null; }
 
@@ -156,6 +157,9 @@ export default function Dashboard({ setView, perms }: Props) {
         </button>
         )}
       </div>
+
+      {/* Small notification the moment a setting looks wrong — caught before it reaches a customer */}
+      <SettingsHealthBanner compact dismissible />
 
       {/* Getting-started checklist — blank-page welcome, first value in 3 steps */}
       {showGettingStarted && (
