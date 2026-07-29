@@ -82,11 +82,10 @@ const isEfraWorkIncome = (t: Transaction) =>
   t.type === 'income' && t.category !== 'adrar_tekjur' && t.category !== 'framlag' && t.category !== 'lan_mottekid'
   && !EFRA_RENT_RE.test(efraFold(t.description)) && !EFRA_NONWORK_RE.test(efraFold(t.description));
 
-// Input VAT (innskattur): VATable business purchases carry reclaimable 24%. EXCLUDE the
-// non-reclaimables — fuel (vehicle not VSK-registered → 0%), the Akurgerði repair (key
-// 1210, property not VSK-registered), wages/depreciation/interest, and non-VAT flows
-// (insurance premiums, taxes, collection fees, draws/loans, other-property/municipal fees).
-const EFRA_INPUT_VAT_SEED_ID = 'efra-input-vat-v1';
+// Input VAT (innskattur): the owner's real innskattur is NOT booked yet (serious work
+// for later), so E must be 0 — no fake reclaim. This REVERTS the earlier 24% seeding on
+// reclaimable purchases back to 0%. (isEfraReclaimable identifies the rows that were set.)
+const EFRA_INPUT_VAT_REVERT_ID = 'efra-input-vat-revert-v1';
 const EFRA_ACC_1210 = 'ac_1784964615252_1s9q';
 const EFRA_NO_INNSKATTUR = /\bn1\b|olis|orkan|atlantsol|skeljung|costco|eldsneyt|\bob |vordur|trygg|sysluma|rikissj|innheimt|tollur|skatt|inkasso|gjaldheimt|motus|intrum|worldremit|western|wise|hradbanki|\batm\b|vidar sig|heida|jane|deildartun|husfelag|akraneskaup/;
 const NON_VAT_EXP_CATS = new Set(['laun', 'launatengd_gjold', 'afskriftir', 'fjarmagnsgjold']);
@@ -141,11 +140,11 @@ function applyOwnerSeeds(d: AppData): AppData {
     settings = { ...settings, pricesIncludeVAT: true };
     done.push(EFRA_WORK_VAT_SEED_ID); changed = true;
   }
-  // Seed 5: reclaimable business purchases → 24% so innskattur (E) shows and nets against
-  // útskattur. Non-reclaimables (fuel, 1210, wages, insurance, taxes, transfers) stay 0%.
-  if (!done.includes(EFRA_INPUT_VAT_SEED_ID)) {
-    transactions = transactions.map(t => isEfraReclaimable(t) && t.vatRate !== 24 ? { ...t, vatRate: 24 as typeof t.vatRate } : t);
-    done.push(EFRA_INPUT_VAT_SEED_ID); changed = true;
+  // Seed 5 (revert): real innskattur isn't booked yet, so E must be 0 — set the earlier-
+  // seeded 24% reclaimable purchases back to 0%. Real input VAT is later, serious work.
+  if (!done.includes(EFRA_INPUT_VAT_REVERT_ID)) {
+    transactions = transactions.map(t => isEfraReclaimable(t) && t.vatRate === 24 ? { ...t, vatRate: 0 as typeof t.vatRate } : t);
+    done.push(EFRA_INPUT_VAT_REVERT_ID); changed = true;
   }
   // Seed 6: bank interest + tiny date-serial junk → financial income (out of taxable velta).
   if (!done.includes(EFRA_INTEREST_SEED_ID)) {
