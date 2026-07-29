@@ -441,6 +441,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const testModeRef = useRef(false);           // synchronous gate for the effects
   const realDataBackup = useRef<AppData | null>(null);
 
+  // DEV-ONLY sample-data loader for testing. import.meta.env.DEV is statically false
+  // in the production build, so Vite drops this whole effect and never bundles the
+  // demo generator (dynamic import). Call window.__loadDemo() in the dev console to
+  // fill the app with realistic data in the current jurisdiction/locale.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __loadDemo?: () => Promise<void> }).__loadDemo = async () => {
+      const { generateDemoData } = await import('../utils/demoData');
+      const cur = dataRef.current;
+      dispatch({ type: 'LOAD', payload: { ...cur, ...generateDemoData(cur) } });
+    };
+  }, []);
+
   const enterTestMode = useCallback(() => {
     realDataBackup.current = data;             // immutable snapshot of the real data
     testModeRef.current = true;
