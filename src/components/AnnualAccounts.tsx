@@ -1,7 +1,7 @@
 ﻿import { useState, useMemo } from 'react';
 import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss, accountBalanceByYear, getTransactionISK } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem, Account } from '../types';
 
@@ -128,7 +128,7 @@ export default function AnnualAccounts() {
   // owner can see all years. Only the displayed year changes — the figures come
   // from the same calcProfitLoss engine as before.
   const years = useMemo(() => {
-    const ys = new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()));
+    const ys = new Set(data.transactions.map(tx => yearOf(tx.date)));
     ys.add(data.settings.fiscalYear);
     return [...ys].sort((a, b) => b - a);
   }, [data.transactions, data.settings.fiscalYear]);
@@ -144,7 +144,7 @@ export default function AnnualAccounts() {
   // Whether the immediately prior year has any bookings — drives the one-tap
   // "download both years" button (each year stays its own separate PDF).
   const prevYear = year - 1;
-  const hasPrevYear = data.transactions.some(tx => new Date(tx.date).getFullYear() === prevYear);
+  const hasPrevYear = data.transactions.some(tx => yearOf(tx.date) === prevYear);
 
   const [bsModal, setBsModal] = useState<{ open: boolean; item?: BalanceSheetItem }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -208,7 +208,7 @@ export default function AnnualAccounts() {
   const isAssetKey = (id?: string) => !!id && data.accounts.find(a => a.id === id)?.type === 'asset';
   const trackedCash = useMemo(() =>
     data.transactions
-      .filter(tx => new Date(tx.date).getFullYear() <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
+      .filter(tx => yearOf(tx.date) <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
       // Money IN = income, a loan received (lan_mottekid), OR an owner contribution
       // (framlag) — mirror accountBalanceByYear, so money paid IN isn't wrongly
       // counted as cash going out.
@@ -226,7 +226,7 @@ export default function AnnualAccounts() {
   const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? cashAsset : b.amount;
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
   const retainedEarnings = useMemo(() => {
-    const yrs = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].filter(y => y <= year);
+    const yrs = [...new Set(data.transactions.map(t => yearOf(t.date)))].filter(y => y <= year);
     return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
   }, [data.transactions, year, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT]);
   const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
@@ -275,9 +275,9 @@ export default function AnnualAccounts() {
       .map(a => ({ acc: a, closing: closingFor(a) }));
     const bk = { asset: rowsFor('asset'), liability: rowsFor('liability'), equity: rowsFor('equity') };
     const cash = data.transactions
-      .filter(tx => new Date(tx.date).getFullYear() <= y && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
+      .filter(tx => yearOf(tx.date) <= y && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
       .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
-    const retained = [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))]
+    const retained = [...new Set(data.transactions.map(t => yearOf(t.date)))]
       .filter(yy => yy <= y)
       .reduce((s, yy) => s + calcProfitLoss(filterByYear(data.transactions, yy), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
     const posAssets = cash + bk.asset.reduce((s, r) => s + r.closing, 0);

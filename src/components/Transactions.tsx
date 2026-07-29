@@ -8,7 +8,7 @@ import {
   Transaction, TransactionType, Currency,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../types';
-import { getVATAmountISK, getTotalISK, invoiceReceivedISK } from '../utils/calculations';
+import { getVATAmountISK, getTotalISK, invoiceReceivedISK, yearOf } from '../utils/calculations';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
 import { isTransactionLimitReached } from '../utils/planLimits';
@@ -440,7 +440,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   }, [initialFilter, onFilterConsumed]);
 
   const years = useMemo(() => {
-    const ys = new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()));
+    const ys = new Set(data.transactions.map(tx => yearOf(tx.date)));
     return Array.from(ys).sort((a, b) => b - a);
   }, [data.transactions]);
 
@@ -448,7 +448,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     return data.transactions
       .filter(tx => {
         if (filterType !== 'all' && tx.type !== filterType) return false;
-        if (filterYear !== 'all' && new Date(tx.date).getFullYear() !== filterYear) return false;
+        if (filterYear !== 'all' && yearOf(tx.date) !== filterYear) return false;
         if (filterCategory !== 'all' && tx.category !== filterCategory) return false;
         if (filterKey === 'none') { if (tx.accountId && data.accounts.some(a => a.id === tx.accountId)) return false; }
         else if (filterKey !== 'all' && tx.accountId !== filterKey) return false;
@@ -612,13 +612,13 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   // Export a counterparty index of the currently-filtered set: one row per party
   // (grouped by description), with count, total in/out/net, and a column per year.
   function exportCounterparties() {
-    const yrs = Array.from(new Set(filtered.map(tx => new Date(tx.date).getFullYear()))).sort((a, b) => a - b);
+    const yrs = Array.from(new Set(filtered.map(tx => yearOf(tx.date)))).sort((a, b) => a - b);
     const map = new Map<string, { inc: number; exp: number; count: number; perYear: Record<number, number> }>();
     for (const tx of filtered) {
       const key = (tx.description || '').trim() || (lang === 'is' ? '(engin lýsing)' : '(no description)');
       let e = map.get(key);
       if (!e) { e = { inc: 0, exp: 0, count: 0, perYear: {} }; map.set(key, e); }
-      const y = new Date(tx.date).getFullYear();
+      const y = yearOf(tx.date);
       const v = getTotalISK(tx, inclVat);
       e.perYear[y] = e.perYear[y] ?? 0;
       if (tx.type === 'income') { e.inc += v; e.perYear[y] += v; }

@@ -5,6 +5,7 @@ import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buil
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
+import { yearOf } from '../utils/calculations';
 import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus } from '../types';
 import { COUNTRY_CONFIGS, findCaProvince } from '../data/countries';
 
@@ -288,7 +289,7 @@ export default function AIAssistant() {
 
   // The year the AI is working on. One year at a time: it then gets EVERY row of
   // that year rather than a newest-first sweep that quietly drops the oldest.
-  const yearsWithData = [...new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))]
+  const yearsWithData = [...new Set(data.transactions.map(tx => yearOf(tx.date)))]
     .sort((a, b) => b - a);
   const [aiYear, setAiYear] = useState<number | null>(() =>
     yearsWithData.includes(data.settings.fiscalYear) ? data.settings.fiscalYear : yearsWithData[0] ?? null);
@@ -743,7 +744,7 @@ export default function AIAssistant() {
       const d = foldAccents((tx.description || '').trim());
       if (mf.contains ? !d.includes(needle) : d !== needle) return false;
       if (mf.type && tx.type !== mf.type) return false;
-      if (mf.year != null && new Date(tx.date).getFullYear() !== mf.year) return false;
+      if (mf.year != null && yearOf(tx.date) !== mf.year) return false;
       if (mf.date && tx.date !== mf.date) return false;
       return true;
     });
@@ -1133,7 +1134,7 @@ export default function AIAssistant() {
                             const groups = matches.map(mf => {
                               const txs = matchTxs(mf);
                               const perYear = new Map<number, number>();
-                              for (const tx of txs) { const y = new Date(tx.date).getFullYear(); perYear.set(y, (perYear.get(y) ?? 0) + 1); }
+                              for (const tx of txs) { const y = yearOf(tx.date); perYear.set(y, (perYear.get(y) ?? 0) + 1); }
                               return { mf, txs, perYear: [...perYear.entries()].sort((a, b) => a[0] - b[0]) };
                             });
                             // DISTINCT rows across all groups — a row caught by

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { BudgetLine, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../types';
-import { filterByYear, getTransactionISK } from '../utils/calculations';
+import { filterByYear, getTransactionISK, yearOf, monthOf } from '../utils/calculations';
 
 const MONTHS = ['jan','feb','mar','apr','may_short','jun','jul','aug','sep','oct','nov','dec'] as const;
 
@@ -23,7 +23,7 @@ export default function Budget() {
     const m: Record<string, number[]> = {};
     categories.forEach(({ c }) => { m[c] = Array(12).fill(0); });
     yearlyTx.forEach(tx => {
-      const mo = new Date(tx.date).getMonth();
+      const mo = monthOf(tx.date) - 1;
       if (m[tx.category] !== undefined) m[tx.category][mo] += getTransactionISK(tx);
     });
     return m;
@@ -45,7 +45,7 @@ export default function Budget() {
 
   const years = Array.from(new Set([
     year - 1, year, year + 1,
-    ...data.transactions.map(tx => new Date(tx.date).getFullYear()),
+    ...data.transactions.map(tx => yearOf(tx.date)),
   ])).sort((a, b) => b - a);
 
   const inp = 'w-full border border-blue-300 rounded px-1.5 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500';

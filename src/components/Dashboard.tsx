@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary } from '../utils/calculations';
+import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary, yearOf } from '../utils/calculations';
 import { formatDate } from '../utils/formatters';
 import { View, UserPermissions } from '../types';
 
@@ -21,7 +21,7 @@ export default function Dashboard({ setView, perms }: Props) {
   );
   const [year, setYear] = useState(data.settings.fiscalYear);
   const availableYears = useMemo(() => {
-    const ys = new Set<number>(data.transactions.map(tx => new Date(tx.date).getFullYear()));
+    const ys = new Set<number>(data.transactions.map(tx => yearOf(tx.date)));
     ys.add(data.settings.fiscalYear);
     return Array.from(ys).sort((a, b) => b - a);
   }, [data.transactions, data.settings.fiscalYear]);

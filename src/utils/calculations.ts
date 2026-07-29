@@ -1,5 +1,19 @@
 import { Transaction, Currency, Account } from '../types';
 
+// Transaction dates are stored as date-only "YYYY-MM-DD". `new Date("2025-01-01")`
+// parses as UTC midnight, so `.getFullYear()` returns the LOCAL year — off by one
+// for negative-UTC users (US), landing every Jan-1 row in the previous year. Read
+// the year/month straight from the string instead; fall back to Date for any other
+// format. Use these everywhere a stored transaction date is bucketed by year/month.
+export function yearOf(dateStr: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  return m ? Number(m[1]) : new Date(dateStr).getFullYear();
+}
+export function monthOf(dateStr: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  return m ? Number(m[2]) : new Date(dateStr).getMonth() + 1;
+}
+
 export function toISK(amount: number, currency: Currency, rate: number): number {
   return currency === 'ISK' ? amount : amount * rate;
 }
@@ -39,7 +53,7 @@ export function invoiceReceivedISK(invoiceId: string, transactions: Transaction[
 export function accountBalanceByYear(account: Account, transactions: Transaction[]): { year: number; closing: number }[] {
   const movs = transactions.filter(tx => tx.accountId === account.id);
   if (!movs.length && account.openingBalance == null) return [];
-  const movYears = movs.map(tx => new Date(tx.date).getFullYear());
+  const movYears = movs.map(tx => yearOf(tx.date));
   const start = account.openingYear ?? (movYears.length ? Math.min(...movYears) : NaN);
   const end = movYears.length ? Math.max(start, ...movYears) : start;
   if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
@@ -47,7 +61,7 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
   let bal = account.openingBalance ?? 0;
   for (let y = start; y <= end; y++) {
     const net = movs
-      .filter(tx => new Date(tx.date).getFullYear() === y)
+      .filter(tx => yearOf(tx.date) === y)
       .reduce((s, tx) => {
         const gross = getTransactionISK(tx);
         // A loan payment's interest is a cost, not a reduction of the loan — only
@@ -209,23 +223,19 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
 }
 
 export function filterByYear(transactions: Transaction[], year: number): Transaction[] {
-  return transactions.filter(t => new Date(t.date).getFullYear() === year);
+  return transactions.filter(t => yearOf(t.date) === year);
 }
 
 export function filterByMonth(transactions: Transaction[], year: number, month: number): Transaction[] {
-  return transactions.filter(t => {
-    const d = new Date(t.date);
-    return d.getFullYear() === year && d.getMonth() + 1 === month;
-  });
+  return transactions.filter(t => yearOf(t.date) === year && monthOf(t.date) === month);
 }
 
 export function filterByQuarter(transactions: Transaction[], year: number, quarter: number): Transaction[] {
   const startMonth = (quarter - 1) * 3 + 1;
   const endMonth = startMonth + 2;
   return transactions.filter(t => {
-    const d = new Date(t.date);
-    const m = d.getMonth() + 1;
-    return d.getFullYear() === year && m >= startMonth && m <= endMonth;
+    const m = monthOf(t.date);
+    return yearOf(t.date) === year && m >= startMonth && m <= endMonth;
   });
 }
 

@@ -1,5 +1,5 @@
 import { AppData, Transaction } from '../types';
-import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear } from './calculations';
+import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear, yearOf, monthOf } from './calculations';
 
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
@@ -231,14 +231,13 @@ ${Object.entries(catBreakdown).map(([c, a]) => `  ${c}: ${fmtNum(a)}`).join('\n'
 function monthlyBreakdown(data: AppData, year?: number): string {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const years = year != null ? [year]
-    : [...new Set(data.transactions.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a);
+    : [...new Set(data.transactions.map(t => yearOf(t.date)))].sort((a, b) => b - a);
   const lines: string[] = [];
   for (const y of years) {
     const inc = new Array(12).fill(0), exp = new Array(12).fill(0);
     for (const tx of data.transactions) {
-      const d = new Date(tx.date);
-      if (d.getFullYear() !== y) continue;
-      const m = d.getMonth();
+      if (yearOf(tx.date) !== y) continue;
+      const m = monthOf(tx.date) - 1;
       if (tx.type === 'income') inc[m] += tx.amount;
       else if (tx.type === 'expense') exp[m] += tx.amount;
     }
@@ -258,13 +257,13 @@ function counterpartyIndex(data: AppData, year?: number): string {
   interface Party { inc: number; exp: number; count: number; years: Map<number, { inc: number; exp: number }>; }
   const map = new Map<string, Party>();
   const source = year != null
-    ? data.transactions.filter(tx => new Date(tx.date).getFullYear() === year)
+    ? data.transactions.filter(tx => yearOf(tx.date) === year)
     : data.transactions;
   for (const tx of source) {
     const key = (tx.description || '(no description)').trim() || '(no description)';
     let e = map.get(key);
     if (!e) { e = { inc: 0, exp: 0, count: 0, years: new Map() }; map.set(key, e); }
-    const y = new Date(tx.date).getFullYear();
+    const y = yearOf(tx.date);
     let ye = e.years.get(y);
     if (!ye) { ye = { inc: 0, exp: 0 }; e.years.set(y, ye); }
     if (tx.type === 'income') { e.inc += tx.amount; ye.inc += tx.amount; }
@@ -298,7 +297,7 @@ export function txPool(transactions: Transaction[], year?: number): Transaction[
   // ledger reads. Otherwise fall back to the newest-first sweep across all years.
   return year != null
     ? transactions
-        .filter(tx => new Date(tx.date).getFullYear() === year)
+        .filter(tx => yearOf(tx.date) === year)
         .sort((a, b) => a.date.localeCompare(b.date))
     : [...transactions].sort((a, b) => b.date.localeCompare(a.date));
 }
@@ -306,7 +305,7 @@ export function txPool(transactions: Transaction[], year?: number): Transaction[
 export function buildContext(data: AppData, lang: string, year?: number): string {
   // Every year that actually has transactions, newest first — so the AI can
   // analyse and compare any year (e.g. 2024 vs 2025), not just the fiscal year.
-  const years = [...new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))]
+  const years = [...new Set(data.transactions.map(tx => yearOf(tx.date)))]
     .sort((a, b) => b - a);
 
   // Working on one year: summarise ONLY that year. Leaving every year's totals in

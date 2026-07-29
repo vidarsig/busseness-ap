@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { calcVATSummary, filterByMonth, filterByQuarter, filterByYear } from '../utils/calculations';
+import { calcVATSummary, filterByMonth, filterByQuarter, filterByYear, yearOf } from '../utils/calculations';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 const PERIOD_MONTHS: Record<number, number[]> = {
@@ -58,7 +58,7 @@ export default function VATReturn() {
   const usState = data.settings.usState;
 
   const years = Array.from(new Set([year - 1, year, year + 1,
-    ...data.transactions.map(tx => new Date(tx.date).getFullYear())])).sort((a, b) => b - a);
+    ...data.transactions.map(tx => yearOf(tx.date))])).sort((a, b) => b - a);
 
   const periodLabel = (p: number) => {
     const ms = PERIOD_MONTHS[p];

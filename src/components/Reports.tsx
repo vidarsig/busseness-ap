@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, yearOf } from '../utils/calculations';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 export default function Reports({ drill }: { drill?: (category: string, year: number) => void } = {}) {
@@ -85,7 +85,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
   }
 
   const years = Array.from(
-    new Set(data.transactions.map(tx => new Date(tx.date).getFullYear()))
+    new Set(data.transactions.map(tx => yearOf(tx.date)))
   ).sort((a, b) => b - a);
   if (!years.includes(currentYear)) years.unshift(currentYear);
 
