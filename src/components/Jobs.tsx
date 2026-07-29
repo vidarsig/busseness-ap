@@ -3,10 +3,10 @@ import {
   Plus, X, Pencil, Trash2, Clock, Package, ChevronDown, ChevronUp,
   HardHat, CheckCircle, PauseCircle, XCircle, FileText, TrendingUp,
   Camera, Image, Receipt, Users, MapPin, Phone,
-  ZoomIn, Search, Calendar, Mail,
+  ZoomIn, Search, Calendar, Mail, CheckSquare, Square,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, InvoicePhoto, Currency, StockItem } from '../types';
+import { Job, JobStatus, JobReportStatus, JobChecklistItem, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, InvoicePhoto, Currency, StockItem } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import { sharePDF } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
@@ -55,7 +55,7 @@ const emptyJob = (): Partial<Job> => ({
   description:'', notes:'',
 });
 
-type TabType = 'time' | 'materials' | 'photos' | 'summary';
+type TabType = 'time' | 'materials' | 'photos' | 'checklist' | 'summary';
 interface JobFormState { open: boolean; job?: Partial<Job>; }
 interface TimeFormState { open: boolean; jobId: string; entry?: Partial<TimeEntry>; }
 interface MatFormState  { open: boolean; jobId: string; mat?: Partial<JobMaterial>; }
@@ -185,6 +185,23 @@ export default function Jobs({ sessionUser }: JobsProps) {
 
   const getTab = (id: string): TabType => tab[id] ?? 'summary';
   const setJobTab = (id: string, t: TabType) => setTab(v => ({ ...v, [id]: t }));
+
+  // ── per-job checklist (folds the old standalone Verkefni into the job) ──
+  const [checkText, setCheckText] = useState<Record<string, string>>({});
+  const openChecks = (j: Job) => (j.checklist ?? []).filter(c => !c.done).length;
+  function addCheck(job: Job) {
+    const text = (checkText[job.id] ?? '').trim();
+    if (!text) return;
+    const item: JobChecklistItem = { id: newId('ck'), text, done: false, createdAt: nowISO() };
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, checklist: [...(job.checklist ?? []), item], updatedAt: nowISO() } });
+    setCheckText(v => ({ ...v, [job.id]: '' }));
+  }
+  function toggleCheck(job: Job, id: string) {
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, checklist: (job.checklist ?? []).map(c => c.id === id ? { ...c, done: !c.done } : c), updatedAt: nowISO() } });
+  }
+  function delCheck(job: Job, id: string) {
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, checklist: (job.checklist ?? []).filter(c => c.id !== id), updatedAt: nowISO() } });
+  }
 
   // ── job counter ──────────────────────────────────────────
   // Next number = highest existing sequence for the year + 1, NOT a count — a count
@@ -811,6 +828,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
                         { id:'time',      label: t('Tímar','Time'),         icon: Clock },
                         { id:'materials', label: t('Efni','Materials'),     icon: Package },
                         { id:'photos',    label: `${t('Myndir','Photos')} (${jPhotos.length})`, icon: Camera },
+                        { id:'checklist', label: `${t('Gátlisti','Checklist')}${openChecks(job) ? ` (${openChecks(job)})` : ''}`, icon: CheckSquare },
                       ] as const).map(({ id, label, icon: Icon }) => (
                         <button key={id} onClick={() => setJobTab(job.id, id)}
                           className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition ${
@@ -1152,6 +1170,45 @@ export default function Jobs({ sessionUser }: JobsProps) {
                                     />
                                     <p className="text-[10px] text-gray-400 mt-0.5">{photo.takenAt.slice(0,10)}</p>
                                   </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── CHECKLIST TAB ── */}
+                      {currentTab === 'checklist' && (
+                        <div className="space-y-3">
+                          <div className="flex gap-2">
+                            <input
+                              value={checkText[job.id] ?? ''}
+                              onChange={e => setCheckText(v => ({ ...v, [job.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') addCheck(job); }}
+                              placeholder={t('Bæta við verki…', 'Add a to-do…')}
+                              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button onClick={() => addCheck(job)}
+                              className="flex items-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition">
+                              <Plus className="w-4 h-4" />{t('Bæta við', 'Add')}
+                            </button>
+                          </div>
+                          {(job.checklist ?? []).length === 0 ? (
+                            <p className="text-xs text-gray-400 text-center py-6">{t('Enginn gátlisti enn — bættu við fyrsta verkinu', 'No to-dos yet — add the first one')}</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {(job.checklist ?? []).map(c => (
+                                <div key={c.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                                  <button onClick={() => toggleCheck(job, c.id)} className="flex-shrink-0">
+                                    {c.done
+                                      ? <CheckSquare className="w-5 h-5 text-green-600" />
+                                      : <Square className="w-5 h-5 text-gray-300 hover:text-gray-400" />}
+                                  </button>
+                                  <span className={`flex-1 text-sm ${c.done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{c.text}</span>
+                                  <button onClick={() => delCheck(job, c.id)}
+                                    className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-red-600 transition">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               ))}
                             </div>

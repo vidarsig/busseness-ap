@@ -448,53 +448,34 @@ export default function Dashboard({ setView, perms }: Props) {
         )}
       </>)}
 
-      {/* Upcoming tasks widget */}
-      {(() => {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const upcoming = data.tasks
-          .filter(t => t.status === 'open')
-          .sort((a, b) => {
-            if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-            if (a.dueDate) return -1;
-            if (b.dueDate) return 1;
-            return 0;
-          })
-          .slice(0, 5);
-        if (upcoming.length === 0) return null;
+      {/* To-do — open checklist items gathered from all jobs (folds in Verkefni) */}
+      {canViewJobs && (() => {
+        const todos = jobs.flatMap(j => (j.checklist ?? [])
+          .filter(c => !c.done)
+          .map(c => ({ id: c.id, text: c.text, jobName: j.name || j.number })))
+          .slice(0, 8);
+        if (todos.length === 0) return null;
         return (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h2 className="font-semibold text-gray-800 flex items-center gap-2">
                 <CheckSquare className="w-4 h-4 text-blue-600" />
-                {t('upcomingTasks')}
+                {L('Verkefni', 'To-do')}
               </h2>
-              <button onClick={() => setView('tasks')}
+              <button onClick={() => setView('jobs')}
                 className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                {lang === 'is' ? 'Sjá öll' : 'See all'}<ArrowRight className="w-3 h-3" />
+                {L('Sjá verk', 'See jobs')}<ArrowRight className="w-3 h-3" />
               </button>
             </div>
             <div className="divide-y divide-gray-50">
-              {upcoming.map(task => {
-                const isOverdue = task.dueDate && task.dueDate < todayStr;
-                const isToday = task.dueDate === todayStr;
-                return (
-                  <div key={task.id} className="px-4 py-2.5 flex items-center gap-3">
-                    {isOverdue
-                      ? <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                      : <Circle className="w-4 h-4 text-gray-300 flex-shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-800 truncate">{task.title}</p>
-                    </div>
-                    {task.dueDate && (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        isOverdue ? 'bg-red-100 text-red-700' : isToday ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'
-                      }`}>
-                        {isOverdue ? (lang === 'is' ? 'Útrunnið' : 'Overdue') : isToday ? (lang === 'is' ? 'Í dag' : 'Today') : task.dueDate}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+              {todos.map(td => (
+                <button key={td.id} onClick={() => setView('jobs')}
+                  className="w-full px-4 py-2.5 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors">
+                  <Circle className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  <span className="text-sm text-gray-800 truncate flex-1">{td.text}</span>
+                  <span className="text-xs text-gray-400 truncate flex-shrink-0 max-w-[45%]">{td.jobName}</span>
+                </button>
+              ))}
             </div>
           </div>
         );

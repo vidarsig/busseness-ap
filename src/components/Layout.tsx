@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   BookOpen, LayoutDashboard, List, Calculator, BarChart2, FileText,
   Settings, Menu, X, RefreshCw, Upload, Receipt,
-  BookMarked, TrendingUp, Users, ClipboardList, Zap, CheckSquare,
+  BookMarked, TrendingUp, Users, ClipboardList, Zap,
   Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle, Crown, Star, Contact,
   Briefcase, ChevronDown,
 } from 'lucide-react';
@@ -32,11 +32,11 @@ const sections: NavSection[] = [
   { part: 'top', items: [{ id: 'dashboard', icon: LayoutDashboard }] },
 
   // ── WORK — the field/job side (invoices live here too; still permission-gated) ──
+  // Verkefni/tasks folded into each Job's checklist, so no standalone tab.
   { part: 'work', items: [
     { id: 'jobs', icon: HardHat },
     { id: 'invoices', icon: Receipt },
     { id: 'stock', icon: Package },
-    { id: 'tasks', icon: CheckSquare },
   ]},
 
   // ── BUSINESS — the money side (hidden until expanded) ──

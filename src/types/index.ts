@@ -352,6 +352,16 @@ export type JobStatus = 'survey' | 'scheduled' | 'active' | 'paused' | 'complete
 // a manager/owner approves it, and ONLY then can the job become an invoice.
 export type JobReportStatus = 'draft' | 'submitted' | 'approved';
 
+// A simple to-do item that lives ON a job (replaces the old standalone task list):
+// "book inspection", "pick up materials", "call customer". Open items surface on
+// the Command Center.
+export interface JobChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: string;
+}
+
 export interface Job {
   id: string;
   number: string;         // e.g. JOB-2026-001
@@ -375,6 +385,7 @@ export interface Job {
   approvedBy?: string;
   approvedAt?: string;
   returnNote?: string;
+  checklist?: JobChecklistItem[];   // per-job to-do list
   createdAt: string;
   updatedAt: string;
 }
