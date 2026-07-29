@@ -36,6 +36,11 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
   const { data, t, cc, lang, fmt } = useApp();
   const nextInvNum = `${data.settings.invoicePrefix}${String(data.settings.invoiceLastNumber + 1).padStart(4, '0')}`;
   const nextQuoteNum = `T${String(data.settings.quoteLastNumber + 1).padStart(4, '0')}`;
+  // Default tax on a new line: in the US the standard rate is 0, so lines must
+  // default to the contractor's configured STATE sales-tax rate — otherwise every
+  // invoice starts at 0% and they'd silently under-charge sales tax. (VAT countries
+  // already carry a real standardRate.) They can still drop a line to 0 (e.g. labour).
+  const defaultTaxRate = cc.isUSA ? (data.settings.salesTaxRate ?? 0) : cc.standardRate;
 
   const [form, setForm] = useState<Invoice>(initial ?? {
     id: newId(),
@@ -44,7 +49,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
     date: todayISO(),
     dueDate: addDays(todayISO(), defaultType === 'quote' ? 14 : 30),
     customer: { name: '', kennitala: '', address: '', postalCode: '', city: '', email: '', phone: '' },
-    lines: [{ id: lineId(), description: '', quantity: 1, unitPrice: 0, vatRate: cc.standardRate }],
+    lines: [{ id: lineId(), description: '', quantity: 1, unitPrice: 0, vatRate: defaultTaxRate }],
     notes: '',
     status: 'draft',
     currency: data.settings.defaultCurrency,
@@ -55,7 +60,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
     setForm(f => ({ ...f, customer: { ...f.customer, [k]: v } }));
   const setLine = (id: string, k: keyof InvoiceLine, v: unknown) =>
     setForm(f => ({ ...f, lines: f.lines.map(l => l.id === id ? { ...l, [k]: v } : l) }));
-  const addLine = () => setForm(f => ({ ...f, lines: [...f.lines, { id: lineId(), description: '', quantity: 1, unitPrice: 0, vatRate: cc.standardRate }] }));
+  const addLine = () => setForm(f => ({ ...f, lines: [...f.lines, { id: lineId(), description: '', quantity: 1, unitPrice: 0, vatRate: defaultTaxRate }] }));
   const removeLine = (id: string) => setForm(f => ({ ...f, lines: f.lines.filter(l => l.id !== id) }));
   // Add a Birgðir (stock) item as an invoice line — fills name, sell price and VAT.
   const [stockPick, setStockPick] = useState(false);
@@ -63,7 +68,7 @@ function InvoiceModal({ initial, defaultType = 'invoice', autoCamera = false, on
   const addStockLine = (item: StockItem) => setForm(f => ({ ...f, lines: [...f.lines, {
     id: lineId(),
     description: item.unit ? `${item.name} (${item.unit})` : item.name,
-    quantity: 1, unitPrice: item.sellPrice || 0, vatRate: item.vatRate ?? cc.standardRate,
+    quantity: 1, unitPrice: item.sellPrice || 0, vatRate: item.vatRate ?? defaultTaxRate,
   }] }));
 
   // ── Photos ────────────────────────────────────────────────

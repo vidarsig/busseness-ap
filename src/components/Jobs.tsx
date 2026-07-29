@@ -64,6 +64,10 @@ export default function Jobs({ sessionUser }: JobsProps) {
   const { data, dispatch, lang, fmt, cc } = useApp();
   const isIS = lang === 'is';
   const t = (is: string, en: string) => isIS ? is : en;
+  // US standard rate is 0, so invoice/offer lines must default to the contractor's
+  // configured state sales-tax rate — otherwise jobs bill at 0% sales tax. Mirrors
+  // the same default in the Invoices form.
+  const defaultTaxRate = cc.isUSA ? (data.settings.salesTaxRate ?? 0) : cc.standardRate;
   // Guards a job from being invoiced twice: set synchronously so a fast double-click
   // (both handlers fire before React re-renders) can't create two invoices / two
   // identical numbers. The persistent check (an invoice already tagged to this job)
@@ -396,7 +400,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
         description: `${t('Vinnulaun', 'Labour')} — ${name}`,
         quantity: hours,
         unitPrice: rate,
-        vatRate: cc.standardRate,
+        vatRate: defaultTaxRate,
       });
     });
 
@@ -407,7 +411,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
         description: m.description,
         quantity: m.qty,
         unitPrice: m.unitCost,
-        vatRate: cc.standardRate,
+        vatRate: defaultTaxRate,
       });
     });
 
@@ -482,7 +486,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       description: job.name || t('Tilboð', 'Offer'),
       quantity: 1,
       unitPrice: job.quotedAmount || 0,
-      vatRate: cc.standardRate,
+      vatRate: defaultTaxRate,
     }];
 
     // Carry the job's photos onto the offer too, so they survive job → offer →
@@ -534,7 +538,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
     });
   }
   function offerAddLine() {
-    setOfferEdit(o => o ? { ...o, lines: [...o.lines, { id: newId('il'), description: '', quantity: 1, unitPrice: 0, vatRate: cc.standardRate }] } : o);
+    setOfferEdit(o => o ? { ...o, lines: [...o.lines, { id: newId('il'), description: '', quantity: 1, unitPrice: 0, vatRate: defaultTaxRate }] } : o);
   }
   // Add a Birgðir (stock) item as an offer line — fills name, sell price and VAT.
   function offerAddStock(item: StockItem) {
