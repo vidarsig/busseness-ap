@@ -73,6 +73,11 @@ export default function Dashboard({ setView, perms }: Props) {
     [t('income')]: m.income,
     [t('expense')]: m.expenses,
   }));
+  // The monthly totals are ISK-normalised; the Y-axis divides by the same rate the
+  // tooltip's fmtISK uses, so the axis labels read in the company currency (a US
+  // company sees ~5k, not ~660k) instead of leaking ISK magnitudes.
+  const baseCur = data.settings.defaultCurrency || 'ISK';
+  const dispRate = baseCur === 'ISK' ? 1 : ((data.settings.exchangeRates as unknown as Record<string, number>)[baseCur] ?? 1);
 
   const recent = [...data.transactions]
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -219,7 +224,7 @@ export default function Dashboard({ setView, perms }: Props) {
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => { const d = v / dispRate; return d >= 1000 ? `${(d/1000).toFixed(0)}k` : `${Math.round(d)}`; }} />
             <Tooltip
               formatter={(value: number) => fmtISK(value)}
               labelStyle={{ fontSize: 12 }}

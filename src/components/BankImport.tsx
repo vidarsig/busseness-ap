@@ -341,7 +341,9 @@ function buildPartyHistory(txns: Transaction[]): Map<string, { type: Transaction
 export default function BankImport() {
   const { data, dispatch, t, lang, cc } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [format, setFormat] = useState<BankFormat>('arion');
+  // The Arion/Íslandsbanki/Landsbankinn presets are Iceland-only; elsewhere the
+  // Generic + AI options cover any bank, so default a non-IS company to Generic.
+  const [format, setFormat] = useState<BankFormat>(() => cc.code === 'IS' ? 'arion' : 'generic');
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [done, setDone] = useState(0);
@@ -584,7 +586,9 @@ export default function BankImport() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t('bankimport')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{lang === 'is' ? 'Flytja inn Excel eða CSV frá íslensku bönkum' : 'Import Excel or CSV from Icelandic banks'}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{cc.code === 'IS'
+            ? (lang === 'is' ? 'Flytja inn Excel eða CSV frá íslensku bönkum' : 'Import Excel or CSV from Icelandic banks')
+            : (lang === 'is' ? 'Flytja inn Excel eða CSV frá bankanum þínum' : 'Import Excel or CSV from your bank')}</p>
         </div>
         <button onClick={() => setShowReceipts(true)}
           className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors flex-shrink-0">
@@ -601,7 +605,9 @@ export default function BankImport() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
         <h2 className="text-sm font-semibold text-gray-800 mb-3">{lang === 'is' ? '1. Veldu snið og skrá' : '1. Select format and file'}</h2>
         <div className="flex flex-wrap gap-3 mb-4">
-          {(['arion', 'islandsbanki', 'landsbankinn', 'generic', 'auto'] as BankFormat[]).map(f => (
+          {((cc.code === 'IS'
+            ? ['arion', 'islandsbanki', 'landsbankinn', 'generic', 'auto']
+            : ['generic', 'auto']) as BankFormat[]).map(f => (
             <button key={f} type="button" onClick={() => setFormat(f)}
               className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${format === f ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>
               {f === 'arion' ? 'Arion' : f === 'islandsbanki' ? 'Íslandsbanki' : f === 'landsbankinn' ? 'Landsbankinn' : f === 'generic' ? (lang === 'is' ? 'Almennt' : 'Generic') : (lang === 'is' ? '✨ Annað kerfi (AI)' : '✨ Other program (AI)')}
@@ -639,10 +645,12 @@ export default function BankImport() {
 
         <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
           <p className="font-semibold">{lang === 'is' ? 'Dálkareglur (Excel eða CSV):' : 'Column rules (Excel or CSV):'}</p>
-          <p>Arion: Dagsetning, Upphæð, Mynt, Skýring … (Excel-útflutningur úr netbanka)</p>
-          <p>Íslandsbanki: Dagsetning, Lýsing, Tilvísun, Innborgun, Útborgun</p>
-          <p>Landsbankinn: Dagsetning, Lýsing, Upphæð</p>
-          <p>{lang === 'is' ? 'Almennt' : 'Generic'}: Dagsetning, Lýsing, Upphæð</p>
+          {cc.code === 'IS' && <>
+            <p>Arion: Dagsetning, Upphæð, Mynt, Skýring … (Excel-útflutningur úr netbanka)</p>
+            <p>Íslandsbanki: Dagsetning, Lýsing, Tilvísun, Innborgun, Útborgun</p>
+            <p>Landsbankinn: Dagsetning, Lýsing, Upphæð</p>
+          </>}
+          <p>{lang === 'is' ? 'Almennt' : 'Generic'}: {lang === 'is' ? 'Dagsetning, Lýsing, Upphæð' : 'Date, Description, Amount'}</p>
           <p className="text-gray-400 pt-1">{lang === 'is' ? 'Fyrirsagnarlínur efst eru hunsaðar sjálfkrafa.' : 'Header/metadata rows at the top are skipped automatically.'}</p>
         </div>
       </div>
