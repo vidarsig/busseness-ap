@@ -16,7 +16,7 @@ interface Review {
 }
 
 interface AnalysisResult {
-  bugs: { title: string; severity: 'critical' | 'high' | 'medium' | 'low'; description: string; canFix: boolean; fixSuggestion?: string; screen?: string }[];
+  bugs: { title: string; severity: 'critical' | 'high' | 'medium' | 'low'; description: string; canFix: boolean; fixSuggestion?: string; screen?: string; userFixable?: boolean; fixSteps?: string }[];
   improvements: { title: string; description: string; priority: 'high' | 'medium' | 'low' }[];
   cantFix: { title: string; reason: string }[];
   replies: { reviewId: string; author: string; reply: string }[];
@@ -122,7 +122,9 @@ Analyze these reviews and respond with a JSON object (no markdown, just raw JSON
       "description": "what users are experiencing",
       "canFix": true,
       "fixSuggestion": "technical suggestion for fixing it",
-      "screen": "the app screen where this bug shows, so it can be reproduced — one of: dashboard, transactions, recurring, bankimport, invoices, jobs, stock, contacts, accounts, budget, payroll, vat, vatreturn, reports, annual, settings (omit if unclear)"
+      "screen": "the app screen where this bug shows, so it can be reproduced — one of: dashboard, transactions, recurring, bankimport, invoices, jobs, stock, contacts, accounts, budget, payroll, vat, vatreturn, reports, annual, settings (omit if unclear)",
+      "userFixable": false,
+      "fixSteps": "IF this is actually a WRONG SETTING the user can fix themselves (wrong sales-tax rate, wrong currency, wrong invoice prefix, prices-include-tax mismatch — NOT a code bug), set userFixable=true and give the exact plain-words in-app steps here, e.g. 'Open Settings → Sales Tax and set your state's rate (or 0 if your state has no sales tax).' Otherwise omit."
     }
   ],
   "improvements": [
@@ -142,7 +144,7 @@ Analyze these reviews and respond with a JSON object (no markdown, just raw JSON
     {
       "reviewId": "r0",
       "author": "reviewer name",
-      "reply": "professional, friendly reply that acknowledges their feedback, mentions any fix or roadmap item if relevant. Keep under 100 words. Sign off as 'The Jobboks Team'."
+      "reply": "professional, friendly reply that acknowledges their feedback. IF the problem is something they can fix themselves in the app (a wrong setting), the reply MUST guide them with the exact in-app steps, e.g. 'Good news — you can fix this in seconds: open Settings → Sales Tax and set your state's rate.' IF it's a real bug we must fix, thank them and say a fix is on the way. Keep under 100 words. Sign off as 'The Jobboks Team'."
     }
   ],
   "summary": "3-4 sentence executive summary of the overall review landscape, top pain points, and recommended next steps"
@@ -362,13 +364,22 @@ Be specific and actionable. For bugs, focus on what developers can actually fix 
                           <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${severityColor(bug.severity)}`}>
                             {bug.severity}
                           </span>
-                          {!bug.canFix && (
+                          {bug.userFixable ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 border border-green-200">
+                              user can self-fix (setting)
+                            </span>
+                          ) : !bug.canFix && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
                               manual fix needed
                             </span>
                           )}
                         </div>
                         <p className="text-sm text-gray-600 mt-1">{bug.description}</p>
+                        {bug.userFixable && bug.fixSteps && (
+                          <div className="mt-2 bg-green-50 rounded-lg px-3 py-2">
+                            <p className="text-xs text-green-800"><span className="font-medium">User can fix it in-app:</span> {bug.fixSteps}</p>
+                          </div>
+                        )}
                         {bug.fixSuggestion && (
                           <div className="mt-2 bg-blue-50 rounded-lg px-3 py-2">
                             <p className="text-xs text-blue-800"><span className="font-medium">Fix suggestion:</span> {bug.fixSuggestion}</p>
