@@ -6,7 +6,7 @@ import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
 import { yearOf } from '../utils/calculations';
-import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus } from '../types';
+import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus, CategoryRule } from '../types';
 import { COUNTRY_CONFIGS, findCaProvince } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
@@ -26,6 +26,21 @@ function extractBook(content: string): { text: string; book: BookTx[] } {
     if (Array.isArray(p?.transactions)) book = p.transactions;
   } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), book };
+}
+
+// A standing categorisation rule the AI proposes (```jobboks-rule``` block): teach the
+// app to auto-categorise every future matching transaction (e.g. "anything from Shell
+// is fuel"). The owner taps "Create rule" — the AI proposes, the owner approves.
+interface RuleProposal { pattern: string; category: string; type: TransactionType; vatRate?: number }
+function extractRule(content: string): { text: string; rules: RuleProposal[] } {
+  const m = content.match(/```jobboks-rule\s*([\s\S]*?)```/);
+  if (!m) return { text: content, rules: [] };
+  let rules: RuleProposal[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.rules)) rules = p.rules;
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), rules };
 }
 
 // The business setup the AI proposes for a new user (```jobboks-setup``` block):
@@ -669,6 +684,29 @@ export default function AIAssistant() {
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-book\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner approved a proposed categorisation rule → save it so future imports
+  // auto-categorise anything matching the pattern (same engine as the Flokkunarreglur screen).
+  function approveRule(msgIndex: number, rules: RuleProposal[]) {
+    let n = 0;
+    for (const r of rules) {
+      if (!String(r.pattern ?? '').trim()) continue;
+      const rule: CategoryRule = {
+        id: `rule_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        pattern: String(r.pattern).trim(),
+        category: r.category,
+        type: r.type,
+        vatRate: (Number(r.vatRate) || 0) as CategoryRule['vatRate'],
+        useCount: 0,
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+      dispatch({ type: 'ADD_RULE', payload: rule });
+      n++;
+    }
+    const done = lang === 'is' ? `✅ Flokkunarregla búin til: ${n}` : `✅ Rule${n === 1 ? '' : 's'} created: ${n}`;
+    setMessages(prev => prev.map((m, idx) =>
+      idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-rule\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // Point a proposed fix back at the real transaction. Returns null when the ref
   // no longer lines up — the books can change mid-chat (a Book, an import, an
   // edit in the Transactions screen), which shifts every row's position. Checking
@@ -946,7 +984,8 @@ export default function AIAssistant() {
                       const { text: afterJob, jobs: aiJobs } = extractJob(afterSettings);
                       const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterJob);
                       const { text: afterBook, book } = extractBook(afterInvoice);
-                      const { text, fixes, matches, badBlock } = extractFix(afterBook);
+                      const { text: afterRule, rules: aiRules } = extractRule(afterBook);
+                      const { text, fixes, matches, badBlock } = extractFix(afterRule);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -1080,6 +1119,25 @@ export default function AIAssistant() {
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? `Bóka ${book.length} færslu(r) í Jobboks` : `Book ${book.length} entr${book.length === 1 ? 'y' : 'ies'} into Jobboks`}
+                              </button>
+                            </div>
+                          )}
+                          {aiRules.length > 0 && (
+                            <div className="mt-3 border border-purple-200 rounded-lg overflow-hidden">
+                              <div className="bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700">
+                                {lang === 'is' ? 'Tillaga að flokkunarreglu — flokkar sjálfkrafa næst' : 'Proposed rule — auto-categorises from now on'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiRules.map((r, ri) => (
+                                  <div key={ri} className="px-3 py-1.5 text-xs text-gray-700">
+                                    {lang === 'is' ? 'Allt sem inniheldur' : 'Anything containing'} “<span className="font-medium">{r.pattern}</span>” → <span className="text-gray-500">{r.category} ({r.type}, {lang === 'is' ? 'VSK' : 'tax'} {Number(r.vatRate) || 0}%)</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={() => approveRule(i, aiRules)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white text-sm font-medium hover:bg-purple-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? `Búa til ${aiRules.length} reglu(r)` : `Create ${aiRules.length} rule${aiRules.length === 1 ? '' : 's'}`}
                               </button>
                             </div>
                           )}

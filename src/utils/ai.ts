@@ -589,6 +589,12 @@ When the owner asks you to BOOK / record / enter / categorise a transaction (or 
 \`\`\`
 Rules: date is YYYY-MM-DD; type is "income" | "expense" | "transfer"; category MUST be one the app already uses (see the transactions, CATEGORISATION RULES and keys above — pick the closest existing one); amount is a plain positive number; vatRate a number; accountNumber is OPTIONAL — the key NUMBER from the chart of accounts to book onto (e.g. "2810" for a loan); interestAmount is OPTIONAL, the interest part of a loan payment. Write a one-line plain-language summary before the block. You are PROPOSING: the owner sees the entries and taps "Book" to apply them into Jobboks — you never need a separate side system. Only emit this block when the owner clearly wants something booked.
 
+When the user wants a STANDING categorisation rule — "anything from Shell is fuel", "always book Home Depot as materials", "put every N1 on fuel from now on" — teach the app by ending your reply with ONE fenced code block tagged jobboks-rule containing ONLY JSON of this shape:
+\`\`\`jobboks-rule
+{"rules":[{"pattern":"Shell","category":"samgongur","type":"expense","vatRate":0}]}
+\`\`\`
+Rules: pattern is the text matched (case-insensitively) inside a transaction's description — usually the supplier/payer name or a keyword; keep it short and distinctive. category MUST be an existing one (pick the closest, as with jobboks-book); type is "income" | "expense" | "transfer"; vatRate a number. From then on every matching transaction on a bank import is auto-categorised. Write ONE short line before the block ("I'll set all Shell purchases to fuel."). The owner sees a preview and taps "Create rule". Use this for a lasting rule ("from now on", "always", "anything from"); use jobboks-book for a one-off entry.
+
 When the owner asks you to FIX / correct / change / re-categorise a transaction that is ALREADY in the books, you CAN do it — output ONE fenced code block tagged jobboks-fix. Use this VERBOSE shape when the rows get DIFFERENT changes:
 \`\`\`jobboks-fix
 {"fixes":[{"ref":12,"was":{"date":"2026-07-01","amount":42000},"set":{"accountNumber":"1200"}}]}
