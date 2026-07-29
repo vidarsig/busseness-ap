@@ -1,21 +1,39 @@
 import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare, AlertTriangle, Circle, Download, Check } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
+  TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare,
+  AlertTriangle, Circle, Download, Check, HardHat, MapPin, Camera, ClipboardCheck,
+  Send, ArrowDownLeft, Search,
+} from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, getTransactionISK, getMonthlyTotals, calcVATSummary, yearOf } from '../utils/calculations';
+import { filterByYear, getTransactionISK, calcVATSummary, yearOf } from '../utils/calculations';
+import { invoiceTotals } from '../utils/invoiceMath';
 import { formatDate } from '../utils/formatters';
-import { View, UserPermissions } from '../types';
+import { View, UserPermissions, JobStatus, Currency } from '../types';
 import SettingsHealthBanner from './SettingsHealthBanner';
 
 interface Props { setView: (v: View) => void; perms?: UserPermissions | null; }
+
+// Full pipeline shown on the front page (cancelled left off), in the order the
+// foreman works them. Labels/colours mirror the Jobs screen so they never disagree.
+const STAGES: JobStatus[] = ['survey', 'scheduled', 'active', 'paused', 'complete'];
+const STAGE_META: Record<JobStatus, { is: string; en: string; dot: string; chip: string }> = {
+  survey:    { is: 'Vettvangsskoðun', en: 'Site visit', dot: 'bg-purple-500', chip: 'bg-purple-100 text-purple-700' },
+  scheduled: { is: 'Færslur',         en: 'Entries',    dot: 'bg-indigo-500', chip: 'bg-indigo-100 text-indigo-700' },
+  active:    { is: 'Í vinnslu',       en: 'Active',     dot: 'bg-green-500',  chip: 'bg-green-100 text-green-700' },
+  paused:    { is: 'Á bið',           en: 'Paused',     dot: 'bg-amber-500',  chip: 'bg-amber-100 text-amber-700' },
+  complete:  { is: 'Lokið',           en: 'Complete',   dot: 'bg-blue-500',   chip: 'bg-blue-100 text-blue-700' },
+  cancelled: { is: 'Hætt við',        en: 'Cancelled',  dot: 'bg-gray-400',   chip: 'bg-gray-100 text-gray-500' },
+};
 
 export default function Dashboard({ setView, perms }: Props) {
   // Workers (e.g. staff) must not see the company's financial situation.
   const canViewFinancials = !perms || perms.canViewFinancials;
   const canExport = !perms || perms.canExportData;
+  const canViewJobs = !perms || perms.canViewJobs;
+  const canViewInvoices = !perms || perms.canViewInvoices;
+  const canApproveReports = !perms || perms.canApproveJobReports;
   const { data, t, lang, fmtISK, cc } = useApp();
+  const L = (is: string, en: string) => (lang === 'is' ? is : en);
   const [backedUp, setBackedUp] = useState(false);
   const [lastBackup, setLastBackup] = useState<string | null>(
     () => localStorage.getItem('jobboks_last_backup'),
@@ -66,23 +84,45 @@ export default function Dashboard({ setView, perms }: Props) {
   const netProfit = totalIncome - totalExpenses;
   const vat = calcVATSummary(yearly, cc.vatRates, data.settings.pricesIncludeVAT);
 
-  const monthlyData = getMonthlyTotals(data.transactions, year);
-  const monthLabels = [t('january'),t('february'),t('march'),t('april'),t('may'),t('june'),
-    t('july'),t('august'),t('september'),t('october'),t('november'),t('december')];
-  const chartData = monthlyData.map((m, i) => ({
-    name: monthLabels[i].slice(0, 3),
-    [t('income')]: m.income,
-    [t('expense')]: m.expenses,
-  }));
-  // The monthly totals are ISK-normalised; the Y-axis divides by the same rate the
-  // tooltip's fmtISK uses, so the axis labels read in the company currency (a US
-  // company sees ~5k, not ~660k) instead of leaking ISK magnitudes.
-  const baseCur = data.settings.defaultCurrency || 'ISK';
-  const dispRate = baseCur === 'ISK' ? 1 : ((data.settings.exchangeRates as unknown as Record<string, number>)[baseCur] ?? 1);
+  // ── Field / work data for the front page ──
+  const jobs = data.jobs ?? [];
+  // Work sites = the live ones (planned or in progress), newest touched first.
+  const sites = [...jobs]
+    .filter(j => j.status === 'survey' || j.status === 'scheduled' || j.status === 'active' || j.status === 'paused')
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    .slice(0, 6);
+  // Reports a worker submitted, waiting for the owner/manager to approve.
+  const submitted = [...jobs]
+    .filter(j => j.reportStatus === 'submitted')
+    .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+  // Latest photos taken out on the jobs.
+  const recentPhotos = [...(data.jobPhotos ?? [])]
+    .sort((a, b) => (b.takenAt || b.createdAt || '').localeCompare(a.takenAt || a.createdAt || ''))
+    .slice(0, 8);
 
-  const recent = [...data.transactions]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 5);
+  // ── "What's moving" flow — the daily pulse of the business ──
+  const invoices = data.invoices ?? [];
+  const toISK = (amt: number, cur: Currency) =>
+    amt * ((data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1);
+  const invISK = (inv: typeof invoices[number]) => toISK(invoiceTotals(inv).total, inv.currency);
+  const sumISK = (arr: typeof invoices) => arr.reduce((s, i) => s + invISK(i), 0);
+  const offersOut = invoices.filter(i => i.type === 'quote' && i.status === 'sent');
+  const incoming = invoices.filter(i => i.type === 'invoice' && (i.status === 'sent' || i.status === 'overdue'));
+  const overdue = invoices.filter(i => i.type === 'invoice' && i.status === 'overdue');
+  const jobsIn = (st: JobStatus) => jobs.filter(j => j.status === st).length;
+
+  type FlowTile = { key: string; label: string; n: number; sub?: string; Icon: typeof Send; color: string; bg: string; to: View };
+  const flow: FlowTile[] = [];
+  if (canViewInvoices) {
+    flow.push({ key: 'offers',  label: L('Tilboð úti', 'Offers out'),   n: offersOut.length, sub: fmtISK(sumISK(offersOut)), Icon: Send,          color: 'text-violet-600', bg: 'bg-violet-50', to: 'invoices' });
+    flow.push({ key: 'incoming', label: L('Að koma inn', 'Coming in'),  n: incoming.length,  sub: fmtISK(sumISK(incoming)),  Icon: ArrowDownLeft,  color: 'text-green-600',  bg: 'bg-green-50',  to: 'invoices' });
+    if (overdue.length > 0)
+      flow.push({ key: 'overdue', label: L('Í vanskilum', 'Overdue'),   n: overdue.length,   sub: fmtISK(sumISK(overdue)),   Icon: AlertTriangle,  color: 'text-red-600',    bg: 'bg-red-50',    to: 'invoices' });
+  }
+  if (canViewJobs) {
+    flow.push({ key: 'survey', label: L('Skoðanir', 'Surveys'), n: jobsIn('survey'), Icon: Search,  color: 'text-purple-600', bg: 'bg-purple-50', to: 'jobs' });
+    flow.push({ key: 'active', label: L('Í vinnslu', 'Active'),  n: jobsIn('active'), Icon: HardHat, color: 'text-blue-600',   bg: 'bg-blue-50',   to: 'jobs' });
+  }
 
   const cards = [
     {
@@ -206,86 +246,184 @@ export default function Dashboard({ setView, perms }: Props) {
         </button>
       )}
 
-      {canViewFinancials ? (<>
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {cards.map(card => (
-          <div key={card.label} className={`bg-white rounded-xl border ${card.border} p-4`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-500">{card.label}</span>
-              <div className={`${card.bg} rounded-lg p-2`}>
-                <card.icon className={`w-4 h-4 ${card.color}`} />
+      {/* KPI cards — money glance, owner/manager only */}
+      {canViewFinancials && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {cards.map(card => (
+            <div key={card.label} className={`bg-white rounded-xl border ${card.border} p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-gray-500">{card.label}</span>
+                <div className={`${card.bg} rounded-lg p-2`}>
+                  <card.icon className={`w-4 h-4 ${card.color}`} />
+                </div>
               </div>
+              <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
             </div>
-            <div className={`text-xl font-bold ${card.color}`}>{card.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Chart */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('incomeVsExpenses')} — {year}</h2>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => { const d = v / dispRate; return d >= 1000 ? `${(d/1000).toFixed(0)}k` : `${Math.round(d)}`; }} />
-            <Tooltip
-              formatter={(value: number) => fmtISK(value)}
-              labelStyle={{ fontSize: 12 }}
-              contentStyle={{ fontSize: 12 }}
-            />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey={t('income')} fill="#22c55e" radius={[3, 3, 0, 0]} />
-            <Bar dataKey={t('expense')} fill="#f87171" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Recent transactions */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">{t('recentTransactions')}</h2>
-          <button
-            onClick={() => setView('transactions')}
-            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-          >
-            {t('all')} <ArrowRight className="w-3 h-3" />
-          </button>
-        </div>
-        {recent.length === 0 ? (
-          <div className="py-12 text-center">
-            <p className="text-gray-400 text-sm">{t('noTransactions')}</p>
-            <button
-              onClick={() => setView('transactions')}
-              className="mt-3 text-blue-600 text-sm font-medium hover:underline"
-            >
-              {t('addFirst')}
-            </button>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {recent.map(tx => (
-              <div key={tx.id} className="flex items-center justify-between px-5 py-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${tx.type === 'income' ? 'bg-green-400' : 'bg-red-400'}`} />
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{tx.description}</p>
-                    <p className="text-xs text-gray-400">{formatDate(tx.date, lang)} · {t(tx.category as never)}</p>
-                  </div>
-                </div>
-                <div className={`text-sm font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                  {tx.type === 'income' ? '+' : '-'}{fmtISK(getTransactionISK(tx))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      </>) : (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-500 text-sm mb-6">
-          {lang === 'is' ? 'Verkefnin þín og verkefnalistinn eru hér að neðan.' : 'Your jobs and tasks are below.'}
+          ))}
         </div>
       )}
+
+      {/* "What's moving" — the daily pulse: offers out, money coming in, surveys, active jobs */}
+      {flow.length > 0 && (
+        <div className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{L('Í gangi núna', "What's moving")}</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {flow.map(f => (
+              <button key={f.key} onClick={() => setView(f.to)}
+                className="rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 p-3 text-left transition-colors">
+                <div className="flex items-center justify-between mb-2">
+                  <div className={`${f.bg} rounded-lg p-1.5`}>
+                    <f.Icon className={`w-4 h-4 ${f.color}`} />
+                  </div>
+                  <span className="text-2xl font-bold text-gray-900 leading-none">{f.n}</span>
+                </div>
+                <div className="text-xs font-medium text-gray-700 truncate">{f.label}</div>
+                {f.sub && <div className="text-[11px] text-gray-400 truncate">{f.sub}</div>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {canViewJobs && (<>
+        {/* Reports from workers — waiting for approval */}
+        {canApproveReports && submitted.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl border border-amber-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-amber-100">
+              <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2 min-w-0">
+                <ClipboardCheck className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <span className="truncate">{L('Skýrslur frá starfsmönnum', 'Reports from workers')}</span>
+                <span className="text-xs font-normal text-amber-600 hidden sm:inline">· {L('bíður samþykktar', 'waiting for approval')}</span>
+              </h2>
+              <button onClick={() => setView('jobs')} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium flex-shrink-0">
+                {L('Skoða', 'Review')} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-50">
+              {submitted.slice(0, 5).map(job => (
+                <button key={job.id} onClick={() => setView('jobs')}
+                  className="w-full flex items-center justify-between gap-3 px-5 py-3 text-left hover:bg-amber-50/60 transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{job.name || job.number}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {job.clientName}
+                      {job.submittedBy ? ` · ${L('sent af', 'by')} ${job.submittedBy}` : ''}
+                      {job.submittedAt ? ` · ${formatDate(job.submittedAt.split('T')[0], lang)}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 flex-shrink-0">
+                    {L('Samþykkja', 'Approve')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Job status — where the jobs are in the pipeline (positioning) */}
+        {jobs.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <HardHat className="w-4 h-4 text-blue-600" />
+                {L('Staða verkefna', 'Job status')}
+              </h2>
+              <button onClick={() => setView('jobs')} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                {L('Öll verk', 'All jobs')} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {STAGES.map(s => {
+                const m = STAGE_META[s];
+                const n = jobs.filter(j => j.status === s).length;
+                return (
+                  <button key={s} onClick={() => setView('jobs')}
+                    className="rounded-xl border border-gray-100 bg-gray-50 hover:bg-blue-50 p-3 text-left transition-colors">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.dot}`} />
+                      <span className="text-[11px] text-gray-500 truncate">{L(m.is, m.en)}</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900">{n}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Work sites — the live jobs */}
+        <div className="mb-6 bg-white rounded-xl border border-gray-200">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-blue-600" />
+              {L('Verkstaðir', 'Work sites')}
+            </h2>
+            <button onClick={() => setView('jobs')} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+              {L('Öll', 'All')} <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+          {sites.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-gray-400 text-sm">{L('Engin virk verk', 'No active jobs')}</p>
+              <button onClick={() => setView('jobs')} className="mt-3 text-blue-600 text-sm font-medium hover:underline">
+                {L('Skrá fyrsta verkið', 'Log your first job')}
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {sites.map(job => {
+                const m = STAGE_META[job.status];
+                return (
+                  <button key={job.id} onClick={() => setView('jobs')}
+                    className="w-full flex items-center justify-between gap-3 px-5 py-3 text-left hover:bg-gray-50 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{job.name || job.number}</p>
+                      <p className="text-xs text-gray-400 truncate flex items-center gap-1">
+                        {job.address
+                          ? <><MapPin className="w-3 h-3 flex-shrink-0" />{job.address}</>
+                          : (job.clientName || '—')}
+                      </p>
+                    </div>
+                    {m && <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${m.chip}`}>{L(m.is, m.en)}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Photos from jobs */}
+        {recentPhotos.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-blue-600" />
+                {L('Myndir frá verkum', 'Photos from jobs')}
+              </h2>
+              <button onClick={() => setView('jobs')} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                {L('Öll', 'All')} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {recentPhotos.map(p => {
+                const jn = jobs.find(j => j.id === p.jobId)?.name;
+                return (
+                  <button key={p.id} onClick={() => setView('jobs')}
+                    className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group">
+                    <img src={p.dataUrl} alt={p.caption || jn || 'job photo'}
+                      className="w-full h-full object-cover" loading="lazy" />
+                    {(p.caption || jn) && (
+                      <div className="absolute inset-x-0 bottom-0 bg-black/50 px-1.5 py-0.5">
+                        <p className="text-[10px] text-white truncate">{p.caption || jn}</p>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </>)}
 
       {/* Upcoming tasks widget */}
       {(() => {
