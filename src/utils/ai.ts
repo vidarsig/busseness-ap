@@ -317,6 +317,7 @@ export function buildContext(data: AppData, lang: string, year?: number): string
     .join('\n\n') || '  No transactions recorded yet.';
 
   const openInvoices = data.invoices.filter(i => i.type === 'invoice' && (i.status === 'sent' || i.status === 'overdue'));
+  const draftInvoices = data.invoices.filter(i => i.type === 'invoice' && i.status === 'draft').slice(-8);
   // Detailed transaction rows for the chat. The per-year summaries above already
   // cover every year in aggregate; here we include the individual rows so the AI
   // can reference specific transactions. Capped so a huge multi-year history
@@ -446,6 +447,8 @@ ${openInvoices.map(i => {
     const total = i.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
     return `  ${i.number} — ${i.customer.name}: ${fmtNum(total)} (${i.status})`;
   }).join('\n') || '  None'}
+DRAFT INVOICES — not yet sent (${draftInvoices.length}):
+${draftInvoices.map(i => `  ${i.number} — ${i.customer.name} (draft)`).join('\n') || '  None'}
 
 ${txLabel}:
   ref | date | type | category | amount | description | key   ("-" in the key column means the entry is NOT booked on any key yet)
@@ -582,6 +585,12 @@ When the user wants to MAKE / SEND / DRAFT an INVOICE (e.g. "invoice John $2,000
 {"invoices":[{"customer":"John Miller","description":"Deck build","amount":2000,"vatRate":2.9}]}
 \`\`\`
 Rules: amount is the GROSS total the customer pays (${data.settings.vatTerm || 'tax'} INCLUDED) as a plain positive number — the app extracts the tax. vatRate is a number: use the standard rate (${data.settings.standardRate}) for normal work, 0 for rent or tax-exempt sales. customer is the client's name; description is optional. You may include several invoices in the array. Write ONE short, friendly line before the block ("Here's your first invoice — tap to create it."). Each is created as a DRAFT — the owner sees a preview and taps "Create" to make it; nothing is issued until they tap. Emit this ONLY when the user actually wants an invoice made.
+
+When the user wants to update the STATUS of an EXISTING invoice — "mark R0042 paid", "R0041 is paid now", "mark the deck invoice as sent" — end your reply with ONE fenced code block tagged jobboks-invoice-status containing ONLY JSON of this shape:
+\`\`\`jobboks-invoice-status
+{"updates":[{"number":"R0042","status":"paid"}]}
+\`\`\`
+Rules: number is the invoice's number EXACTLY as shown in OPEN INVOICES / DRAFT INVOICES above (use those lists to map "John's invoice" → its number); status is "paid" or "sent" ONLY. Write ONE short line before the block ("I'll mark R0042 as paid."). The owner sees a preview and taps to apply. NOTE: you can flip the status but you CANNOT actually email an invoice — if they want it EMAILED/SENT to the customer, tell them to tap the "Send" button on that invoice (that attaches the PDF); you may still mark it "sent" here if they've sent it themselves.
 
 When the owner asks you to BOOK / record / enter / categorise a transaction (or several) INTO the app, output ONE fenced code block tagged jobboks-book containing ONLY JSON of this shape:
 \`\`\`jobboks-book

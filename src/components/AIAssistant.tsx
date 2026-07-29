@@ -61,6 +61,20 @@ function extractContact(content: string): { text: string; contacts: ContactPropo
   return { text: content.replace(m[0], '').trim(), contacts };
 }
 
+// A status change to an EXISTING invoice the AI proposes (```jobboks-invoice-status```):
+// mark paid or sent. The owner taps to apply — the AI proposes, the owner approves.
+interface InvoiceStatusUpdate { number: string; status: 'paid' | 'sent' }
+function extractInvoiceStatus(content: string): { text: string; updates: InvoiceStatusUpdate[] } {
+  const m = content.match(/```jobboks-invoice-status\s*([\s\S]*?)```/);
+  if (!m) return { text: content, updates: [] };
+  let updates: InvoiceStatusUpdate[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.updates)) updates = p.updates;
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), updates };
+}
+
 // The business setup the AI proposes for a new user (```jobboks-setup``` block):
 // country + (US) state/rate + company name. The owner taps "Set up" to apply — the
 // AI directs, the owner confirms. This is the "it set itself up for me" moment.
@@ -84,7 +98,7 @@ function extractSetup(content: string): { text: string; setup: SetupProposal | n
 // directs, the owner confirms — nothing is issued until they tap.
 interface InvoiceProposal { customer: string; description?: string; amount: number; vatRate?: number; }
 function extractInvoice(content: string): { text: string; invoices: InvoiceProposal[] } {
-  const m = content.match(/```jobboks-invoice\s*([\s\S]*?)```/);
+  const m = content.match(/```jobboks-invoice(?!-)\s*([\s\S]*?)```/);
   if (!m) return { text: content, invoices: [] };
   let invoices: InvoiceProposal[] = [];
   try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.invoices)) invoices = p.invoices; } catch { /* ignore malformed block */ }
@@ -594,7 +608,7 @@ export default function AIAssistant() {
     dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: seq } });
     const n = seq - s.invoiceLastNumber;
     const done = lang === 'is' ? `✅ ${n} reikningur búinn til sem drög` : `✅ ${n} invoice${n === 1 ? '' : 's'} created as draft${n === 1 ? '' : 's'}`;
-    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice\s*[\s\S]*?```/, `\n${done}`) } : m));
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice(?!-)\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
   // The owner approved AI-logged job(s) → create them. Numbers run JOB-YYYY-NNN off
@@ -750,6 +764,24 @@ export default function AIAssistant() {
     const done = lang === 'is' ? `✅ Tengiliður skráður: ${n}` : `✅ Contact${n === 1 ? '' : 's'} added: ${n}`;
     setMessages(prev => prev.map((m, idx) =>
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-contact\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
+  // The owner approved an invoice status change → flip it (paid/sent only). Marking
+  // paid is non-financial in this app (income is booked from the bank deposit).
+  function approveInvoiceStatus(msgIndex: number, updates: InvoiceStatusUpdate[]) {
+    let n = 0;
+    for (const u of updates) {
+      const num = String(u.number ?? '').trim();
+      const status = u.status === 'sent' ? 'sent' : u.status === 'paid' ? 'paid' : null;
+      if (!num || !status) continue;
+      const inv = (data.invoices ?? []).find(x => x.type === 'invoice' && x.number === num);
+      if (!inv) continue;
+      dispatch({ type: 'UPDATE_INVOICE', payload: { ...inv, status } });
+      n++;
+    }
+    const done = lang === 'is' ? `✅ Reikningsstöðu breytt: ${n}` : `✅ Invoice${n === 1 ? '' : 's'} updated: ${n}`;
+    setMessages(prev => prev.map((m, idx) =>
+      idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice-status\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
   // Point a proposed fix back at the real transaction. Returns null when the ref
@@ -1031,7 +1063,8 @@ export default function AIAssistant() {
                       const { text: afterBook, book } = extractBook(afterInvoice);
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
                       const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
-                      const { text, fixes, matches, badBlock } = extractFix(afterContact);
+                      const { text: afterInvStatus, updates: aiInvStatus } = extractInvoiceStatus(afterContact);
+                      const { text, fixes, matches, badBlock } = extractFix(afterInvStatus);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -1205,6 +1238,25 @@ export default function AIAssistant() {
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? `Skrá ${aiContacts.length} tengilið(i)` : `Add ${aiContacts.length} contact${aiContacts.length === 1 ? '' : 's'}`}
+                              </button>
+                            </div>
+                          )}
+                          {aiInvStatus.length > 0 && (
+                            <div className="mt-3 border border-emerald-200 rounded-lg overflow-hidden">
+                              <div className="bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                                {lang === 'is' ? 'Uppfæra stöðu reiknings' : 'Update invoice status'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiInvStatus.map((u, ui) => (
+                                  <div key={ui} className="px-3 py-1.5 text-xs text-gray-700">
+                                    <span className="font-medium">{u.number}</span> → {u.status === 'paid' ? (lang === 'is' ? 'greitt' : 'paid') : (lang === 'is' ? 'sent' : 'sent')}
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={() => approveInvoiceStatus(i, aiInvStatus)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? 'Uppfæra' : 'Apply'}
                               </button>
                             </div>
                           )}
