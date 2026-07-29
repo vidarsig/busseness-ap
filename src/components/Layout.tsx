@@ -4,6 +4,7 @@ import {
   Settings, Menu, X, RefreshCw, Upload, Receipt,
   BookMarked, TrendingUp, Users, ClipboardList, Zap, CheckSquare,
   Cloud, CloudOff, Loader2, Bot, Package, HardHat, LogOut, UserCircle, Crown, Star, Contact,
+  Briefcase, ChevronDown,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { signOut } from '../utils/supabase';
@@ -21,42 +22,52 @@ interface Props {
 }
 
 interface NavItem { id: View; icon: React.ElementType; }
-interface NavSection { label?: string; labelKey?: string; items: NavItem[]; }
+// `part` groups sections into the two halves of the app: the field-work side
+// ('work', always shown) and the money side ('business', collapsible + hidden by
+// default). 'top' = dashboard, 'bottom' = always-there utilities (settings, users).
+type NavPart = 'top' | 'work' | 'business' | 'bottom';
+interface NavSection { label?: string; labelKey?: string; part: NavPart; items: NavItem[]; }
 
 const sections: NavSection[] = [
-  { items: [{ id: 'dashboard', icon: LayoutDashboard }] },
-  { labelKey: 'navTransactions', items: [
+  { part: 'top', items: [{ id: 'dashboard', icon: LayoutDashboard }] },
+
+  // ── WORK — the field/job side (invoices live here too; still permission-gated) ──
+  { part: 'work', items: [
+    { id: 'jobs', icon: HardHat },
+    { id: 'invoices', icon: Receipt },
+    { id: 'stock', icon: Package },
+    { id: 'tasks', icon: CheckSquare },
+  ]},
+
+  // ── BUSINESS — the money side (hidden until expanded) ──
+  { part: 'business', items: [
+    { id: 'contacts', icon: Contact },
+  ]},
+  { part: 'business', labelKey: 'navTransactions', items: [
     { id: 'transactions', icon: List },
     { id: 'recurring', icon: RefreshCw },
     { id: 'bankimport', icon: Upload },
     { id: 'rules', icon: Zap },
   ]},
-  { labelKey: 'navSales', items: [
-    { id: 'invoices', icon: Receipt },
-    { id: 'jobs', icon: HardHat },
-    { id: 'stock', icon: Package },
-    { id: 'contacts', icon: Contact },
-  ]},
-  { labelKey: 'navAccounting', items: [
+  { part: 'business', labelKey: 'navAccounting', items: [
     { id: 'accounts', icon: BookMarked },
     { id: 'budget', icon: TrendingUp },
     { id: 'payroll', icon: Users },
   ]},
-  { labelKey: 'navReports', items: [
+  { part: 'business', labelKey: 'navReports', items: [
     { id: 'vat', icon: Calculator },
     { id: 'vatreturn', icon: ClipboardList },
     { id: 'reports', icon: BarChart2 },
     { id: 'annual', icon: FileText },
   ]},
-  { labelKey: 'tasks', items: [
-    { id: 'tasks', icon: CheckSquare },
-  ]},
-  { label: 'AI', items: [
+  { part: 'business', items: [
     { id: 'ai', icon: Bot },
-    { id: 'reviews', icon: Star },
   ]},
-  { items: [{ id: 'settings', icon: Settings }] },
-  { items: [{ id: 'users', icon: Users }] },
+
+  // ── BOTTOM — always available ──
+  { part: 'bottom', items: [{ id: 'settings', icon: Settings }] },
+  { part: 'bottom', items: [{ id: 'users', icon: Users }] },
+  { part: 'bottom', items: [{ id: 'reviews', icon: Star }] },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -89,6 +100,14 @@ function SyncIndicator() {
 export default function Layout({ view, setView, children, sessionUser, perms, onSignOut }: Props) {
   const { t, lang, cc, data } = useApp();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // The Business (money) group is collapsed & hidden by default; the owner taps
+  // the "Rekstur / Business" header to reveal it. Choice is remembered.
+  const [businessOpen, setBusinessOpen] = useState(() => {
+    try { return localStorage.getItem('nav.businessOpen') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('nav.businessOpen', businessOpen ? '1' : '0'); } catch { /* ignore */ }
+  }, [businessOpen]);
   const companyName = data.settings.company.name || t('appName');
   const isOperator = isOperatorAccount(data.settings);
 
@@ -117,6 +136,51 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
     return () => window.removeEventListener('keydown', h);
   }, []);
 
+  const visibleItems = (section: NavSection) => section.items.filter(item =>
+    (item.id !== 'users' || supabaseConfigured) &&
+    // Payroll only where an engine exists (Iceland, US, Canada).
+    (item.id !== 'payroll' || data.settings.country === 'IS' || data.settings.country === 'US' || data.settings.country === 'CA') &&
+    // Review Intelligence is an operator-only internal tool — hidden from subscribers.
+    (item.id !== 'reviews' || isOperator) &&
+    canAccessView(item.id, perms ?? null),
+  );
+
+  const renderSection = (section: NavSection, key: string, first: boolean) => {
+    const items = visibleItems(section);
+    if (items.length === 0) return null;
+    return (
+      <div key={key} className={first ? '' : 'mt-1'}>
+        {section.labelKey && (
+          <div className="px-3 pt-3 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            {t(section.labelKey as never)}
+          </div>
+        )}
+        {items.map(({ id, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setView(id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-all ${
+              view === id
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            }`}
+          >
+            <Icon className="w-4 h-4 flex-shrink-0" />
+            {navLabel(id)}
+          </button>
+        ))}
+        {section.labelKey && <div className="mx-3 mt-1 border-t border-gray-100" />}
+      </div>
+    );
+  };
+
+  const partSections = (p: NavPart) => sections.filter(s => s.part === p);
+  const businessIds = new Set(partSections('business').flatMap(s => s.items.map(i => i.id)));
+  // Force the Business group open while the user is actually on one of its screens.
+  const showBusiness = businessOpen || businessIds.has(view);
+  const workHasItems = partSections('work').some(s => visibleItems(s).length > 0);
+  const businessHasItems = partSections('business').some(s => visibleItems(s).length > 0);
+
   const NavContent = () => (
     <>
       {/* Logo / company */}
@@ -133,41 +197,40 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
       </div>
 
       <nav className="flex-1 py-3 px-2 overflow-y-auto">
-        {sections.map((section, si) => {
-          const items = section.items.filter(item =>
-            (item.id !== 'users' || supabaseConfigured) &&
-            // Payroll only where an engine exists (Iceland, US, Canada).
-            (item.id !== 'payroll' || data.settings.country === 'IS' || data.settings.country === 'US' || data.settings.country === 'CA') &&
-            // Review Intelligence is an operator-only internal tool — hidden from subscribers.
-            (item.id !== 'reviews' || isOperator) &&
-            canAccessView(item.id, perms ?? null),
-          );
-          if (items.length === 0) return null;
-          return (
-          <div key={si} className={si > 0 ? 'mt-1' : ''}>
-            {section.labelKey && (
-              <div className="px-3 pt-3 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                {t(section.labelKey as never)}
-              </div>
-            )}
-            {items.map(({ id, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 text-sm font-medium transition-all ${
-                  view === id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                {navLabel(id)}
-              </button>
-            ))}
-            {section.labelKey && <div className="mx-3 mt-1 border-t border-gray-100" />}
+        {/* Top — dashboard */}
+        {partSections('top').map((s, i) => renderSection(s, `top-${i}`, i === 0))}
+
+        {/* WORK — always visible field/job side */}
+        {workHasItems && (
+          <div className="mt-2">
+            <div className="px-3 pt-1 pb-1 flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-widest">
+              <HardHat className="w-3.5 h-3.5 flex-shrink-0" />
+              {t('navWork')}
+            </div>
+            {partSections('work').map((s, i) => renderSection(s, `work-${i}`, i === 0))}
           </div>
-          );
-        })}
+        )}
+
+        {/* BUSINESS — money side, collapsed & hidden by default */}
+        {businessHasItems && (
+          <div className="mt-2">
+            <button
+              onClick={() => setBusinessOpen(o => !o)}
+              className="w-full px-3 pt-1 pb-1 flex items-center gap-2 text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:text-gray-700 transition-colors"
+              aria-expanded={showBusiness}
+            >
+              <Briefcase className="w-3.5 h-3.5 flex-shrink-0" />
+              {t('navBusiness')}
+              <ChevronDown className={`w-3.5 h-3.5 ml-auto transition-transform ${showBusiness ? '' : '-rotate-90'}`} />
+            </button>
+            {showBusiness && partSections('business').map((s, i) => renderSection(s, `biz-${i}`, i === 0))}
+          </div>
+        )}
+
+        {/* Bottom — always available utilities */}
+        <div className="mt-2">
+          {partSections('bottom').map((s, i) => renderSection(s, `bot-${i}`, i === 0))}
+        </div>
       </nav>
 
       {/* Upgrade CTA */}
