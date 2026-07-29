@@ -123,6 +123,30 @@ export const CA_PROVINCES: CaProvince[] = [
   { code: 'YT', name: 'Yukon', rate: 5, type: 'GST' },
 ];
 
+// US states with their BASE state sales-tax rate (%). Local (city/county) rates can
+// add on top — the contractor can override in Settings. NB: AK/DE/MT/NH/OR have NO
+// state sales tax (0). Single source of truth: Settings picker + onboarding + AI setup.
+export interface UsState { name: string; rate: number; }
+export const US_STATES: UsState[] = [
+  { name: 'Alabama', rate: 4 }, { name: 'Alaska', rate: 0 }, { name: 'Arizona', rate: 5.6 },
+  { name: 'Arkansas', rate: 6.5 }, { name: 'California', rate: 7.25 }, { name: 'Colorado', rate: 2.9 },
+  { name: 'Connecticut', rate: 6.35 }, { name: 'Delaware', rate: 0 }, { name: 'Florida', rate: 6 },
+  { name: 'Georgia', rate: 4 }, { name: 'Hawaii', rate: 4 }, { name: 'Idaho', rate: 6 },
+  { name: 'Illinois', rate: 6.25 }, { name: 'Indiana', rate: 7 }, { name: 'Iowa', rate: 6 },
+  { name: 'Kansas', rate: 6.5 }, { name: 'Kentucky', rate: 6 }, { name: 'Louisiana', rate: 4.45 },
+  { name: 'Maine', rate: 5.5 }, { name: 'Maryland', rate: 6 }, { name: 'Massachusetts', rate: 6.25 },
+  { name: 'Michigan', rate: 6 }, { name: 'Minnesota', rate: 6.875 }, { name: 'Mississippi', rate: 7 },
+  { name: 'Missouri', rate: 4.225 }, { name: 'Montana', rate: 0 }, { name: 'Nebraska', rate: 5.5 },
+  { name: 'Nevada', rate: 6.85 }, { name: 'New Hampshire', rate: 0 }, { name: 'New Jersey', rate: 6.625 },
+  { name: 'New Mexico', rate: 4.875 }, { name: 'New York', rate: 4 }, { name: 'North Carolina', rate: 4.75 },
+  { name: 'North Dakota', rate: 5 }, { name: 'Ohio', rate: 5.75 }, { name: 'Oklahoma', rate: 4.5 },
+  { name: 'Oregon', rate: 0 }, { name: 'Pennsylvania', rate: 6 }, { name: 'Rhode Island', rate: 7 },
+  { name: 'South Carolina', rate: 6 }, { name: 'South Dakota', rate: 4.2 }, { name: 'Tennessee', rate: 7 },
+  { name: 'Texas', rate: 6.25 }, { name: 'Utah', rate: 6.1 }, { name: 'Vermont', rate: 6 },
+  { name: 'Virginia', rate: 5.3 }, { name: 'Washington', rate: 6.5 }, { name: 'West Virginia', rate: 6 },
+  { name: 'Wisconsin', rate: 5 }, { name: 'Wyoming', rate: 4 }, { name: 'District of Columbia', rate: 6 },
+];
+
 // Look up a province by its full name OR 2-letter code (case-insensitive), so both
 // the Settings dropdown and an AI-supplied "Ontario" / "ON" resolve to the same entry.
 export function findCaProvince(nameOrCode: string): CaProvince | null {

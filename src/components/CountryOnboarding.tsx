@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { COUNTRY_LIST, COUNTRY_CONFIGS } from '../data/countries';
+import { COUNTRY_LIST, COUNTRY_CONFIGS, US_STATES, CA_PROVINCES } from '../data/countries';
 import { Language } from '../types';
 
 export default function CountryOnboarding() {
   const { dispatch } = useApp();
   const [selectedCode, setSelectedCode] = useState('');
   const [lang, setLang] = useState<Language>('en');
+  // Optional state/province at setup so the sales-tax rate is right from the first
+  // invoice — critical for the 0%-tax states (OR/MT/NH/DE/AK) where charging any is wrong.
+  const [usState, setUsState] = useState('');
+  const [caProvince, setCaProvince] = useState('');
 
   const COUNTRY_LANG: Record<string, Language> = {
     IS: 'is', DE: 'de', FR: 'fr', NL: 'nl', NO: 'no', DK: 'da', SE: 'sv',
@@ -33,6 +37,16 @@ export default function CountryOnboarding() {
   function handleStart() {
     if (!selectedCode) return;
     const cc = COUNTRY_CONFIGS[selectedCode];
+    // Apply the picked state/province rate up front (mirrors Settings' applyUsRate /
+    // applyCaRate), so new invoices carry the right tax without a Settings detour.
+    const taxOverride: Record<string, unknown> = {};
+    if (selectedCode === 'US' && usState) {
+      const st = US_STATES.find(s => s.name === usState);
+      if (st) { taxOverride.usState = usState; taxOverride.salesTaxRate = st.rate; taxOverride.standardRate = st.rate; taxOverride.vatRates = st.rate > 0 ? [st.rate, 0] : [0]; }
+    } else if (selectedCode === 'CA' && caProvince) {
+      const p = CA_PROVINCES.find(pr => pr.name === caProvince);
+      if (p) { taxOverride.caProvince = caProvince; taxOverride.standardRate = p.rate; taxOverride.vatRates = p.rate > 0 ? [p.rate, 0] : [0]; }
+    }
     dispatch({ type: 'UPDATE_SETTINGS', payload: {
       country: selectedCode,
       language: lang,
@@ -48,6 +62,7 @@ export default function CountryOnboarding() {
       taxAuthority: cc.taxAuthority,
       companyIdLabel: cc.companyIdLabel,
       vatNumberLabel: cc.vatNumberLabel,
+      ...taxOverride,
     }});
   }
 
@@ -96,17 +111,27 @@ export default function CountryOnboarding() {
           ))}
         </div>
 
-        {/* US note */}
+        {/* US note + optional state picker (sets the sales-tax rate now) */}
         {selectedCode === 'US' && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-xs text-amber-800">
-            {ob.usNote}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-xs text-amber-800 space-y-2">
+            <p>{ob.usNote}</p>
+            <select value={usState} onChange={e => setUsState(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm text-gray-700 focus:border-blue-500 focus:outline-none">
+              <option value="">{lang === 'is' ? 'Veldu ríki (valfrjálst)…' : 'Pick your state (optional) — sets your rate…'}</option>
+              {US_STATES.map(s => <option key={s.name} value={s.name}>{s.name} — {s.rate}%</option>)}
+            </select>
           </div>
         )}
 
-        {/* Canada note */}
+        {/* Canada note + optional province picker */}
         {selectedCode === 'CA' && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-xs text-amber-800">
-            {ob.caNote}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-xs text-amber-800 space-y-2">
+            <p>{ob.caNote}</p>
+            <select value={caProvince} onChange={e => setCaProvince(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm text-gray-700 focus:border-blue-500 focus:outline-none">
+              <option value="">{lang === 'is' ? 'Veldu fylki (valfrjálst)…' : 'Pick your province (optional) — sets your rate…'}</option>
+              {CA_PROVINCES.map(p => <option key={p.name} value={p.name}>{p.name} — {p.rate}% ({p.type})</option>)}
+            </select>
           </div>
         )}
 
