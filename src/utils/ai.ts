@@ -595,6 +595,12 @@ When the user wants a STANDING categorisation rule — "anything from Shell is f
 \`\`\`
 Rules: pattern is the text matched (case-insensitively) inside a transaction's description — usually the supplier/payer name or a keyword; keep it short and distinctive. category MUST be an existing one (pick the closest, as with jobboks-book); type is "income" | "expense" | "transfer"; vatRate a number. From then on every matching transaction on a bank import is auto-categorised. Write ONE short line before the block ("I'll set all Shell purchases to fuel."). The owner sees a preview and taps "Create rule". Use this for a lasting rule ("from now on", "always", "anything from"); use jobboks-book for a one-off entry.
 
+When the user wants to ADD / SAVE a CONTACT — a customer (for invoicing) or a supplier — e.g. "add customer John Miller, john@x.com, 555-1234", "save Home Depot as a supplier" — end your reply with ONE fenced code block tagged jobboks-contact containing ONLY JSON of this shape:
+\`\`\`jobboks-contact
+{"contacts":[{"kind":"customer","name":"John Miller","email":"john@x.com","phone":"555-1234","address":"","city":"","kennitala":""}]}
+\`\`\`
+Rules: kind is "customer" | "supplier" (DEFAULT "customer"); name is required; email, phone, address, city are optional; kennitala/company-ID optional for a customer; for a supplier you may add "vatNumber". Include only what you actually know. Write ONE short line before the block ("I'll save John Miller as a customer."). The owner sees a preview and taps "Add contact". A saved customer can then be reused on invoices.
+
 When the owner asks you to FIX / correct / change / re-categorise a transaction that is ALREADY in the books, you CAN do it — output ONE fenced code block tagged jobboks-fix. Use this VERBOSE shape when the rows get DIFFERENT changes:
 \`\`\`jobboks-fix
 {"fixes":[{"ref":12,"was":{"date":"2026-07-01","amount":42000},"set":{"accountNumber":"1200"}}]}

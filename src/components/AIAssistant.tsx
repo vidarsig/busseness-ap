@@ -43,6 +43,24 @@ function extractRule(content: string): { text: string; rules: RuleProposal[] } {
   return { text: content.replace(m[0], '').trim(), rules };
 }
 
+// A contact the AI proposes to save (```jobboks-contact``` block): a customer (for
+// invoicing) or a supplier. The owner taps "Add contact" — the AI proposes, owner approves.
+interface ContactProposal {
+  kind?: 'customer' | 'supplier';
+  name: string; email?: string; phone?: string; address?: string; city?: string;
+  postalCode?: string; kennitala?: string; vatNumber?: string; contactName?: string;
+}
+function extractContact(content: string): { text: string; contacts: ContactProposal[] } {
+  const m = content.match(/```jobboks-contact\s*([\s\S]*?)```/);
+  if (!m) return { text: content, contacts: [] };
+  let contacts: ContactProposal[] = [];
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (Array.isArray(p?.contacts)) contacts = p.contacts;
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), contacts };
+}
+
 // The business setup the AI proposes for a new user (```jobboks-setup``` block):
 // country + (US) state/rate + company name. The owner taps "Set up" to apply — the
 // AI directs, the owner confirms. This is the "it set itself up for me" moment.
@@ -707,6 +725,33 @@ export default function AIAssistant() {
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-rule\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner approved a proposed contact → save it as a reusable customer or supplier.
+  function approveContact(msgIndex: number, contacts: ContactProposal[]) {
+    let n = 0;
+    for (const c of contacts) {
+      if (!String(c.name ?? '').trim()) continue;
+      const now = new Date().toISOString();
+      const rid = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      if (c.kind === 'supplier') {
+        dispatch({ type: 'ADD_SUPPLIER', payload: {
+          id: `sup_${rid}`, name: String(c.name).trim(),
+          contactName: c.contactName, email: c.email, phone: c.phone, address: c.address,
+          vatNumber: c.vatNumber, currency: (data.settings.defaultCurrency || 'ISK') as Currency, createdAt: now,
+        }});
+      } else {
+        dispatch({ type: 'ADD_CUSTOMER', payload: {
+          id: `cust_${rid}`, name: String(c.name).trim(),
+          kennitala: c.kennitala, address: c.address, postalCode: c.postalCode, city: c.city,
+          email: c.email, phone: c.phone, createdAt: now,
+        }});
+      }
+      n++;
+    }
+    const done = lang === 'is' ? `✅ Tengiliður skráður: ${n}` : `✅ Contact${n === 1 ? '' : 's'} added: ${n}`;
+    setMessages(prev => prev.map((m, idx) =>
+      idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-contact\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // Point a proposed fix back at the real transaction. Returns null when the ref
   // no longer lines up — the books can change mid-chat (a Book, an import, an
   // edit in the Transactions screen), which shifts every row's position. Checking
@@ -985,7 +1030,8 @@ export default function AIAssistant() {
                       const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterJob);
                       const { text: afterBook, book } = extractBook(afterInvoice);
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
-                      const { text, fixes, matches, badBlock } = extractFix(afterRule);
+                      const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
+                      const { text, fixes, matches, badBlock } = extractFix(afterContact);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -1138,6 +1184,27 @@ export default function AIAssistant() {
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white text-sm font-medium hover:bg-purple-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? `Búa til ${aiRules.length} reglu(r)` : `Create ${aiRules.length} rule${aiRules.length === 1 ? '' : 's'}`}
+                              </button>
+                            </div>
+                          )}
+                          {aiContacts.length > 0 && (
+                            <div className="mt-3 border border-teal-200 rounded-lg overflow-hidden">
+                              <div className="bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-700">
+                                {lang === 'is' ? 'Tillaga að tengilið' : 'Proposed contact'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiContacts.map((c, ci) => (
+                                  <div key={ci} className="px-3 py-1.5 text-xs text-gray-700">
+                                    <span className="font-medium">{c.name}</span>
+                                    <span className="text-gray-400"> · {c.kind === 'supplier' ? (lang === 'is' ? 'birgir' : 'supplier') : (lang === 'is' ? 'viðskiptavinur' : 'customer')}</span>
+                                    {(c.email || c.phone) && <span className="text-gray-500"> — {[c.email, c.phone].filter(Boolean).join(' · ')}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={() => approveContact(i, aiContacts)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? `Skrá ${aiContacts.length} tengilið(i)` : `Add ${aiContacts.length} contact${aiContacts.length === 1 ? '' : 's'}`}
                               </button>
                             </div>
                           )}
