@@ -362,6 +362,19 @@ export interface JobChecklistItem {
   createdAt: string;
 }
 
+// A payment stage (áfangi) on a job: a deposit at the start plus milestones as the
+// work progresses. Each stage becomes its OWN progress invoice. `mode` chooses how
+// the amount is set — a fixed money `value`, or a `percent` of the job's quoted price.
+export interface JobMilestone {
+  id: string;
+  label: string;
+  mode: 'amount' | 'percent';
+  value: number;           // money in the job's currency (amount) OR a percent 0–100
+  invoiceId?: string;      // the progress invoice created for this stage (once billed)
+  invoiceNumber?: string;  // for display
+  createdAt: string;
+}
+
 export interface Job {
   id: string;
   number: string;         // e.g. JOB-2026-001
@@ -386,6 +399,7 @@ export interface Job {
   approvedAt?: string;
   returnNote?: string;
   checklist?: JobChecklistItem[];   // per-job to-do list
+  milestones?: JobMilestone[];      // deposit + progress payment stages (áfangar)
   createdAt: string;
   updatedAt: string;
 }

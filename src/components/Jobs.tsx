@@ -3,13 +3,14 @@ import {
   Plus, X, Pencil, Trash2, Clock, Package, ChevronDown, ChevronUp,
   HardHat, CheckCircle, PauseCircle, XCircle, FileText, TrendingUp,
   Camera, Image, Receipt, Users, MapPin, Phone,
-  ZoomIn, Search, Calendar, Mail, CheckSquare, Square,
+  ZoomIn, Search, Calendar, Mail, CheckSquare, Square, Wallet,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Job, JobStatus, JobReportStatus, JobChecklistItem, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, InvoicePhoto, Currency, StockItem } from '../types';
+import { Job, JobStatus, JobReportStatus, JobChecklistItem, JobMilestone, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, InvoicePhoto, Currency, StockItem } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import { sharePDF } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
+import { invoiceReceivedISK } from '../utils/calculations';
 import PhotoViewer from './PhotoViewer';
 import NumberInput from './NumberInput';
 import CustomerAutocomplete from './CustomerAutocomplete';
@@ -21,6 +22,7 @@ interface JobsProps { sessionUser?: SessionUser | null; }
 
 function newId(prefix: string) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function nowISO() { return new Date().toISOString(); }
+const CUR_SYM: Record<string, string> = { ISK:'kr', USD:'$', EUR:'€', GBP:'£', DKK:'kr', NOK:'kr', SEK:'kr', CAD:'$', AUD:'$', NZD:'$' };
 function todayISO() { return new Date().toISOString().slice(0,10); }
 
 const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -55,7 +57,7 @@ const emptyJob = (): Partial<Job> => ({
   description:'', notes:'',
 });
 
-type TabType = 'time' | 'materials' | 'photos' | 'checklist' | 'summary';
+type TabType = 'time' | 'materials' | 'photos' | 'checklist' | 'payments' | 'summary';
 interface JobFormState { open: boolean; job?: Partial<Job>; }
 interface TimeFormState { open: boolean; jobId: string; entry?: Partial<TimeEntry>; }
 interface MatFormState  { open: boolean; jobId: string; mat?: Partial<JobMaterial>; }
@@ -201,6 +203,68 @@ export default function Jobs({ sessionUser }: JobsProps) {
   }
   function delCheck(job: Job, id: string) {
     dispatch({ type: 'UPDATE_JOB', payload: { ...job, checklist: (job.checklist ?? []).filter(c => c.id !== id), updatedAt: nowISO() } });
+  }
+
+  // ── payment stages / down payments (áfangar) ──
+  const milestoneAmount = (job: Job, m: JobMilestone) =>
+    m.mode === 'percent' ? (job.quotedAmount ?? 0) * (m.value / 100) : m.value;
+  const milestoneInvoice = (m: JobMilestone) => (data.invoices ?? []).find(i => i.id === m.invoiceId);
+  const toISKrate = (cur: Currency) => (data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1;
+  // Paid is derived ONLY from real money — bank-imported income transactions linked to
+  // this stage's invoice (invoiceId). Never a manual flag.
+  const isMilestonePaid = (m: JobMilestone) => {
+    const inv = milestoneInvoice(m);
+    if (!inv) return false;
+    const totalISK = invoiceTotals(inv).total * toISKrate(inv.currency);
+    return invoiceReceivedISK(inv.id, data.transactions) >= totalISK - 1;
+  };
+
+  function updateMilestone(job: Job, id: string, patch: Partial<JobMilestone>) {
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, milestones: (job.milestones ?? []).map(m => m.id === id ? { ...m, ...patch } : m), updatedAt: nowISO() } });
+  }
+  function addMilestone(job: Job) {
+    const first = (job.milestones ?? []).length === 0;
+    const m: JobMilestone = { id: newId('ms'), label: first ? t('Innborgun', 'Deposit') : t('Áfangi', 'Stage'), mode: 'amount', value: 0, createdAt: nowISO() };
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, milestones: [...(job.milestones ?? []), m], updatedAt: nowISO() } });
+  }
+  function delMilestone(job: Job, id: string) {
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, milestones: (job.milestones ?? []).filter(m => m.id !== id), updatedAt: nowISO() } });
+  }
+  // Quick-start: split the quoted price into % stages (only offered when none exist yet).
+  function applySplit(job: Job, parts: { label: string; pct: number }[]) {
+    const milestones: JobMilestone[] = parts.map(p => ({ id: newId('ms'), label: p.label, mode: 'percent', value: p.pct, createdAt: nowISO() }));
+    dispatch({ type: 'UPDATE_JOB', payload: { ...job, milestones, updatedAt: nowISO() } });
+  }
+  function createMilestoneInvoice(job: Job, m: JobMilestone) {
+    if (!canApprove || m.invoiceId) return;
+    // The stage must bill a registered customer, so the amount lands on that
+    // customer's statement (and can be reconciled to their bank deposit).
+    if (!job.clientName?.trim()) {
+      alert(t('Skráðu viðskiptavin á verkið fyrst — þá birtist greiðslan á yfirliti hans.', 'Add a customer to this job first — then the amount shows on their statement.'));
+      return;
+    }
+    const amount = milestoneAmount(job, m);
+    if (amount <= 0) { alert(t('Upphæð áfangans verður að vera hærri en 0.', 'The stage amount must be more than 0.')); return; }
+    const lastNum = data.settings.invoiceLastNumber + 1;
+    const prefix = data.settings.invoicePrefix || 'R';
+    const invoice: Invoice = {
+      id: newId('inv'),
+      number: `${prefix}${String(lastNum).padStart(4, '0')}`,
+      type: 'invoice',
+      date: todayISO(),
+      dueDate: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10),
+      customer: { name: job.clientName, email: job.clientEmail, phone: job.clientPhone, address: job.address },
+      lines: [{ id: newId('il'), description: `${job.name} — ${m.label}`, quantity: 1, unitPrice: amount, vatRate: defaultTaxRate }],
+      notes: `${t('Verk', 'Job')}: ${job.number} — ${job.name} · ${t('Áfangi', 'Stage')}: ${m.label}`,
+      status: 'draft',
+      currency: job.currency,
+      eurToIskRate: data.settings.exchangeRates?.EUR ?? 150,
+    };
+    dispatch({ type: 'ADD_INVOICE', payload: invoice });
+    dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: lastNum } });
+    updateMilestone(job, m.id, { invoiceId: invoice.id, invoiceNumber: invoice.number });
+    setInvoiceSuccess(invoice.number);
+    setTimeout(() => setInvoiceSuccess(null), 4000);
   }
 
   // ── job counter ──────────────────────────────────────────
@@ -835,16 +899,17 @@ export default function Jobs({ sessionUser }: JobsProps) {
                 {isExpanded && (
                   <div className="border-t border-gray-100">
                     {/* Tab bar */}
-                    <div className="flex border-b border-gray-100 bg-gray-50">
+                    <div className="flex border-b border-gray-100 bg-gray-50 overflow-x-auto">
                       {([
                         { id:'summary',   label: t('Samantekt','Summary'),  icon: TrendingUp },
                         { id:'time',      label: t('Tímar','Time'),         icon: Clock },
                         { id:'materials', label: t('Efni','Materials'),     icon: Package },
                         { id:'photos',    label: `${t('Myndir','Photos')} (${jPhotos.length})`, icon: Camera },
                         { id:'checklist', label: `${t('Gátlisti','Checklist')}${openChecks(job) ? ` (${openChecks(job)})` : ''}`, icon: CheckSquare },
+                        { id:'payments',  label: t('Áfangar','Payments'),   icon: Wallet },
                       ] as const).map(({ id, label, icon: Icon }) => (
                         <button key={id} onClick={() => setJobTab(job.id, id)}
-                          className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition ${
+                          className={`flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition ${
                             currentTab === id ? 'border-blue-500 text-blue-600 bg-white' : 'border-transparent text-gray-500 hover:text-gray-700'
                           }`}>
                           <Icon className="w-3.5 h-3.5" />
@@ -1228,6 +1293,100 @@ export default function Jobs({ sessionUser }: JobsProps) {
                           )}
                         </div>
                       )}
+
+                      {/* ── PAYMENTS / MILESTONES TAB (áfangar) ── */}
+                      {currentTab === 'payments' && (() => {
+                        const ms = job.milestones ?? [];
+                        const quoted = job.quotedAmount ?? 0;
+                        const invoicedTotal = ms.filter(m => m.invoiceId).reduce((s, m) => s + milestoneAmount(job, m), 0);
+                        const paidTotal = ms.filter(m => isMilestonePaid(m)).reduce((s, m) => s + milestoneAmount(job, m), 0);
+                        const remaining = quoted - invoicedTotal;
+                        const sym = CUR_SYM[job.currency] ?? job.currency;
+                        return (
+                          <div className="space-y-3">
+                            {/* Running summary — kept up to date */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {[
+                                { l: t('Tilboð','Quoted'),          v: quoted,        c: 'text-gray-900' },
+                                { l: t('Reikningsfært','Invoiced'),  v: invoicedTotal, c: 'text-blue-600' },
+                                { l: t('Greitt','Paid'),             v: paidTotal,     c: 'text-green-600' },
+                                { l: t('Eftirstöðvar','Remaining'),  v: remaining,     c: remaining > 0 ? 'text-amber-600' : 'text-gray-400' },
+                              ].map((x, i) => (
+                                <div key={i} className="bg-gray-50 rounded-lg p-2.5">
+                                  <div className="text-[10px] text-gray-500 uppercase tracking-wide">{x.l}</div>
+                                  <div className={`text-sm font-bold ${x.c}`}>{fmt(x.v)}</div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Quick split — only offered before any stages exist */}
+                            {ms.length === 0 && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs text-gray-500">{t('Skipta tilboði:','Split the quote:')}</span>
+                                <button onClick={() => applySplit(job, [{ label: t('Innborgun','Deposit'), pct: 50 }, { label: t('Lokagreiðsla','Final'), pct: 50 }])}
+                                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">50 / 50</button>
+                                <button onClick={() => applySplit(job, [{ label: t('Innborgun','Deposit'), pct: 30 }, { label: t('Áfangi','Milestone'), pct: 40 }, { label: t('Lokagreiðsla','Final'), pct: 30 }])}
+                                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">30 / 40 / 30</button>
+                              </div>
+                            )}
+
+                            {/* Stages */}
+                            {ms.map(m => {
+                              const paid = isMilestonePaid(m);
+                              const amount = milestoneAmount(job, m);
+                              return (
+                                <div key={m.id} className="border border-gray-100 rounded-xl p-3 space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <input value={m.label} onChange={e => updateMilestone(job, m.id, { label: e.target.value })}
+                                      className="flex-1 min-w-0 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                                    <button onClick={() => delMilestone(job, m.id)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-red-600 flex-shrink-0">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+                                      <button onClick={() => updateMilestone(job, m.id, { mode: 'amount' })}
+                                        className={`px-2.5 py-1.5 text-xs font-semibold ${m.mode === 'amount' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>{sym}</button>
+                                      <button onClick={() => updateMilestone(job, m.id, { mode: 'percent' })}
+                                        className={`px-2.5 py-1.5 text-xs font-semibold ${m.mode === 'percent' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>%</button>
+                                    </div>
+                                    <input type="number" value={m.value || ''} onChange={e => updateMilestone(job, m.id, { value: parseFloat(e.target.value) || 0 })}
+                                      className="w-24 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      placeholder={m.mode === 'percent' ? '%' : t('upphæð','amount')} />
+                                    {m.mode === 'percent' && <span className="text-sm text-gray-500">= {fmt(amount)}</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {!m.invoiceId ? (
+                                      canApprove && (
+                                        <button onClick={() => createMilestoneInvoice(job, m)}
+                                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-semibold transition">
+                                          <Receipt className="w-3.5 h-3.5" />{t('Búa til reikning','Create invoice')}
+                                        </button>
+                                      )
+                                    ) : (
+                                      <>
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${paid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                          {paid ? t('Greitt','Paid') : t('Bíður greiðslu','Awaiting payment')} {m.invoiceNumber}
+                                        </span>
+                                        {!paid && (
+                                          <span className="text-[11px] text-gray-400">
+                                            {t('Merkist greitt þegar innborgun berst í bankann','Shows Paid when the deposit lands in the bank')}
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            <button onClick={() => addMilestone(job)}
+                              className="w-full flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm font-medium text-gray-500 hover:border-blue-300 hover:text-blue-600 transition">
+                              <Plus className="w-4 h-4" />{t('Bæta við áfanga','Add a stage')}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}

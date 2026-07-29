@@ -2,13 +2,13 @@ import { useState } from 'react';
 import {
   TrendingUp, TrendingDown, DollarSign, Receipt, ArrowRight, CheckSquare,
   AlertTriangle, Circle, Download, Check, HardHat, MapPin, Camera, ClipboardCheck,
-  Send, ArrowDownLeft, Search,
+  Send, ArrowDownLeft, Search, Wallet,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { getTransactionISK, calcVATSummary } from '../utils/calculations';
+import { getTransactionISK, calcVATSummary, invoiceReceivedISK } from '../utils/calculations';
 import { invoiceTotals } from '../utils/invoiceMath';
 import { formatDate } from '../utils/formatters';
-import { View, UserPermissions, JobStatus, Currency } from '../types';
+import { View, UserPermissions, JobStatus, JobMilestone, Currency } from '../types';
 import SettingsHealthBanner from './SettingsHealthBanner';
 
 interface Props { setView: (v: View) => void; perms?: UserPermissions | null; }
@@ -143,6 +143,27 @@ export default function Dashboard({ setView, perms }: Props) {
     flow.push({ key: 'survey', label: L('Skoðanir', 'Surveys'), n: jobsIn('survey'), Icon: Search,  color: 'text-purple-600', bg: 'bg-purple-50', to: 'jobs' });
     flow.push({ key: 'active', label: L('Í vinnslu', 'Active'),  n: jobsIn('active'), Icon: HardHat, color: 'text-blue-600',   bg: 'bg-blue-50',   to: 'jobs' });
   }
+
+  // Payment progress across jobs that have a plan (deposit + milestones). Paid is
+  // bank-truth: an amount only counts once the deposit is imported + linked (R9-6).
+  const invRate = (cur: Currency) => (data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1;
+  const milestonePaid = (m: JobMilestone): boolean => {
+    const inv = invoices.find(i => i.id === m.invoiceId);
+    if (!inv) return false;
+    return invoiceReceivedISK(inv.id, data.transactions) >= invoiceTotals(inv).total * invRate(inv.currency) - 1;
+  };
+  const payingJobs = jobs
+    .filter(j => (j.milestones ?? []).length > 0)
+    .map(j => {
+      const q = j.quotedAmount ?? 0;
+      const amt = (m: JobMilestone) => m.mode === 'percent' ? q * (m.value / 100) : m.value;
+      const ms = j.milestones ?? [];
+      const invoiced = ms.filter(m => m.invoiceId).reduce((s, m) => s + amt(m), 0);
+      const paid = ms.filter(m => m.invoiceId && milestonePaid(m)).reduce((s, m) => s + amt(m), 0);
+      const r = invRate(j.currency);
+      return { id: j.id, name: j.name || j.number, quotedISK: q * r, invoicedISK: invoiced * r, paidISK: paid * r, pct: q > 0 ? Math.min(100, Math.round(paid / q * 100)) : 0 };
+    })
+    .slice(0, 6);
 
   const cards = [
     {
@@ -370,6 +391,34 @@ export default function Dashboard({ setView, perms }: Props) {
                   </button>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Payment progress — deposits + milestones per job (bank-verified paid) */}
+        {canViewInvoices && payingJobs.length > 0 && (
+          <div className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-blue-600" />
+                {L('Greiðslur verka', 'Job payments')}
+              </h2>
+              <button onClick={() => setView('jobs')} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium">
+                {L('Öll', 'All')} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              {payingJobs.map(p => (
+                <button key={p.id} onClick={() => setView('jobs')} className="w-full text-left group">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="font-medium text-gray-800 truncate group-hover:text-blue-600">{p.name}</span>
+                    <span className="text-gray-500 flex-shrink-0 ml-2">{fmtISK(p.paidISK)} / {fmtISK(p.quotedISK)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${p.pct}%` }} />
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         )}
