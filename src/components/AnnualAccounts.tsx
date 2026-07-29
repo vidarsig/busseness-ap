@@ -123,7 +123,13 @@ function BSModal({ initial, onSave, onClose }: BSModalProps) {
 }
 
 export default function AnnualAccounts() {
-  const { data, dispatch, t, lang, fmtISK } = useApp();
+  const { data, dispatch, t, lang, fmtISK, cc } = useApp();
+  // Column figures are rendered via fmtISK (company currency), so the "(ISK)" in
+  // the headers must follow suit — show the company's own currency code. The
+  // Icelandic Annual-Accounts-Act subtitle/notes only apply to an IS company.
+  const baseCur = (data.settings.defaultCurrency || 'ISK');
+  const isIceland = cc.code === 'IS';
+  const acctSubtitle = isIceland ? t('annualAccountsTitle') : (lang === 'is' ? 'Ársreikningur' : 'Annual Accounts');
   // Browse the accounts for any year with data (not just the fiscal year), so the
   // owner can see all years. Only the displayed year changes — the figures come
   // from the same calcProfitLoss engine as before.
@@ -370,7 +376,7 @@ export default function AnnualAccounts() {
     return {
       columns: [
         { header: t('description'), key: 'label', width: 120 },
-        { header: `${y} (ISK)`, key: 'amount', width: 45 },
+        { header: `${y} (${baseCur})`, key: 'amount', width: 45 },
       ],
       rows,
     };
@@ -427,7 +433,7 @@ export default function AnnualAccounts() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('annualAccounts')}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{t('annualAccountsTitle')}</p>
+          <p className="text-sm text-gray-500 mt-0.5">{acctSubtitle}</p>
         </div>
         <div className="flex gap-2 no-print items-center">
           <select
@@ -487,7 +493,7 @@ export default function AnnualAccounts() {
         {company.kennitala && <div className="text-sm text-gray-600">{t('companyKennitala')}: {company.kennitala}</div>}
         {company.address && <div className="text-sm text-gray-600">{company.address}{company.postalCode ? `, ${company.postalCode}` : ''} {company.city}</div>}
         <div className="text-base font-semibold mt-2">{t('annualAccounts')} {t('forYear')} {year}</div>
-        <div className="text-xs text-gray-500 mt-1">{t('annualAccountsTitle')}</div>
+        <div className="text-xs text-gray-500 mt-1">{acctSubtitle}</div>
       </div>
 
       {/* Company info bar */}
@@ -525,7 +531,7 @@ export default function AnnualAccounts() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-left uppercase">{t('description')}</th>
-                <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-right uppercase">{year} (ISK)</th>
+                <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-right uppercase">{year} ({baseCur})</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 text-sm">
@@ -571,7 +577,7 @@ export default function AnnualAccounts() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-left uppercase">{t('description')}</th>
-                  <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-right uppercase">{year} (ISK)</th>
+                  <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-right uppercase">{year} ({baseCur})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -624,7 +630,7 @@ export default function AnnualAccounts() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-left uppercase">{t('description')}</th>
-                  <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-right uppercase">{year} (ISK)</th>
+                  <th className="px-4 py-2 text-xs text-gray-500 font-semibold text-right uppercase">{year} ({baseCur})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -708,7 +714,9 @@ export default function AnnualAccounts() {
 
           <div>
             <h3 className="font-semibold text-gray-800 mb-1">1. {t('note1Title')}</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">{t('note1Text')}</p>
+            <p className="text-sm text-gray-600 leading-relaxed">{isIceland ? t('note1Text') : (lang === 'is'
+              ? `Ársreikningurinn er gerður í ${baseCur}. Tekjur og gjöld eru færð á þeim tíma sem þau eiga sér stað (gjaldfærslureglan).`
+              : `The accounts are prepared in ${baseCur}. Revenues and expenses are recognized on an accrual basis.`)}</p>
           </div>
 
           <div>

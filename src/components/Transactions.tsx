@@ -391,7 +391,11 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 }
 
 export default function Transactions({ initialFilter, onFilterConsumed }: { initialFilter?: { category?: string; year?: number } | null; onFilterConsumed?: () => void } = {}) {
-  const { data, dispatch, t, lang, cc } = useApp();
+  const { data, dispatch, t, lang, cc, fmtISK } = useApp();
+  // The reporting base is normalised to ISK internally; fmtISK renders it in the
+  // company's own currency (kr. for an ISK company, US$/CA$/… otherwise) so the
+  // Transactions screen never shows "kr." to a US or Canadian user.
+  const baseCur = (data.settings.defaultCurrency || 'ISK');
   const inclVat = data.settings.pricesIncludeVAT; // amounts are gross → extract VAT for display
   const [modal, setModal] = useState<{ open: boolean; tx?: Transaction }>({ open: false });
   const [limitModal, setLimitModal] = useState(false);
@@ -833,11 +837,11 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           </span>
           <span className="text-gray-400">·</span>
           <span className="text-gray-600">{summary.count} {lang === 'is' ? 'færslur' : 'transactions'}</span>
-          {summary.income > 0 && <span className="font-mono text-green-600">+{formatISK(summary.income, lang)}</span>}
-          {summary.expense > 0 && <span className="font-mono text-red-600">-{formatISK(summary.expense, lang)}</span>}
-          {summary.transfer !== 0 && <span className="font-mono text-gray-500">±{formatISK(summary.transfer, lang)}</span>}
+          {summary.income > 0 && <span className="font-mono text-green-600">+{fmtISK(summary.income)}</span>}
+          {summary.expense > 0 && <span className="font-mono text-red-600">-{fmtISK(summary.expense)}</span>}
+          {summary.transfer !== 0 && <span className="font-mono text-gray-500">±{fmtISK(summary.transfer)}</span>}
           {summary.income > 0 && summary.expense > 0 && (
-            <span className="ml-auto font-semibold text-gray-800">{lang === 'is' ? 'Nettó' : 'Net'}: {formatISK(summary.net, lang)}</span>
+            <span className="ml-auto font-semibold text-gray-800">{lang === 'is' ? 'Nettó' : 'Net'}: {fmtISK(summary.net)}</span>
           )}
         </div>
       )}
@@ -904,7 +908,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 <div className="flex justify-between items-start gap-2">
                   <p className="font-medium text-gray-800 text-sm truncate">{tx.description}</p>
                   <span className={`font-semibold text-sm flex-shrink-0 font-mono ${flow.text}`}>
-                    {flow.sign}{formatISK(getTotalISK(tx, inclVat), lang)}
+                    {flow.sign}{fmtISK(getTotalISK(tx, inclVat))}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -958,7 +962,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                 <th className={thCls}>{t('type')}</th>
                 <th className={`${thCls} text-right`}>{cc.isUSA ? `Amount excl. ${cc.vatTerm}` : t('amountExVat')}</th>
                 <th className={`${thCls} text-right`}>{cc.vatTerm}%</th>
-                <th className={`${thCls} text-right`}>{t('iskAmount')}</th>
+                <th className={`${thCls} text-right`}>{baseCur === 'ISK' ? t('iskAmount') : (lang === 'is' ? `Heild (${baseCur})` : `Total (${baseCur})`)}</th>
                 <th className={thCls}></th>
               </tr>
             </thead>
@@ -995,7 +999,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
                       <span className={tx.vatRate === 0 ? 'text-gray-400' : ''}>{tx.vatRate}%</span>
                     </td>
                     <td className={`${tdCls} text-right font-mono font-semibold ${flow.text}`}>
-                      {flow.sign}{formatISK(getTotalISK(tx, inclVat), lang)}
+                      {flow.sign}{fmtISK(getTotalISK(tx, inclVat))}
                     </td>
                     <td className={tdCls}>
                       <div className="flex gap-1">
@@ -1031,10 +1035,10 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
             <span>{filtered.length} {lang === 'is' ? 'færslur' : 'transactions'}</span>
             <div className="flex gap-4">
               <span className="text-green-600 font-semibold">
-                +{formatISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
+                +{fmtISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0))}
               </span>
               <span className="text-red-600 font-semibold">
-                -{formatISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
+                -{fmtISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0))}
               </span>
             </div>
           </div>
@@ -1047,10 +1051,10 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           <span>{filtered.length} {lang === 'is' ? 'færslur' : 'transactions'}</span>
           <div className="flex gap-3">
             <span className="text-green-600 font-semibold">
-              +{formatISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
+              +{fmtISK(filtered.filter(tx => tx.type === 'income').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0))}
             </span>
             <span className="text-red-600 font-semibold">
-              -{formatISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0), lang)}
+              -{fmtISK(filtered.filter(tx => tx.type === 'expense').reduce((s, tx) => s + getTotalISK(tx, inclVat), 0))}
             </span>
           </div>
         </div>
