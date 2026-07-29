@@ -525,7 +525,12 @@ export default function BankImport() {
   function handleImport() {
     setImporting(true);
     const selected = rows.filter(r => r.selected);
-    const rate = data.settings.exchangeRates.EUR;
+    // Stamp imports in the company's own currency, not a hardcoded ISK — otherwise a
+    // US ($) or Canadian (CAD) bank file gets read as krónur and shown ~130× too small.
+    // eurToIskRate is the "→ ISK" multiplier the reports normalise with: 1 for an ISK
+    // company, else how many ISK one unit of the company currency is worth.
+    const cur = (data.settings.defaultCurrency || 'ISK') as Transaction['currency'];
+    const rate = cur === 'ISK' ? 1 : ((data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1);
     const ruleHits: Record<string, number> = {};
 
     // De-duplicate against existing transactions (and within this batch) using a
@@ -539,7 +544,7 @@ export default function BankImport() {
       newTxs.push({
         id: newId(), date: r.date, description: r.description,
         category: r.category, type: r.type, amount: r.amount,
-        currency: 'ISK', eurToIskRate: rate, vatRate: r.vatRate,
+        currency: cur, eurToIskRate: rate, vatRate: r.vatRate,
         reference: r.reference, invoiceId: r.invoiceId,
       });
       if (r.matchedRule) ruleHits[r.matchedRule] = (ruleHits[r.matchedRule] ?? 0) + 1;
