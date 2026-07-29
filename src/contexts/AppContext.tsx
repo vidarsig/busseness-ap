@@ -475,6 +475,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(persistTimer.current);
   }, [data]);
 
+  // Returning from Stripe Connect onboarding (/?stripe=return|refresh): confirm the
+  // contractor can now get paid by re-reading their connected account, then strip the
+  // query so a reload doesn't re-fire. Waits for settings (and the acct id) to hydrate.
+  const stripeReturnHandled = useRef(false);
+  useEffect(() => {
+    if (stripeReturnHandled.current) return;
+    const flag = new URLSearchParams(window.location.search).get('stripe');
+    if (flag !== 'return' && flag !== 'refresh') return;
+    const acct = data.settings.stripeConnectAccountId;
+    if (!acct) return; // settings not hydrated yet — re-runs when the id appears
+    stripeReturnHandled.current = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe-connect', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'status', accountId: acct }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) dispatch({ type: 'UPDATE_SETTINGS', payload: { stripeChargesEnabled: !!d.chargesEnabled, paymentsEnabled: !!d.chargesEnabled } });
+      } catch { /* leave status as-is; the user can re-check in Settings */ }
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('stripe');
+        window.history.replaceState({}, '', url.toString());
+      } catch { /* ignore */ }
+    })();
+  }, [data.settings.stripeConnectAccountId]);
+
   // On mount: (1) hydrate from IndexedDB (migrating from localStorage on first
   // run), then (2) sync with Supabase if configured and the cloud copy is newer.
   useEffect(() => {

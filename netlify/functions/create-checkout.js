@@ -28,7 +28,7 @@ exports.handler = async (event) => {
   let p;
   try { p = JSON.parse(event.body || '{}'); } catch { return { statusCode: 400, body: 'Bad request' }; }
 
-  const { amount, currency, description, invoiceNumber, origin, methods } = p;
+  const { amount, currency, description, invoiceNumber, origin, methods, connectedAccountId } = p;
   const cur = String(currency || 'usd').toLowerCase();
   const amt = Number(amount);
   if (!amt || amt <= 0) return json(400, { error: { message: 'Missing or invalid amount.' } });
@@ -49,11 +49,19 @@ exports.handler = async (event) => {
   form.append('cancel_url', `${base}/?paid=0`);
   if (invoiceNumber) form.append('metadata[invoice]', String(invoiceNumber));
 
+  // Direct charge on the contractor's connected account: the money settles in THEIR
+  // Stripe balance / bank, and they are the merchant of record. The Stripe-Account
+  // header is how a platform acts on a connected account (acct_…). Without it, the
+  // charge would land on the platform account — so a connected id is required for
+  // the multi-tenant "each contractor gets paid into their own bank" model.
+  const headers = { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (connectedAccountId) headers['Stripe-Account'] = String(connectedAccountId);
+
   let res, data;
   try {
     res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers,
       body: form.toString(),
     });
     data = await res.json();

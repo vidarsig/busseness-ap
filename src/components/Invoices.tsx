@@ -726,15 +726,16 @@ export default function Invoices() {
           description: `${lang === 'is' ? 'Reikningur' : 'Invoice'} ${inv.number} — ${inv.customer.name}`,
           invoiceNumber: inv.number,
           origin: window.location.origin,
+          connectedAccountId: data.settings.stripeConnectAccountId,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.url) {
-        alert(data?.error?.message || (lang === 'is' ? 'Ekki tókst að búa til greiðsluhlekk. Kláraðu uppsetningu greiðslna í Stillingum.' : 'Could not create a payment link. Finish payment setup in Settings.'));
+      const resJson = await res.json().catch(() => ({}));
+      if (!res.ok || !resJson.url) {
+        alert(resJson?.error?.message || (lang === 'is' ? 'Ekki tókst að búa til greiðsluhlekk. Kláraðu uppsetningu greiðslna í Stillingum.' : 'Could not create a payment link. Finish payment setup in Settings.'));
         return;
       }
-      try { await navigator.clipboard.writeText(data.url); } catch { /* clipboard may be blocked */ }
-      window.open(data.url, '_blank');
+      try { await navigator.clipboard.writeText(resJson.url); } catch { /* clipboard may be blocked */ }
+      window.open(resJson.url, '_blank');
       alert(lang === 'is' ? 'Greiðsluhlekkur afritaður — sendu hann á viðskiptavininn.' : 'Payment link copied — send it to your customer.');
     } catch {
       alert(lang === 'is' ? 'Villa við að búa til greiðsluhlekk.' : 'Error creating the payment link.');
@@ -1060,7 +1061,7 @@ export default function Invoices() {
                     </button>
                   )}
                   {/* Invoice: get paid online (Stripe ACH/card) — only when payments are set up */}
-                  {data.settings.paymentsEnabled && !isQuote && inv.status !== 'paid' && (
+                  {(data.settings.stripeChargesEnabled ?? data.settings.paymentsEnabled) && !isQuote && inv.status !== 'paid' && (
                     <button onClick={() => paymentLink(inv)} disabled={payLinkId === inv.id}
                       className="flex items-center gap-1 text-xs text-white bg-emerald-600 border border-emerald-600 px-2.5 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
                       <CreditCard className="w-3.5 h-3.5" /> {payLinkId === inv.id ? (lang === 'is' ? 'Bý til…' : 'Creating…') : (lang === 'is' ? 'Greiðsluhlekkur' : 'Payment link')}

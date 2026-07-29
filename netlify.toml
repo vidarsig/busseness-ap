@@ -13,6 +13,11 @@
   to = "/.netlify/functions/create-checkout"
   status = 200
 
+[[redirects]]
+  from = "/api/stripe-connect"
+  to = "/.netlify/functions/stripe-connect"
+  status = 200
+
 # Clean URL for the public info / marketing page
 [[redirects]]
   from = "/kynning"

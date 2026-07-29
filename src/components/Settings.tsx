@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2, FlaskConical } from 'lucide-react';
+import { CheckCircle, Download, Upload, AlertCircle, Cloud, Copy, Loader2, FlaskConical, CreditCard } from 'lucide-react';
 import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
@@ -170,6 +170,57 @@ export default function Settings() {
   const [restoreError, setRestoreError] = useState('');
   const [restoreOk, setRestoreOk] = useState(false);
   const restoreRef = useRef<HTMLInputElement>(null);
+  const [stripeBusy, setStripeBusy] = useState(false);
+  const [stripeErr, setStripeErr] = useState<string | null>(null);
+
+  // Stripe Connect onboarding: create (or reuse) the contractor's connected account
+  // and send them to Stripe's hosted page to enter their own bank/business details.
+  // We persist only the account id (acct_…, not a secret) so the return handler in
+  // AppContext can confirm they can get paid. Everything sensitive stays on Stripe.
+  async function connectStripe() {
+    setStripeBusy(true); setStripeErr(null);
+    try {
+      const res = await fetch('/api/stripe-connect', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          country: cc.code,
+          email: data.settings.company.email || undefined,
+          accountId: data.settings.stripeConnectAccountId || undefined,
+          origin: window.location.origin,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.url) { setStripeErr(d?.error?.message || (lang === 'is' ? 'Ekki tókst að tengja Stripe.' : 'Could not start Stripe connection.')); return; }
+      // Remember the account id before we leave, so the return trip can check status.
+      if (d.accountId && d.accountId !== data.settings.stripeConnectAccountId) {
+        dispatch({ type: 'UPDATE_SETTINGS', payload: { stripeConnectAccountId: d.accountId } });
+      }
+      window.location.href = d.url;
+    } catch {
+      setStripeErr(lang === 'is' ? 'Villa við að tengja Stripe.' : 'Error connecting to Stripe.');
+    } finally {
+      setStripeBusy(false);
+    }
+  }
+
+  async function refreshStripeStatus() {
+    if (!data.settings.stripeConnectAccountId) return;
+    setStripeBusy(true); setStripeErr(null);
+    try {
+      const res = await fetch('/api/stripe-connect', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status', accountId: data.settings.stripeConnectAccountId }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setStripeErr(d?.error?.message || 'Stripe error'); return; }
+      dispatch({ type: 'UPDATE_SETTINGS', payload: { stripeChargesEnabled: !!d.chargesEnabled, paymentsEnabled: !!d.chargesEnabled } });
+    } catch {
+      setStripeErr(lang === 'is' ? 'Villa við að sækja stöðu.' : 'Error checking status.');
+    } finally {
+      setStripeBusy(false);
+    }
+  }
 
   function exportBackup() {
     const json = JSON.stringify(data, null, 2);
@@ -530,31 +581,49 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Payments (get paid online via Stripe) */}
+          {/* Payments (get paid online via Stripe Connect) */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Greiðslur á netinu (Stripe)' : 'Get paid online (Stripe)'}</h2>
-            <p className="text-xs text-gray-500 mb-3">{lang === 'is' ? 'Leyfðu viðskiptavinum að greiða reikninga með millifærslu (ACH) eða korti.' : 'Let customers pay invoices by bank (ACH) or card.'}</p>
-            <label className="flex items-start gap-2 cursor-pointer mb-3">
-              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded flex-shrink-0"
-                checked={form.paymentsEnabled ?? false}
-                onChange={e => setTop('paymentsEnabled', e.target.checked)} />
-              <span className="text-sm text-gray-700">
-                {lang === 'is' ? 'Sýna „Greiðsluhlekk“ á reikningum' : 'Show the "Payment link" button on invoices'}
-                <span className="block text-xs text-gray-400 mt-0.5">
-                  {lang === 'is' ? 'Kveiktu eftir að þú hefur klárað skrefin hér að neðan.' : 'Turn on after you finish the steps below.'}
-                </span>
-              </span>
-            </label>
-            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-gray-600 space-y-1.5">
-              <p className="font-semibold text-gray-700">{lang === 'is' ? 'Uppsetning (þú gerir þetta sjálf/ur — ég sé aldrei bankaupplýsingar):' : 'Setup (you do this yourself — I never see your banking details):'}</p>
-              <ol className="list-decimal ml-4 space-y-1">
-                <li>{lang === 'is' ? 'Stofnaðu Stripe reikning á stripe.com og tengdu bankareikninginn þinn (fyrir ACH — lægstu gjöldin).' : 'Create a Stripe account at stripe.com and connect your bank (for ACH — lowest fees).'}</li>
-                <li>{lang === 'is' ? 'Í Stripe: Developers → API keys → afritaðu „Secret key“.' : 'In Stripe: Developers → API keys → copy your "Secret key".'}</li>
-                <li>{lang === 'is' ? 'Í Netlify: Site settings → Environment variables → bættu við STRIPE_SECRET_KEY með lyklinum.' : 'In Netlify: Site settings → Environment variables → add STRIPE_SECRET_KEY with that key.'}</li>
-                <li>{lang === 'is' ? 'Komdu aftur hingað og kveiktu á rofanum að ofan.' : 'Come back here and turn the switch above on.'}</li>
-              </ol>
-              <p className="text-gray-500">{lang === 'is' ? 'Þegar greitt er berst upphæðin í bankann þinn og bankainnflutningurinn tengir hana sjálfkrafa við reikninginn.' : 'When a customer pays, the money lands in your bank and the bank import auto-links it to the invoice.'}</p>
-            </div>
+            <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Fáðu greitt á netinu' : 'Get paid online'}</h2>
+            <p className="text-xs text-gray-500 mb-3">{lang === 'is' ? 'Leyfðu viðskiptavinum að greiða reikninga með millifærslu (ACH) eða korti — peningarnir fara beint í bankann þinn.' : 'Let your customers pay invoices by bank (ACH) or card — the money goes straight to your bank.'}</p>
+
+            {data.settings.stripeChargesEnabled ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-green-800">
+                  {lang === 'is' ? 'Tengt — viðskiptavinir geta greitt þér.' : "Connected — your customers can pay you."}
+                  <span className="block text-xs text-green-700 mt-0.5">{lang === 'is' ? '„Greiðsluhlekkur“ birtist nú á reikningunum þínum.' : 'The "Payment link" button now shows on your invoices.'}</span>
+                  <button type="button" onClick={refreshStripeStatus} disabled={stripeBusy}
+                    className="mt-2 text-xs text-green-700 underline disabled:opacity-50">{lang === 'is' ? 'Athuga stöðu aftur' : 'Re-check status'}</button>
+                </div>
+              </div>
+            ) : data.settings.stripeConnectAccountId ? (
+              <div className="space-y-2">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                  {lang === 'is' ? 'Stripe-tengingin er hafin en ekki fullkláruð. Kláraðu skráninguna hjá Stripe.' : 'Your Stripe connection is started but not finished. Complete your details with Stripe.'}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={connectStripe} disabled={stripeBusy}
+                    className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                    {stripeBusy ? (lang === 'is' ? 'Augnablik…' : 'One moment…') : (lang === 'is' ? 'Klára Stripe-skráningu' : 'Finish Stripe setup')}
+                  </button>
+                  <button type="button" onClick={refreshStripeStatus} disabled={stripeBusy}
+                    className="px-3 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">
+                    {lang === 'is' ? 'Athuga stöðu' : 'Check status'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button type="button" onClick={connectStripe} disabled={stripeBusy}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  {stripeBusy ? (lang === 'is' ? 'Augnablik…' : 'One moment…') : (lang === 'is' ? 'Tengja Stripe til að fá greitt' : 'Connect Stripe to get paid')}
+                </button>
+                <p className="text-xs text-gray-500">{lang === 'is' ? 'Þú skráir bankann þinn hjá Stripe (öruggt) — við sjáum aldrei bankaupplýsingarnar. Tekur örfáar mínútur.' : "You enter your bank with Stripe (secure) — we never see your banking details. Takes a couple of minutes."}</p>
+              </div>
+            )}
+            {stripeErr && <p className="text-xs text-red-600 mt-2">{stripeErr}</p>}
+            <p className="text-[11px] text-gray-400 mt-3">{lang === 'is' ? 'Þegar greitt er berst upphæðin í bankann þinn og bankainnflutningurinn tengir hana sjálfkrafa við reikninginn.' : 'When a customer pays, the money lands in your bank and the bank import auto-links it to the invoice.'}</p>
           </div>
 
           {/* Exchange rates */}
