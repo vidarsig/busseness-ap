@@ -64,6 +64,13 @@ const ARION_CASH_BY_YEAR: Record<string, number> = {
 const isCashLineItem = (b: BalanceSheetItem) =>
   b.computed === 'cash' || b.id === 'bs1' || (b.section === 'current_assets' && /handbært/i.test(b.name));
 
+// The loan keys that are MORTGAGES financing the 3 properties (Arion ×3 + the two
+// bonds still owed — A00750 Akurgerði, A00346 Deildartún). Only these net against
+// property book value. The paid-up bonds (M2595, A01536), the family loans (Heiða,
+// Jane) and the owner account are NOT property mortgages.
+const EFRA_MORTGAGE_SEED_ID = 'efra-mortgages-v1';
+const EFRA_MORTGAGE_NUMBERS = new Set(['20301', '20302', '20303', '20304', '20305']);
+
 function applyOwnerSeeds(d: AppData): AppData {
   const kt = (d.settings.company?.kennitala ?? '').replace(/\D/g, '');
   const name = (d.settings.company?.name ?? '').toLowerCase();
@@ -71,6 +78,7 @@ function applyOwnerSeeds(d: AppData): AppData {
   if (!isOwner) return d;
   const done = [...(d.seededMigrations ?? [])];
   let items = d.balanceSheetItems;
+  let accounts = d.accounts;
   let changed = false;
   // Seed 1: the 3 properties as fixed assets (upsert by stable id).
   if (!done.includes(EFRA_SEED_ID)) {
@@ -83,7 +91,13 @@ function applyOwnerSeeds(d: AppData): AppData {
     items = items.map(b => isCashLineItem(b) ? { ...b, cashByYear: { ...(b.cashByYear ?? {}), ...ARION_CASH_BY_YEAR } } : b);
     done.push(EFRA_CASH_SEED_ID); changed = true;
   }
-  return changed ? { ...d, balanceSheetItems: items, seededMigrations: done } : d;
+  // Seed 3: flag the 5 property-mortgage loan keys so they net against property book
+  // value (the rest of the debt stays a normal liability). Idempotent by account number.
+  if (!done.includes(EFRA_MORTGAGE_SEED_ID)) {
+    accounts = accounts.map(a => EFRA_MORTGAGE_NUMBERS.has(a.number) ? { ...a, isPropertyMortgage: true } : a);
+    done.push(EFRA_MORTGAGE_SEED_ID); changed = true;
+  }
+  return changed ? { ...d, balanceSheetItems: items, accounts, seededMigrations: done } : d;
 }
 
 const defaultData: AppData = {
