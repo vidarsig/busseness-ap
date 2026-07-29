@@ -4,6 +4,7 @@ import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
 import { COUNTRY_LIST, CA_PROVINCES, US_STATES } from '../data/countries';
+import { generateDemoData } from '../utils/demoData';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
@@ -183,6 +184,34 @@ export default function Settings() {
     } finally {
       setStripeBusy(false);
     }
+  }
+
+  // Sample data (test engine): fill the app with realistic example customers,
+  // invoices and jobs so anyone can see how it works — WITHOUT touching real
+  // settings/company. Every sample record is tagged "_demo_" so "Remove" strips
+  // exactly those and leaves real data alone.
+  const [sampleMsg, setSampleMsg] = useState<string | null>(null);
+  function loadSampleData() {
+    // generateDemoData returns merged entity arrays (real + fresh demo) plus a
+    // settings block — we intentionally DROP settings so a real company's name,
+    // currency and tax setup are never overwritten.
+    const { settings: _ignore, ...entities } = generateDemoData(data);
+    dispatch({ type: 'LOAD', payload: { ...data, ...entities } });
+    setSampleMsg(lang === 'is' ? 'Sýnigögn hlaðin — þú getur fjarlægt þau hvenær sem er.' : 'Sample data loaded — you can remove it anytime.');
+    setTimeout(() => setSampleMsg(null), 5000);
+  }
+  function removeSampleData() {
+    const strip = <T extends { id: string }>(arr: T[] | undefined) => (arr ?? []).filter(x => !x.id.includes('_demo_'));
+    dispatch({ type: 'LOAD', payload: {
+      ...data,
+      transactions: strip(data.transactions), invoices: strip(data.invoices),
+      jobs: strip(data.jobs), timeEntries: strip(data.timeEntries),
+      jobMaterials: strip(data.jobMaterials), stockItems: strip(data.stockItems),
+      stockMovements: strip(data.stockMovements), payrollEntries: strip(data.payrollEntries),
+      tasks: strip(data.tasks), budgetLines: strip(data.budgetLines),
+    }});
+    setSampleMsg(lang === 'is' ? 'Sýnigögn fjarlægð.' : 'Sample data removed.');
+    setTimeout(() => setSampleMsg(null), 5000);
   }
 
   async function refreshStripeStatus() {
@@ -605,6 +634,25 @@ export default function Settings() {
             )}
             {stripeErr && <p className="text-xs text-red-600 mt-2">{stripeErr}</p>}
             <p className="text-[11px] text-gray-400 mt-3">{lang === 'is' ? 'Þegar greitt er berst upphæðin í bankann þinn og bankainnflutningurinn tengir hana sjálfkrafa við reikninginn.' : 'When a customer pays, the money lands in your bank and the bank import auto-links it to the invoice.'}</p>
+          </div>
+
+          {/* Sample data (try / test the app) */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2"><FlaskConical className="w-4 h-4 text-purple-500" />{lang === 'is' ? 'Sýnigögn (prófa forritið)' : 'Sample data (try the app)'}</h2>
+            <p className="text-xs text-gray-500 mb-3">{lang === 'is'
+              ? 'Fylltu forritið af raunhæfum dæmum — viðskiptavinum, reikningum og verkum — til að sjá hvernig allt virkar. Það er merkt sem sýnigögn og þú getur fjarlægt það hvenær sem er. Raunveruleg gögnin þín haldast óbreytt.'
+              : "Fill the app with realistic examples — customers, invoices and jobs — to see how everything works. It's marked as sample data and you can remove it anytime. Your real data stays untouched."}</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={loadSampleData}
+                className="px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5">
+                <FlaskConical className="w-4 h-4" />{lang === 'is' ? 'Hlaða sýnigögnum' : 'Load sample data'}
+              </button>
+              <button type="button" onClick={() => { if (confirm(lang === 'is' ? 'Fjarlægja öll sýnigögn?' : 'Remove all sample data?')) removeSampleData(); }}
+                className="px-3 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50">
+                {lang === 'is' ? 'Fjarlægja sýnigögn' : 'Remove sample data'}
+              </button>
+            </div>
+            {sampleMsg && <p className="text-xs text-green-600 mt-2">{sampleMsg}</p>}
           </div>
 
           {/* Exchange rates */}

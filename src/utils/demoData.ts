@@ -22,8 +22,13 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
 
   const enDesc = (uk: string, us: string) => isIS ? '' : (isEN_US ? us : uk);
 
+  // Sales/VAT rate to put on demo income so the Sales Tax / VAT report shows real
+  // numbers when testing: Iceland 24%, US the state sales-tax rate, else the country
+  // standard rate. Applied to service-sales income below (expenses stay untaxed).
+  const saleVat = isIS ? 24 : (existing.settings.salesTaxRate ?? existing.settings.standardRate ?? 0);
+
   // ── Transactions ─────────────────────────────────────────
-  const transactions: Transaction[] = [
+  const rawTransactions: Transaction[] = [
     { id:id('tx'), date:daysAgo(1),  description: isIS ? 'Þakviðgerð — Skólavörðustígur 12'   : enDesc('Roof repair — 14 Oak Street',        'Roof repair — 123 Main St, Brooklyn'),     category:'sala_thjonustu', type:'income',  amount:a(485000), currency:cur, eurToIskRate:iskRate, vatRate:isIS ? 24 : 0 },
     { id:id('tx'), date:daysAgo(3),  description: isIS ? 'Pípulagnir — Laugavegur 45'          : enDesc('Plumbing — High Street 45',          'Plumbing — 456 Oak Ave, Queens'),          category:'sala_thjonustu', type:'income',  amount:a(320000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
     { id:id('tx'), date:daysAgo(5),  description: isIS ? 'Viðgerð á baðherbergi'               : enDesc('Bathroom renovation',                'Bathroom remodel — Riverside Dr'),         category:'sala_thjonustu', type:'income',  amount:a(195000), currency:cur, eurToIskRate:iskRate, vatRate:0 },
@@ -40,6 +45,8 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
     { id:id('tx'), date:daysAgo(30), description: isIS ? 'Tryggingar — atvinnuslys'            : enDesc('Insurance — workplace cover',        'General liability insurance'),             category:'fagthjonusta',   type:'expense', amount:a(68000),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
     { id:id('tx'), date:daysAgo(32), description: isIS ? 'Hlíf — Bygg og byggingarefni'        : enDesc('Building materials & supplies',      'Lowe\'s — Building materials'),            category:'vorur',          type:'expense', amount:a(94500),  currency:cur, eurToIskRate:iskRate, vatRate:0 },
   ];
+  // Put the sales/VAT rate on service-sales income so the tax report has real figures.
+  const transactions: Transaction[] = rawTransactions.map(t => t.category === 'sala_thjonustu' ? { ...t, vatRate: saleVat } : t);
 
   // ── Workers & clients ─────────────────────────────────────
   const w1 = isIS ? 'Gunnar Sigurðsson' : (isEN_US ? 'James Mitchell'  : 'James Mitchell');
@@ -223,7 +230,7 @@ export function generateDemoData(existing: AppData): Partial<AppData> {
     { id:id('task'), title: isIS ? 'Senda reikning R0042 til Jóns'          : 'Send invoice R0042 to James',         priority:'high',   status:'open', dueDate:daysAgo(-1), linkedView:'invoices',  createdAt:isoAgo(2) },
     { id:id('task'), title: isIS ? 'Kaupa meira timbur — lager lægur'       : 'Order more timber — stock running low',priority:'high',   status:'open', dueDate:daysAgo(-2), linkedView:'stock',     createdAt:isoAgo(1) },
     { id:id('task'), title: isIS ? 'Ljúka við eldhús — Hafnarfjörður'       : 'Complete kitchen — Riverside job',     priority:'medium', status:'open', dueDate:daysAgo(-5), linkedView:'jobs',      createdAt:isoAgo(3) },
-    { id:id('task'), title: isIS ? 'Skoða VSK-skil fyrir apríl'             : 'Review VAT return for April',          priority:'medium', status:'open', dueDate:daysAgo(-3), linkedView:'vatreturn', createdAt:isoAgo(4) },
+    { id:id('task'), title: isIS ? 'Skoða VSK-skil fyrir apríl'             : isEN_US ? 'Review sales tax for the quarter' : 'Review VAT return for April',          priority:'medium', status:'open', dueDate:daysAgo(-3), linkedView:'vatreturn', createdAt:isoAgo(4) },
     { id:id('task'), title: isIS ? 'Fá undirskrift á tilboð — Kópavogur'    : 'Get quote signed — Northside job',     priority:'low',    status:'open', dueDate:daysAgo(-7), linkedView:'jobs',      createdAt:isoAgo(1) },
     { id:id('task'), title: isIS ? 'Uppfæra launaskrá fyrir Maí'            : 'Update payroll for May',               priority:'low',    status:'done', completedAt:isoAgo(1),                       createdAt:isoAgo(6) },
   ];
