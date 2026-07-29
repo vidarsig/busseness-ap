@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { View } from '../types';
 import {
   Star, MessageSquare, Bug, Lightbulb, XCircle, Copy, Check,
-  ChevronDown, ChevronUp, Loader2, Download, Send,
+  ChevronDown, ChevronUp, Loader2, Download, Send, FlaskConical,
 } from 'lucide-react';
 
 interface Review {
@@ -15,7 +16,7 @@ interface Review {
 }
 
 interface AnalysisResult {
-  bugs: { title: string; severity: 'critical' | 'high' | 'medium' | 'low'; description: string; canFix: boolean; fixSuggestion?: string }[];
+  bugs: { title: string; severity: 'critical' | 'high' | 'medium' | 'low'; description: string; canFix: boolean; fixSuggestion?: string; screen?: string }[];
   improvements: { title: string; description: string; priority: 'high' | 'medium' | 'low' }[];
   cantFix: { title: string; reason: string }[];
   replies: { reviewId: string; author: string; reply: string }[];
@@ -74,8 +75,18 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export default function ReviewManager() {
-  const { lang } = useApp();
+const REPRODUCIBLE_VIEWS: View[] = ['dashboard', 'transactions', 'recurring', 'bankimport', 'invoices', 'jobs', 'stock', 'contacts', 'accounts', 'budget', 'payroll', 'vat', 'vatreturn', 'reports', 'annual', 'settings'];
+
+export default function ReviewManager({ setView }: { setView: (v: View) => void }) {
+  const { lang, loadSampleData } = useApp();
+
+  // Reproduce a complaint: load realistic sample data, then jump to the screen the AI
+  // pinned the bug to — so the reported problem can be seen (and fixed) immediately.
+  function reproduce(screen?: string) {
+    loadSampleData();
+    const v = REPRODUCIBLE_VIEWS.find(x => x === screen);
+    if (v) setView(v);
+  }
   const [rawText, setRawText] = useState('');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -110,7 +121,8 @@ Analyze these reviews and respond with a JSON object (no markdown, just raw JSON
       "severity": "critical|high|medium|low",
       "description": "what users are experiencing",
       "canFix": true,
-      "fixSuggestion": "technical suggestion for fixing it"
+      "fixSuggestion": "technical suggestion for fixing it",
+      "screen": "the app screen where this bug shows, so it can be reproduced — one of: dashboard, transactions, recurring, bankimport, invoices, jobs, stock, contacts, accounts, budget, payroll, vat, vatreturn, reports, annual, settings (omit if unclear)"
     }
   ],
   "improvements": [
@@ -362,6 +374,12 @@ Be specific and actionable. For bugs, focus on what developers can actually fix 
                             <p className="text-xs text-blue-800"><span className="font-medium">Fix suggestion:</span> {bug.fixSuggestion}</p>
                           </div>
                         )}
+                        {/* Reproduce: load sample data and jump to the screen the bug is on */}
+                        <button type="button" onClick={() => reproduce(bug.screen)}
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-purple-700 border border-purple-200 bg-purple-50 hover:bg-purple-100 rounded-lg px-2.5 py-1.5">
+                          <FlaskConical className="w-3.5 h-3.5" />
+                          Reproduce with sample data{bug.screen ? ` → ${bug.screen}` : ''}
+                        </button>
                       </div>
                     </div>
                   </div>

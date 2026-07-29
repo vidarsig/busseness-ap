@@ -4,7 +4,7 @@ import { pullData, SETUP_SQL } from '../utils/supabase';
 import { useApp } from '../contexts/AppContext';
 import { AppSettings, Language, Currency, ExchangeRates, AppData } from '../types';
 import { COUNTRY_LIST, CA_PROVINCES, US_STATES } from '../data/countries';
-import { generateDemoData } from '../utils/demoData';
+import { isOperatorAccount } from '../utils/access';
 
 import type { SyncStatus } from '../contexts/AppContext';
 
@@ -146,7 +146,7 @@ function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUs
 }
 
 export default function Settings() {
-  const { data, dispatch, t, lang, cc, syncStatus, lastSyncedAt, syncNow, restoreData, testMode, enterTestMode } = useApp();
+  const { data, dispatch, t, lang, cc, syncStatus, lastSyncedAt, syncNow, restoreData, testMode, enterTestMode, loadSampleData } = useApp();
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState<AppSettings>({ ...data.settings });
   const [restoreError, setRestoreError] = useState('');
@@ -191,12 +191,8 @@ export default function Settings() {
   // settings/company. Every sample record is tagged "_demo_" so "Remove" strips
   // exactly those and leaves real data alone.
   const [sampleMsg, setSampleMsg] = useState<string | null>(null);
-  function loadSampleData() {
-    // generateDemoData returns merged entity arrays (real + fresh demo) plus a
-    // settings block — we intentionally DROP settings so a real company's name,
-    // currency and tax setup are never overwritten.
-    const { settings: _ignore, ...entities } = generateDemoData(data);
-    dispatch({ type: 'LOAD', payload: { ...data, ...entities } });
+  function handleLoadSample() {
+    loadSampleData(); // shared context helper — drops settings so real company is kept
     setSampleMsg(lang === 'is' ? 'Sýnigögn hlaðin — þú getur fjarlægt þau hvenær sem er.' : 'Sample data loaded — you can remove it anytime.');
     setTimeout(() => setSampleMsg(null), 5000);
   }
@@ -636,14 +632,15 @@ export default function Settings() {
             <p className="text-[11px] text-gray-400 mt-3">{lang === 'is' ? 'Þegar greitt er berst upphæðin í bankann þinn og bankainnflutningurinn tengir hana sjálfkrafa við reikninginn.' : 'When a customer pays, the money lands in your bank and the bank import auto-links it to the invoice.'}</p>
           </div>
 
-          {/* Sample data (try / test the app) */}
+          {/* Sample data — operator-only internal testing tool (hidden from subscribers) */}
+          {isOperatorAccount(data.settings) && (
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h2 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2"><FlaskConical className="w-4 h-4 text-purple-500" />{lang === 'is' ? 'Sýnigögn (prófa forritið)' : 'Sample data (try the app)'}</h2>
+            <h2 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2"><FlaskConical className="w-4 h-4 text-purple-500" />{lang === 'is' ? 'Sýnigögn (prófun)' : 'Sample data (testing)'}</h2>
             <p className="text-xs text-gray-500 mb-3">{lang === 'is'
-              ? 'Fylltu forritið af raunhæfum dæmum — viðskiptavinum, reikningum og verkum — til að sjá hvernig allt virkar. Það er merkt sem sýnigögn og þú getur fjarlægt það hvenær sem er. Raunveruleg gögnin þín haldast óbreytt.'
-              : "Fill the app with realistic examples — customers, invoices and jobs — to see how everything works. It's marked as sample data and you can remove it anytime. Your real data stays untouched."}</p>
+              ? 'Fylltu forritið af raunhæfum dæmum — viðskiptavinum, reikningum og verkum — til að prófa. Það er merkt sem sýnigögn og þú getur fjarlægt það hvenær sem er. Raunveruleg gögnin þín haldast óbreytt.'
+              : "Fill the app with realistic examples — customers, invoices and jobs — for testing. It's marked as sample data and you can remove it anytime. Your real data stays untouched."}</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={loadSampleData}
+              <button type="button" onClick={handleLoadSample}
                 className="px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5">
                 <FlaskConical className="w-4 h-4" />{lang === 'is' ? 'Hlaða sýnigögnum' : 'Load sample data'}
               </button>
@@ -654,6 +651,7 @@ export default function Settings() {
             </div>
             {sampleMsg && <p className="text-xs text-green-600 mt-2">{sampleMsg}</p>}
           </div>
+          )}
 
           {/* Exchange rates */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">

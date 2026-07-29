@@ -10,6 +10,7 @@ import {
 import { translations, TranslationKey } from '../i18n/translations';
 import { COUNTRY_CONFIGS } from '../data/countries';
 import { formatCurrency, formatISK } from '../utils/formatters';
+import { generateDemoData } from '../utils/demoData';
 
 const STORAGE_KEY = 'bokhalds_app_v2';
 
@@ -361,6 +362,9 @@ interface AppContextValue {
   testMode: boolean;
   enterTestMode: () => void;
   exitTestMode: () => void;
+  /** Add realistic sample data (customers/invoices/jobs), tagged _demo_, WITHOUT
+   *  touching real settings/company. Used by Settings and Review Intelligence. */
+  loadSampleData: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -447,14 +451,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // fill the app with realistic data in the current jurisdiction/locale.
   const dataRef = useRef(data);
   dataRef.current = data;
+  // Fill the app with realistic sample data (customers/invoices/jobs) — but DROP the
+  // generator's settings block so a real company's name/currency/tax is never
+  // overwritten. Shared by Settings and Review Intelligence's "Reproduce" action.
+  const loadSampleData = useCallback(() => {
+    const cur = dataRef.current;
+    const { settings: _s, ...entities } = generateDemoData(cur);
+    dispatch({ type: 'LOAD', payload: { ...cur, ...entities } });
+  }, []);
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    (window as unknown as { __loadDemo?: () => Promise<void> }).__loadDemo = async () => {
-      const { generateDemoData } = await import('../utils/demoData');
-      const cur = dataRef.current;
-      dispatch({ type: 'LOAD', payload: { ...cur, ...generateDemoData(cur) } });
-    };
-  }, []);
+    (window as unknown as { __loadDemo?: () => void }).__loadDemo = () => loadSampleData();
+  }, [loadSampleData]);
 
   const enterTestMode = useCallback(() => {
     realDataBackup.current = data;             // immutable snapshot of the real data
@@ -669,7 +677,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [data.settings.defaultCurrency, data.settings.exchangeRates, lang]);
 
   return (
-    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow, restoreData, testMode, enterTestMode, exitTestMode }}>
+    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow, restoreData, testMode, enterTestMode, exitTestMode, loadSampleData }}>
       {children}
     </AppContext.Provider>
   );

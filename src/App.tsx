@@ -167,7 +167,7 @@ function AppInner() {
       {safeView === 'jobs'         && <Jobs sessionUser={sessionUser} />}
       {safeView === 'users'        && <Users sessionUser={sessionUser} />}
       {safeView === 'upgrade'      && <Upgrade />}
-      {safeView === 'reviews'      && <ReviewManager />}
+      {safeView === 'reviews'      && <ReviewManager setView={setView} />}
     </Layout>
   );
 }
