@@ -21,7 +21,7 @@ export default function VAT() {
   const L = {
     summary:   isUS ? 'Sales Tax Summary'            : gen ? `${term} Summary`               : t('vatSummary'),
     info:      isUS ? cc.vatNumberLabel              : gen ? cc.vatNumberLabel               : t('vatInfo'),
-    toPay:     isUS ? 'Sales Tax to pay'             : gen ? `${term} to pay`                : t('toPayRSK'),
+    toPay:     isUS ? 'Sales Tax to remit'           : gen ? `${term} to pay`                : t('toPayRSK'),
     refund:    isUS ? 'Sales Tax refund'             : gen ? `${term} refund`                : t('refundFromRSK'),
     output:    isUS ? 'Sales Tax collected (on sales)'    : gen ? `${term} on sales`          : t('outputVAT'),
     input:     isUS ? 'Sales Tax paid (on purchases)'     : gen ? `${term} on purchases`      : t('inputVAT'),
@@ -99,7 +99,11 @@ export default function VAT() {
     </div>
   );
 
-  const isOwed = vat.netVAT > 0;
+  // US sales tax is remit-only: the full amount collected is owed to the state, with
+  // NO offset for tax paid on purchases (that's a VAT concept — a cost, not a credit).
+  // Canada's GST/HST and Iceland's VSK are true VATs, so they keep output − input.
+  const isOwed = isUS ? vat.totalOutput > 0 : vat.netVAT > 0;
+  const netValue = isUS ? vat.totalOutput : Math.abs(vat.netVAT);
 
   return (
     <div>
@@ -152,30 +156,35 @@ export default function VAT() {
         isOwed ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'
       }`}>
         <div className="text-sm font-medium text-gray-600 mb-1">
-          {isOwed ? L.toPay : L.refund}
+          {isUS ? L.toPay : (isOwed ? L.toPay : L.refund)}
         </div>
         <div className={`text-3xl font-bold ${isOwed ? 'text-orange-600' : 'text-green-600'}`}>
-          {fmtISK(Math.abs(vat.netVAT))}
+          {fmtISK(netValue)}
         </div>
         <div className="mt-3 flex gap-6 text-sm text-gray-500">
           <span>{L.output}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalOutput)}</span></span>
-          <span>{L.input}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalInput)}</span></span>
+          {!isUS && <span>{L.input}: <span className="font-semibold text-gray-700">{fmtISK(vat.totalInput)}</span></span>}
         </div>
+        {isUS && (
+          <p className="mt-2 text-xs text-gray-500">Sales tax you paid on your own purchases is a business cost — it is not deducted from what you remit.</p>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 ${isUS ? '' : 'lg:grid-cols-2'} gap-4`}>
         <SectionTable
           title={L.output}
           rows={vat.outputByRate}
           total={vat.totalOutput}
           color="text-green-700"
         />
-        <SectionTable
-          title={L.input}
-          rows={vat.inputByRate}
-          total={vat.totalInput}
-          color="text-blue-700"
-        />
+        {!isUS && (
+          <SectionTable
+            title={L.input}
+            rows={vat.inputByRate}
+            total={vat.totalInput}
+            color="text-blue-700"
+          />
+        )}
       </div>
     </div>
   );
