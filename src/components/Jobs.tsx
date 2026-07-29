@@ -6,7 +6,7 @@ import {
   ZoomIn, Search, Calendar, Mail,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, Currency, StockItem } from '../types';
+import { Job, JobStatus, JobReportStatus, TimeEntry, JobMaterial, JobPhoto, Invoice, InvoiceLine, InvoiceCustomer, InvoicePhoto, Currency, StockItem } from '../types';
 import { isJobLimitReached } from '../utils/planLimits';
 import { sharePDF } from '../utils/exports';
 import { invoiceTotals } from '../utils/invoiceMath';
@@ -418,6 +418,15 @@ export default function Jobs({ sessionUser }: JobsProps) {
       address: job.address,
     };
 
+    // Carry the job's photos onto the invoice as proof of work — the owner
+    // almost always wants the site/work pictures to ride along with the bill.
+    const invoicePhotos: InvoicePhoto[] = jobPhotos(job.id).map(p => ({
+      id: newId('iphoto'),
+      dataUrl: p.dataUrl,
+      caption: p.caption,
+      createdAt: p.takenAt || p.createdAt,
+    }));
+
     const today = todayISO();
     const due = new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10);
     const lastNum = data.settings.invoiceLastNumber + 1;
@@ -431,6 +440,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       dueDate: due,
       customer,
       lines,
+      photos: invoicePhotos.length ? invoicePhotos : undefined,
       notes: `${t('Verk', 'Job')}: ${job.number} — ${job.name}`,
       status: 'draft',
       currency: job.currency,
@@ -475,6 +485,15 @@ export default function Jobs({ sessionUser }: JobsProps) {
       vatRate: cc.standardRate,
     }];
 
+    // Carry the job's photos onto the offer too, so they survive job → offer →
+    // invoice (the quote → invoice conversion copies the whole quote across).
+    const offerPhotos: InvoicePhoto[] = jobPhotos(job.id).map(p => ({
+      id: newId('iphoto'),
+      dataUrl: p.dataUrl,
+      caption: p.caption,
+      createdAt: p.takenAt || p.createdAt,
+    }));
+
     const today = todayISO();
     const due = new Date(Date.now() + 14*24*60*60*1000).toISOString().slice(0,10);
     const nextNum = data.settings.quoteLastNumber + 1;
@@ -487,6 +506,7 @@ export default function Jobs({ sessionUser }: JobsProps) {
       dueDate: due,
       customer,
       lines,
+      photos: offerPhotos.length ? offerPhotos : undefined,
       notes: `${t('Verk', 'Job')} #${job.number} — ${job.name}`,
       status: 'draft',
       currency: job.currency,

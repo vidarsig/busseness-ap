@@ -799,6 +799,16 @@ export default function Invoices() {
       const d = invoicePdfData(inv);
       const { subject, body } = buildInvoiceEmail(inv, data.settings.company.name || '', lang);
       const content = pdfBase64(d.title, d.subtitle, d.cols, d.rows);
+      // Attach the invoice's photos too — they're almost always the site/work
+      // pictures the customer should see alongside the bill. Strip the data-URL
+      // header down to the raw base64 the mail server expects.
+      const photoAttachments = (inv.photos ?? []).map((p, i) => {
+        const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/.exec(p.dataUrl);
+        if (!m) return null;
+        const ext = m[1].split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+        const base = (p.caption?.trim() || `${inv.number}-mynd-${i + 1}`).replace(/[^\w-]+/g, '_').slice(0, 40);
+        return { filename: `${base}.${ext}`, content: m[2] };
+      }).filter((a): a is { filename: string; content: string } => a !== null);
       const res = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -808,14 +818,16 @@ export default function Invoices() {
           replyTo: data.settings.company.email || undefined,
           subject,
           text: body,
-          attachments: [{ filename: d.filename, content }],
+          attachments: [{ filename: d.filename, content }, ...photoAttachments],
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error?.message || `Error ${res.status}`);
       }
-      setEmailToast({ ok: true, text: lang === 'is' ? `Reikningur sendur á ${to}` : `Invoice emailed to ${to}` });
+      const nPhotos = photoAttachments.length;
+      const photoNote = nPhotos > 0 ? (lang === 'is' ? ` + ${nPhotos} ${nPhotos === 1 ? 'mynd' : 'myndir'}` : ` + ${nPhotos} ${nPhotos === 1 ? 'photo' : 'photos'}`) : '';
+      setEmailToast({ ok: true, text: (lang === 'is' ? `Reikningur${photoNote} sendur á ${to}` : `Invoice${photoNote} emailed to ${to}`) });
     } catch (e) {
       setEmailToast({ ok: false, text: (e as Error).message });
     } finally {
