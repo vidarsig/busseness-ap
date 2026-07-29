@@ -27,7 +27,7 @@ import ReviewManager from './components/ReviewManager';
 import Login from './components/Login';
 import { View } from './types';
 import { getSession } from './utils/supabase';
-import { resolvePermissions, canAccessView } from './utils/access';
+import { resolvePermissions, canAccessView, isOperatorAccount } from './utils/access';
 import UpdatePrompt from './components/UpdatePrompt';
 import TestModeBanner from './components/TestModeBanner';
 
@@ -101,10 +101,12 @@ function AppInner() {
 
   // Role-based access: constrain navigation to the logged-in user's permissions
   const perms = resolvePermissions(sessionUser, data.appUsers ?? []);
+  // Review Intelligence is operator-only — a subscriber can't reach it even by URL/state.
+  const viewAllowed = (v: View) => canAccessView(v, perms) && (v !== 'reviews' || isOperatorAccount(data.settings));
 
   // If the current view is not permitted, bounce back to the dashboard
   useEffect(() => {
-    if (!canAccessView(view, perms)) setView('dashboard');
+    if (!viewAllowed(view)) setView('dashboard');
   }, [view, perms]);
 
   // Country onboarding first
@@ -139,7 +141,7 @@ function AppInner() {
 
   // Never render a screen the user can't access (covers the tick before the
   // redirect effect fires)
-  const safeView: View = canAccessView(view, perms) ? view : 'dashboard';
+  const safeView: View = viewAllowed(view) ? view : 'dashboard';
 
   return (
     <Layout view={safeView} setView={setView} sessionUser={sessionUser} perms={perms}

@@ -8,7 +8,7 @@ import {
 import { useApp } from '../contexts/AppContext';
 import { signOut } from '../utils/supabase';
 import { View, UserPermissions } from '../types';
-import { canAccessView } from '../utils/access';
+import { canAccessView, isOperatorAccount } from '../utils/access';
 import type { SessionUser } from '../App';
 
 interface Props {
@@ -90,6 +90,7 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
   const { t, lang, cc, data } = useApp();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const companyName = data.settings.company.name || t('appName');
+  const isOperator = isOperatorAccount(data.settings);
 
   // Nav label for the tax screens follows the country's tax term instead of the
   // hardcoded "VAT": US → "Sales Tax", any other English UI → the config term
@@ -137,6 +138,8 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
             (item.id !== 'users' || supabaseConfigured) &&
             // Payroll only where an engine exists (Iceland, US, Canada).
             (item.id !== 'payroll' || data.settings.country === 'IS' || data.settings.country === 'US' || data.settings.country === 'CA') &&
+            // Review Intelligence is an operator-only internal tool — hidden from subscribers.
+            (item.id !== 'reviews' || isOperator) &&
             canAccessView(item.id, perms ?? null),
           );
           if (items.length === 0) return null;

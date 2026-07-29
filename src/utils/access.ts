@@ -4,6 +4,17 @@ export interface SessionLike {
   email: string;
 }
 
+// The Jobboks OPERATOR's own account. Operator-only internal tools (e.g. Review
+// Intelligence — analysing Jobboks' app-store reviews) are hidden from every
+// subscriber and shown only here (or while developing). A subscriber's own company
+// never matches, so the tool never appears in their app.
+const OPERATOR_KT = '6901201780'; // Efra skrið ehf (Jobboks operator)
+export function isOperatorAccount(settings: { company?: { kennitala?: string; name?: string } } | null | undefined): boolean {
+  const kt = (settings?.company?.kennitala ?? '').replace(/\D/g, '');
+  const name = (settings?.company?.name ?? '').toLowerCase();
+  return kt === OPERATOR_KT || name.includes('efra skrið') || name.includes('efra skrid');
+}
+
 /**
  * Resolve which permissions to enforce for the logged-in user.
  *
