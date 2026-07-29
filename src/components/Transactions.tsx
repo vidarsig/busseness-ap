@@ -58,7 +58,8 @@ interface ModalProps {
 }
 
 function TransactionModal({ initial, onSave, onClose }: ModalProps) {
-  const { t, data, cc, lang } = useApp();
+  const { t, data, cc, lang, fmtISK } = useApp();
+  const baseCur = (data.settings.defaultCurrency || 'ISK');
   const [form, setForm] = useState({ ...EMPTY_FORM, ...initial });
 
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) =>
@@ -202,7 +203,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                     const total = invoiceTotals(inv);
                     return (
                       <option key={inv.id} value={inv.id}>
-                        #{inv.number}{inv.customer.name ? ` — ${inv.customer.name}` : ''} · {formatISK(total.total)}
+                        #{inv.number}{inv.customer.name ? ` — ${inv.customer.name}` : ''} · {formatCurrency(total.total, inv.currency, lang)}
                       </option>
                     );
                   })}
@@ -222,8 +223,8 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               {linkedOverpay && (
                 <p className="text-xs text-amber-600 mt-1">
                   ⚠ {lang === 'is'
-                    ? `Þessi greiðsla (${formatISK(linkedOverpay.thisISK, lang)}) er hærri en það sem eftir stendur á reikningi #${linkedInvoice?.number} (${formatISK(linkedOverpay.outstanding, lang)} eftir). Athugaðu hvort réttur reikningur sé valinn.`
-                    : `This payment (${formatISK(linkedOverpay.thisISK, lang)}) is more than what's left on invoice #${linkedInvoice?.number} (${formatISK(linkedOverpay.outstanding, lang)} left). Check you linked the right invoice.`}
+                    ? `Þessi greiðsla (${fmtISK(linkedOverpay.thisISK)}) er hærri en það sem eftir stendur á reikningi #${linkedInvoice?.number} (${fmtISK(linkedOverpay.outstanding)} eftir). Athugaðu hvort réttur reikningur sé valinn.`
+                    : `This payment (${fmtISK(linkedOverpay.thisISK)}) is more than what's left on invoice #${linkedInvoice?.number} (${fmtISK(linkedOverpay.outstanding)} left). Check you linked the right invoice.`}
                 </p>
               )}
             </div>
@@ -365,7 +366,7 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                 <span>{incVatLabel}</span>
                 <span className="font-mono">{formatCurrency(totalWithVat, form.currency)}</span>
               </div>
-              {form.currency !== 'ISK' && (
+              {form.currency !== 'ISK' && baseCur === 'ISK' && (
                 <div className="flex justify-between text-blue-600 border-t border-gray-200 pt-1.5">
                   <span>{t('iskAmount')}</span>
                   <span className="font-mono">{formatISK(iskTotal)}</span>

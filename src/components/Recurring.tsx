@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, Play, RefreshCw } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { RecurringTransaction, Currency, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../types';
-import { formatISK, formatDate, todayISO } from '../utils/formatters';
+import { formatDate, todayISO } from '../utils/formatters';
 
 function newId() { return `rec_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 function txId() { return `tx_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -150,7 +150,7 @@ function shouldGenerate(rec: RecurringTransaction, today: Date): string[] {
 }
 
 export default function Recurring() {
-  const { data, dispatch, t, lang } = useApp();
+  const { data, dispatch, t, lang, fmtISK } = useApp();
   const [modal, setModal] = useState<{ open: boolean; rec?: RecurringTransaction }>({ open: false });
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -215,7 +215,7 @@ export default function Recurring() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <div className={`font-semibold ${rec.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatISK(rec.amount * (1 + rec.vatRate/100) * (rec.currency === 'ISK' ? 1 : (data.settings.exchangeRates[rec.currency as 'EUR'] ?? 1)), lang)}
+                      {fmtISK(rec.amount * (1 + rec.vatRate/100) * (rec.currency === 'ISK' ? 1 : (data.settings.exchangeRates[rec.currency as 'EUR'] ?? 1)))}
                     </div>
                     {pending > 0 && <div className="text-xs text-orange-500 font-medium">{pending} {lang === 'is' ? 'í bið' : 'pending'}</div>}
                   </div>
