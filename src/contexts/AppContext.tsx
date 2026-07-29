@@ -74,12 +74,25 @@ const EFRA_MORTGAGE_NUMBERS = new Set(['20301', '20302', '20303', '20304', '2030
 // Owner's amounts are GROSS (VAT inside). Contracting/work income is 24% VSK; RENT is
 // exempt (0%); insurance payouts (adrar_tekjur) + loans/framlag are outside VAT.
 const EFRA_WORK_VAT_SEED_ID = 'efra-work-vat-v1';
-const efraFold = (s: string) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const efraFold = (s: string) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
 const EFRA_RENT_RE = /victor|janeks|olajumoke|oleksandr|johann|leiga|husaleig/;
 const EFRA_NONWORK_RE = /vordur|trygg|framlag|vidar sig|heida|jane/;
 const isEfraWorkIncome = (t: Transaction) =>
   t.type === 'income' && t.category !== 'adrar_tekjur' && t.category !== 'framlag' && t.category !== 'lan_mottekid'
   && !EFRA_RENT_RE.test(efraFold(t.description)) && !EFRA_NONWORK_RE.test(efraFold(t.description));
+
+// Input VAT (innskattur): VATable business purchases carry reclaimable 24%. EXCLUDE the
+// non-reclaimables — fuel (vehicle not VSK-registered → 0%), the Akurgerði repair (key
+// 1210, property not VSK-registered), wages/depreciation/interest, and non-VAT flows
+// (insurance premiums, taxes, collection fees, draws/loans, other-property/municipal fees).
+const EFRA_INPUT_VAT_SEED_ID = 'efra-input-vat-v1';
+const EFRA_ACC_1210 = 'ac_1784964615252_1s9q';
+const EFRA_NO_INNSKATTUR = /\bn1\b|olis|orkan|atlantsol|skeljung|costco|eldsneyt|\bob |vordur|trygg|sysluma|rikissj|innheimt|tollur|skatt|inkasso|gjaldheimt|motus|intrum|worldremit|western|wise|hradbanki|\batm\b|vidar sig|heida|jane|deildartun|husfelag|akraneskaup/;
+const NON_VAT_EXP_CATS = new Set(['laun', 'launatengd_gjold', 'afskriftir', 'fjarmagnsgjold']);
+const isEfraReclaimable = (t: Transaction) =>
+  t.type === 'expense' && t.accountId !== EFRA_ACC_1210
+  && !NON_VAT_EXP_CATS.has(t.category) && !EFRA_NO_INNSKATTUR.test(efraFold(t.description));
 
 function applyOwnerSeeds(d: AppData): AppData {
   const kt = (d.settings.company?.kennitala ?? '').replace(/\D/g, '');
@@ -116,6 +129,12 @@ function applyOwnerSeeds(d: AppData): AppData {
     transactions = transactions.map(t => isEfraWorkIncome(t) && t.vatRate !== 24 ? { ...t, vatRate: 24 as typeof t.vatRate } : t);
     settings = { ...settings, pricesIncludeVAT: true };
     done.push(EFRA_WORK_VAT_SEED_ID); changed = true;
+  }
+  // Seed 5: reclaimable business purchases → 24% so innskattur (E) shows and nets against
+  // útskattur. Non-reclaimables (fuel, 1210, wages, insurance, taxes, transfers) stay 0%.
+  if (!done.includes(EFRA_INPUT_VAT_SEED_ID)) {
+    transactions = transactions.map(t => isEfraReclaimable(t) && t.vatRate !== 24 ? { ...t, vatRate: 24 as typeof t.vatRate } : t);
+    done.push(EFRA_INPUT_VAT_SEED_ID); changed = true;
   }
   return changed ? { ...d, balanceSheetItems: items, accounts, transactions, settings, seededMigrations: done } : d;
 }
