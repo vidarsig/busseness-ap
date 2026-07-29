@@ -94,6 +94,17 @@ const isEfraReclaimable = (t: Transaction) =>
   t.type === 'expense' && t.accountId !== EFRA_ACC_1210
   && !NON_VAT_EXP_CATS.has(t.category) && !EFRA_NO_INNSKATTUR.test(efraFold(t.description));
 
+// Bank INTEREST (positive) and tiny date-serial IMPORT JUNK (a number as the whole
+// description, e.g. "46204", tiny amount) were swept into taxable sales — they aren't
+// turnover. Move both to financial income (fjármagnstekjur), which is outside VSK.
+const EFRA_INTEREST_SEED_ID = 'efra-interest-clean-v1';
+const isEfraBankInterest = (t: Transaction) => {
+  if (t.type !== 'income') return false;
+  const d = String(t.description ?? '').trim();
+  if (/vext|innvext/.test(efraFold(d))) return true;       // real bank interest (Innvextir)
+  return /^\d+$/.test(d) && t.amount < 5000;               // date-serial junk imported as tiny income
+};
+
 function applyOwnerSeeds(d: AppData): AppData {
   const kt = (d.settings.company?.kennitala ?? '').replace(/\D/g, '');
   const name = (d.settings.company?.name ?? '').toLowerCase();
@@ -135,6 +146,12 @@ function applyOwnerSeeds(d: AppData): AppData {
   if (!done.includes(EFRA_INPUT_VAT_SEED_ID)) {
     transactions = transactions.map(t => isEfraReclaimable(t) && t.vatRate !== 24 ? { ...t, vatRate: 24 as typeof t.vatRate } : t);
     done.push(EFRA_INPUT_VAT_SEED_ID); changed = true;
+  }
+  // Seed 6: bank interest + tiny date-serial junk → financial income (out of taxable velta).
+  if (!done.includes(EFRA_INTEREST_SEED_ID)) {
+    transactions = transactions.map(t => isEfraBankInterest(t) && (t.category !== 'fjarmagns_tekjur' || t.vatRate !== 0)
+      ? { ...t, category: 'fjarmagns_tekjur', vatRate: 0 as typeof t.vatRate } : t);
+    done.push(EFRA_INTEREST_SEED_ID); changed = true;
   }
   return changed ? { ...d, balanceSheetItems: items, accounts, transactions, settings, seededMigrations: done } : d;
 }
