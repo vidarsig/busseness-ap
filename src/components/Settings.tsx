@@ -164,7 +164,7 @@ function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUs
 }
 
 export default function Settings() {
-  const { data, dispatch, t, lang, cc, syncStatus, lastSyncedAt, syncNow, testMode, enterTestMode } = useApp();
+  const { data, dispatch, t, lang, cc, syncStatus, lastSyncedAt, syncNow, restoreData, testMode, enterTestMode } = useApp();
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState<AppSettings>({ ...data.settings });
   const [restoreError, setRestoreError] = useState('');
@@ -187,11 +187,13 @@ export default function Settings() {
     if (!file) return;
     setRestoreError('');
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
         const parsed = JSON.parse(ev.target?.result as string) as AppData;
         if (!parsed.transactions || !parsed.settings) throw new Error('invalid');
-        dispatch({ type: 'LOAD', payload: parsed });
+        // restoreData persists immediately + bumps the sync timestamp so the restore
+        // actually sticks (the old bare dispatch could be lost on reload / cloud pull).
+        await restoreData(parsed);
         setRestoreOk(true);
         setTimeout(() => setRestoreOk(false), 3000);
       } catch {

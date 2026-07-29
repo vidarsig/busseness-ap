@@ -299,6 +299,9 @@ interface AppContextValue {
   syncStatus: SyncStatus;
   lastSyncedAt: string | null;
   syncNow: () => Promise<void>;
+  /** Restore a backup so it STICKS: migrate + persist to IndexedDB immediately, bump the
+   *  sync timestamp so the mount-time cloud pull can't overwrite it, and push to the cloud. */
+  restoreData: (payload: AppData) => Promise<void>;
   /** Test mode: play with data (imports etc.) without saving locally or to the cloud. */
   testMode: boolean;
   enterTestMode: () => void;
@@ -517,6 +520,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [data]);
 
+  // Restore a backup so it actually STICKS. The old path (bare dispatch LOAD) relied on
+  // debounced effects to persist — if the app reloaded first, or the mount-time cloud pull
+  // ran with a newer remote timestamp, the restore was silently lost (custom fields like
+  // vatExempt / mortgage flags never survived). Here we: migrate (applies owner seeds),
+  // load, write IndexedDB immediately, bump the sync timestamp so the next mount's pull
+  // can't clobber it, and push to the cloud so other devices get the restored copy.
+  const restoreData = useCallback(async (payload: AppData) => {
+    const migrated = migrateData(payload);
+    skipNextPush.current = true; // we push explicitly below; don't double-fire the debounce
+    dispatch({ type: 'LOAD', payload: migrated });
+    idbReady.current = true;
+    try { await idbSet(STORAGE_KEY, migrated); } catch { /* IndexedDB write failed — cloud/localStorage still hold it */ }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch { /* over the localStorage cap — IndexedDB has the full copy */ }
+    const now = new Date().toISOString();
+    localStorage.setItem(SYNC_TS_KEY, now); // mark local as newest so the mount pull won't overwrite the restore
+    setLastSyncedAt(now);
+    const { supabaseUrl, supabaseKey } = migrated.settings;
+    const syncKey = syncKeyRef.current;
+    if (supabaseUrl && supabaseKey && syncKey && !testModeRef.current) {
+      setSyncStatus('syncing');
+      const result = await pushData(supabaseUrl, supabaseKey, syncKey, migrated);
+      setSyncStatus(result.error ? 'error' : 'synced');
+    }
+  }, []);
+
   const lang = data.settings.language;
   const t = useCallback((key: TranslationKey): string => translations[lang][key] ?? translations['is'][key] ?? key, [lang]);
   const setLang = useCallback((l: Language) => dispatch({ type: 'SET_LANGUAGE', payload: l }), []);
@@ -543,7 +571,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [data.settings.defaultCurrency, data.settings.exchangeRates, lang]);
 
   return (
-    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow, testMode, enterTestMode, exitTestMode }}>
+    <AppContext.Provider value={{ data, dispatch, t, lang, setLang, cc, fmt, fmtISK, syncStatus, lastSyncedAt, syncNow, restoreData, testMode, enterTestMode, exitTestMode }}>
       {children}
     </AppContext.Provider>
   );
