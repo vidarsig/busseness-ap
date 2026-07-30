@@ -133,6 +133,19 @@ function extractQuote(content: string): { text: string; quotes: QuoteProposal[] 
   return { text: content.replace(m[0], '').trim(), quotes };
 }
 
+// A quote the customer ACCEPTED, carried to the next step (```jobboks-quote-accept```):
+// target "invoice" copies the estimate's exact lines into a new DRAFT invoice (bill
+// it); target "job" creates a scheduled job to run the work. The estimate stays in
+// Tilboð as the record. Site visit → estimate → accepted → job/invoice → paid.
+interface QuoteAccept { quote: string; target?: 'invoice' | 'job' }
+function extractQuoteAccept(content: string): { text: string; accepts: QuoteAccept[] } {
+  const m = content.match(/```jobboks-quote-accept\s*([\s\S]*?)```/);
+  if (!m) return { text: content, accepts: [] };
+  let accepts: QuoteAccept[] = [];
+  try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.accepts)) accepts = p.accepts; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), accepts };
+}
+
 // A job / site-visit the AI logs from a sentence (```jobboks-job``` block). Default
 // status is 'survey' (the site-visit-first pipeline). The owner taps "Create job".
 interface JobProposal { name: string; client?: string; address?: string; status?: string; quotedAmount?: number; description?: string; }
@@ -699,6 +712,71 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-quote\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The customer accepted an estimate → carry it forward. "invoice" copies the
+  // estimate's exact lines into a new DRAFT invoice (mirrors Invoices.convertToInvoice
+  // — the reproduced gross matches to the cent); "job" creates a scheduled job quoted
+  // at the estimate total (site-visit already happened, so status 'scheduled', not
+  // 'survey'). The estimate itself stays in Tilboð as the record, like the manual
+  // convert button. A quote number that isn't found is reported, never guessed.
+  function applyQuoteAccept(msgIndex: number, accepts: QuoteAccept[]) {
+    const s = data.settings;
+    const today = new Date().toISOString().split('T')[0];
+    const year = new Date().getFullYear();
+    let invSeq = s.invoiceLastNumber;
+    let jobCount = (data.jobs ?? []).filter(j => j.number.includes(String(year))).length;
+    const addedCust: string[] = [];
+    const results: string[] = [];
+    for (const a of accepts) {
+      const num = String(a.quote || '').trim();
+      const target = a.target === 'job' ? 'job' : 'invoice';
+      const q = (data.invoices ?? []).find(i => i.type === 'quote' && i.number === num);
+      if (!q) { results.push(lang === 'is' ? `${num || '?'} fannst ekki` : `${num || '?'} not found`); continue; }
+      if (target === 'invoice') {
+        invSeq += 1;
+        const inv: Invoice = {
+          ...q,
+          id: `inv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          type: 'invoice',
+          number: `${s.invoicePrefix}${String(invSeq).padStart(4, '0')}`,
+          date: today,
+          dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+          status: 'draft',
+        };
+        dispatch({ type: 'ADD_INVOICE', payload: inv });
+        results.push(`${num} → ${inv.number}`);
+      } else {
+        jobCount += 1;
+        const gross = q.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice * (1 + (Number(l.vatRate) || 0) / 100), 0);
+        const client = String(q.customer.name || '').trim();
+        const jobName = String(q.lines[0]?.description || '').trim() || (lang === 'is' ? `Verk fyrir ${client}` : `Work for ${client}`);
+        const descr = q.lines.map(l => l.description).filter(Boolean).join('; ');
+        const now = new Date().toISOString();
+        const job: Job = {
+          id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          number: `JOB-${year}-${String(jobCount).padStart(3, '0')}`,
+          name: jobName,
+          clientName: client,
+          status: 'scheduled',
+          currency: s.defaultCurrency,
+          quotedAmount: Math.round(gross),
+          ...(q.customer.address ? { address: q.customer.address } : {}),
+          ...(descr ? { description: descr } : {}),
+          createdAt: now, updatedAt: now,
+        };
+        dispatch({ type: 'ADD_JOB', payload: job });
+        const key = client.toLowerCase();
+        if (client && !(data.customers ?? []).some(c => c.name.trim().toLowerCase() === key) && !addedCust.includes(key)) {
+          addedCust.push(key);
+          dispatch({ type: 'ADD_CUSTOMER', payload: { id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: client, createdAt: now } });
+        }
+        results.push(`${num} → ${job.number}`);
+      }
+    }
+    if (invSeq !== s.invoiceLastNumber) dispatch({ type: 'UPDATE_SETTINGS', payload: { invoiceLastNumber: invSeq } });
+    const done = (lang === 'is' ? '✅ Samþykkt: ' : '✅ Accepted: ') + (results.join(', ') || (lang === 'is' ? 'ekkert' : 'none'));
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-quote-accept\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved AI-logged job(s) → create them. Numbers run JOB-YYYY-NNN off
   // the count of this year's jobs; status defaults to 'survey' (site visit); a new
   // client name is saved to Viðskiptavinir. Mirrors the Jobs screen's saveJob path.
@@ -1185,7 +1263,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                       const { text: afterJob, jobs: aiJobs } = extractJob(afterSettings);
                       const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterJob);
                       const { text: afterQuote, quotes: aiQuotes } = extractQuote(afterInvoice);
-                      const { text: afterBook, book } = extractBook(afterQuote);
+                      const { text: afterAccept, accepts: aiAccepts } = extractQuoteAccept(afterQuote);
+                      const { text: afterBook, book } = extractBook(afterAccept);
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
                       const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
                       const { text: afterInvStatus, updates: aiInvStatus } = extractInvoiceStatus(afterContact);
@@ -1340,6 +1419,30 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-600 text-white text-sm font-medium hover:bg-orange-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? `Búa til ${aiQuotes.length} tilboð` : `Create ${aiQuotes.length} estimate${aiQuotes.length === 1 ? '' : 's'}`}
+                              </button>
+                            </div>
+                          )}
+                          {aiAccepts.length > 0 && (
+                            <div className="mt-3 border border-green-200 rounded-lg overflow-hidden">
+                              <div className="bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
+                                {lang === 'is' ? 'Tilboð samþykkt — staðfestu' : 'Estimate accepted — confirm'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiAccepts.map((a, ai) => {
+                                  const toJob = a.target === 'job';
+                                  const q = (data.invoices ?? []).find(x => x.type === 'quote' && x.number === String(a.quote || '').trim());
+                                  return (
+                                    <div key={ai} className="px-3 py-1.5 text-xs text-gray-700 flex items-center justify-between gap-2">
+                                      <span><span className="font-medium">{a.quote}</span>{q ? <span className="text-gray-400"> · {q.customer.name}</span> : <span className="text-red-500"> · {lang === 'is' ? 'fannst ekki' : 'not found'}</span>}</span>
+                                      <span className="flex-shrink-0 text-gray-500">→ {toJob ? (lang === 'is' ? 'verk' : 'job') : (lang === 'is' ? 'reikningur' : 'invoice')}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <button onClick={() => applyQuoteAccept(i, aiAccepts)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm font-medium hover:bg-green-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? 'Staðfesta' : 'Confirm'}
                               </button>
                             </div>
                           )}

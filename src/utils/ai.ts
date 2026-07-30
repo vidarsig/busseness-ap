@@ -318,6 +318,9 @@ export function buildContext(data: AppData, lang: string, year?: number): string
 
   const openInvoices = data.invoices.filter(i => i.type === 'invoice' && (i.status === 'sent' || i.status === 'overdue'));
   const draftInvoices = data.invoices.filter(i => i.type === 'invoice' && i.status === 'draft').slice(-8);
+  // Open estimates/quotes, so the AI can map "John's deck estimate" → its number
+  // (T####) when the customer accepts it and it becomes a job or an invoice.
+  const openQuotes = data.invoices.filter(i => i.type === 'quote').slice(-10);
   // Detailed transaction rows for the chat. The per-year summaries above already
   // cover every year in aggregate; here we include the individual rows so the AI
   // can reference specific transactions. Capped so a huge multi-year history
@@ -449,6 +452,11 @@ ${openInvoices.map(i => {
   }).join('\n') || '  None'}
 DRAFT INVOICES — not yet sent (${draftInvoices.length}):
 ${draftInvoices.map(i => `  ${i.number} — ${i.customer.name} (draft)`).join('\n') || '  None'}
+OPEN QUOTES / ESTIMATES (${openQuotes.length}):
+${openQuotes.map(i => {
+    const total = i.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
+    return `  ${i.number} — ${i.customer.name}: ${fmtNum(total)} (${i.status})`;
+  }).join('\n') || '  None'}
 
 ${txLabel}:
   ref | date | type | category | amount | description | key   ("-" in the key column means the entry is NOT booked on any key yet)
@@ -602,6 +610,12 @@ VOICE / SITE-VISIT ESTIMATE (draft a QUOTE). When the contractor is PRICING a jo
 {"quotes":[{"customer":"John Miller","address":"23 Oak Street","validDays":14,"lines":[{"description":"Roof materials, 90 m²","amount":4000,"vatRate":${data.settings.standardRate}},{"description":"Labour, 3 days","amount":5000,"vatRate":${data.settings.standardRate}}]}]}
 \`\`\`
 Rules: each line's amount is the GROSS price the customer pays for THAT line (${data.settings.vatTerm || 'tax'} INCLUDED) as a plain positive number — the app extracts the tax. vatRate is a number: the standard rate (${data.settings.standardRate}) for normal work, 0 for tax-exempt. customer is the client's name; address is optional (the job site). validDays is how long the quote stands (default 14). PREFER several clear lines over one lump — an itemised estimate wins the job, and it's what the contractor just told you. Write ONE short, friendly line before the block ("Here's your estimate for 23 Oak Street — tap to create it."). Each is created as a DRAFT quote (number T####) the owner reviews and can send to the customer; nothing is committed until they tap. This is the "just talk and the estimate writes itself" moment — keep it fast and plain, and if a key number is missing (like the price of one part) ask ONE short question, don't invent it.
+
+QUOTE ACCEPTED → turn it into a JOB or an INVOICE. When the customer ACCEPTS an estimate — "John accepted the deck estimate", "T0001 is a go", "we won the Oak Street quote, bill it", "start on Mrs Green's job" — carry it to the next step. Use OPEN QUOTES / ESTIMATES above to map a description ("John's deck") to its number (T####). End your reply with ONE fenced code block tagged jobboks-quote-accept containing ONLY JSON of this shape:
+\`\`\`jobboks-quote-accept
+{"accepts":[{"quote":"T0001","target":"invoice"}]}
+\`\`\`
+Rules: quote is the estimate's number EXACTLY as shown in OPEN QUOTES / ESTIMATES. target is "invoice" (BILL it now — copies the estimate's exact lines into a new DRAFT invoice) or "job" (SCHEDULE the work — creates a job to track hours/materials/photos, quoted at the estimate total, status scheduled). If they don't say which, choose "invoice" when they talk about billing/paying and "job" when they talk about scheduling/starting the work; if it's genuinely unclear, ask ONE short question instead of guessing. Write ONE short line before the block ("Great — I'll turn John's estimate into an invoice."). The owner taps to confirm; the estimate stays in Tilboð as the record. Only emit this for a quote that actually appears in OPEN QUOTES / ESTIMATES.
 
 When the user wants to update the STATUS of an EXISTING invoice — "mark R0042 paid", "R0041 is paid now", "mark the deck invoice as sent" — end your reply with ONE fenced code block tagged jobboks-invoice-status containing ONLY JSON of this shape:
 \`\`\`jobboks-invoice-status
