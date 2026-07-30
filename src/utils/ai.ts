@@ -321,6 +321,9 @@ export function buildContext(data: AppData, lang: string, year?: number): string
   // Open estimates/quotes, so the AI can map "John's deck estimate" → its number
   // (T####) when the customer accepts it and it becomes a job or an invoice.
   const openQuotes = data.invoices.filter(i => i.type === 'quote').slice(-10);
+  // Jobs still in progress, so the AI can map "John's deck job" → its number
+  // (JOB-YYYY-NNN) when logging hours/materials to it as the work runs.
+  const openJobs = (data.jobs ?? []).filter(j => j.status !== 'cancelled' && j.status !== 'complete').slice(-12);
   // Detailed transaction rows for the chat. The per-year summaries above already
   // cover every year in aggregate; here we include the individual rows so the AI
   // can reference specific transactions. Capped so a huge multi-year history
@@ -457,6 +460,8 @@ ${openQuotes.map(i => {
     const total = i.lines.reduce((s, l) => s + l.quantity * l.unitPrice * (1 + l.vatRate / 100), 0);
     return `  ${i.number} — ${i.customer.name}: ${fmtNum(total)} (${i.status})`;
   }).join('\n') || '  None'}
+JOBS in progress (${openJobs.length}) — log hours/materials to these by number:
+${openJobs.map(j => `  ${j.number} — ${j.name}${j.clientName ? ` (${j.clientName})` : ''} [${j.status}]`).join('\n') || '  None'}
 
 ${txLabel}:
   ref | date | type | category | amount | description | key   ("-" in the key column means the entry is NOT booked on any key yet)
@@ -616,6 +621,12 @@ QUOTE ACCEPTED → turn it into a JOB or an INVOICE. When the customer ACCEPTS a
 {"accepts":[{"quote":"T0001","target":"invoice"}]}
 \`\`\`
 Rules: quote is the estimate's number EXACTLY as shown in OPEN QUOTES / ESTIMATES. target is "invoice" (BILL it now — copies the estimate's exact lines into a new DRAFT invoice) or "job" (SCHEDULE the work — creates a job to track hours/materials/photos, quoted at the estimate total, status scheduled). If they don't say which, choose "invoice" when they talk about billing/paying and "job" when they talk about scheduling/starting the work; if it's genuinely unclear, ask ONE short question instead of guessing. Write ONE short line before the block ("Great — I'll turn John's estimate into an invoice."). The owner taps to confirm; the estimate stays in Tilboð as the record. Only emit this for a quote that actually appears in OPEN QUOTES / ESTIMATES.
+
+LOG WORK TO A JOB as it runs. When the contractor reports hours worked and/or materials used on a job — "add 4 hours and 200 of lumber to John's deck job", "put 3 hours on the Oak Street job today", "used 10 sheets of plywood at 20 each on Mrs Green's" — record it against the job. Use JOBS in progress above to map the description ("John's deck") to its number (JOB-YYYY-NNN). End your reply with ONE fenced code block tagged jobboks-jobentry containing ONLY JSON of this shape:
+\`\`\`jobboks-jobentry
+{"job":"JOB-2026-001","time":[{"hours":4,"rate":8000,"who":"Me","description":"deck framing"}],"materials":[{"description":"Lumber","qty":10,"unit":"pcs","unitCost":20,"supplier":"Home Depot"}]}
+\`\`\`
+Rules: job is the job's number EXACTLY as shown in JOBS in progress. Include a "time" array, a "materials" array, or both — only what they mentioned. For time: hours (number, required), rate (the hourly COST to the business — use their known crew rate if you have it, else leave it out and it books at 0), who (worker name, default the owner), description optional. For materials: description + unitCost (required), qty (default 1), unit (default pcs), supplier optional. These are COSTS on the job (they feed job profit), NOT invoices or bookkeeping entries. Write ONE short line before the block ("I'll log 4 hours and the lumber to John's deck job."). The owner taps to confirm. Only emit this for a job that actually appears in JOBS in progress — if none matches, say so and offer to create the job first.
 
 When the user wants to update the STATUS of an EXISTING invoice — "mark R0042 paid", "R0041 is paid now", "mark the deck invoice as sent" — end your reply with ONE fenced code block tagged jobboks-invoice-status containing ONLY JSON of this shape:
 \`\`\`jobboks-invoice-status

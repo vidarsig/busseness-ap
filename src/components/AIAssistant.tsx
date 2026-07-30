@@ -6,7 +6,7 @@ import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
 import { yearOf } from '../utils/calculations';
-import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus, CategoryRule, View } from '../types';
+import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus, CategoryRule, View, TimeEntry, JobMaterial } from '../types';
 import { getAttention } from '../utils/attention';
 import { COUNTRY_CONFIGS, findCaProvince } from '../data/countries';
 
@@ -144,6 +144,24 @@ function extractQuoteAccept(content: string): { text: string; accepts: QuoteAcce
   let accepts: QuoteAccept[] = [];
   try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.accepts)) accepts = p.accepts; } catch { /* ignore malformed block */ }
   return { text: content.replace(m[0], '').trim(), accepts };
+}
+
+// Hours + materials the AI logs against a running job (```jobboks-jobentry``` block):
+// "add 4 hours and 200 of lumber to John's deck job". These are job COSTS (they feed
+// job profit in Verkbókhald), NOT bookkeeping entries or invoices. The AI proposes,
+// the owner taps "Log to job". This is the working-area-inside-a-job step.
+interface JobTimeInput { hours: number; rate?: number; who?: string; description?: string }
+interface JobMatInput { description: string; qty?: number; unit?: string; unitCost: number; supplier?: string }
+interface JobEntryProposal { job: string; time?: JobTimeInput[]; materials?: JobMatInput[] }
+function extractJobEntry(content: string): { text: string; entry: JobEntryProposal | null } {
+  const m = content.match(/```jobboks-jobentry\s*([\s\S]*?)```/);
+  if (!m) return { text: content, entry: null };
+  let entry: JobEntryProposal | null = null;
+  try {
+    const p = JSON.parse(m[1].trim());
+    if (p && typeof p.job === 'string' && p.job.trim()) entry = p;
+  } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), entry };
 }
 
 // A job / site-visit the AI logs from a sentence (```jobboks-job``` block). Default
@@ -777,6 +795,61 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-quote-accept\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner approved AI-logged work → add time entries and/or materials to a job.
+  // These are COSTS on the job (they flow into job profit in Verkbókhald), not
+  // bookkeeping entries. Job matched by number first, then a forgiving name/client
+  // match; an unmatched job is reported, never guessed onto the wrong one.
+  function applyJobEntry(msgIndex: number, entry: JobEntryProposal) {
+    const ref = String(entry.job || '').trim();
+    const refLc = ref.toLowerCase();
+    const jobs = data.jobs ?? [];
+    const job = jobs.find(j => j.number.toLowerCase() === refLc)
+      ?? jobs.find(j => `${j.name} ${j.clientName ?? ''}`.toLowerCase().includes(refLc));
+    let done: string;
+    if (!job) {
+      done = lang === 'is' ? `⚠️ Verk „${ref}" fannst ekki — ekkert skráð.` : `⚠️ Job "${ref}" not found — nothing logged.`;
+    } else {
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toISOString();
+      let nHours = 0, nMats = 0;
+      for (const t of (entry.time ?? [])) {
+        const hours = Number(t.hours) || 0;
+        if (hours <= 0) continue;
+        const te: TimeEntry = {
+          id: `te_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          jobId: job.id, date: today,
+          employeeName: String(t.who || '').trim() || (lang === 'is' ? 'Ég' : 'Me'),
+          hours, hourlyRate: Number(t.rate) || 0,
+          ...(t.description ? { description: String(t.description) } : {}),
+          createdAt: now,
+        };
+        dispatch({ type: 'ADD_TIME_ENTRY', payload: te });
+        nHours += 1;
+      }
+      for (const mat of (entry.materials ?? [])) {
+        const unitCost = Number(mat.unitCost) || 0;
+        const desc = String(mat.description || '').trim();
+        if (!desc || unitCost <= 0) continue;
+        const jm: JobMaterial = {
+          id: `jm_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          jobId: job.id, date: today,
+          description: desc,
+          qty: Number(mat.qty) > 0 ? Number(mat.qty) : 1,
+          unit: String(mat.unit || '').trim() || (lang === 'is' ? 'stk' : 'pcs'),
+          unitCost,
+          ...(mat.supplier ? { supplierName: String(mat.supplier) } : {}),
+          createdAt: now,
+        };
+        dispatch({ type: 'ADD_JOB_MATERIAL', payload: jm });
+        nMats += 1;
+      }
+      done = lang === 'is'
+        ? `✅ Skráð á ${job.number}: ${nHours} tímafærsla(r), ${nMats} efnislína(r)`
+        : `✅ Logged to ${job.number}: ${nHours} time entr${nHours === 1 ? 'y' : 'ies'}, ${nMats} material line${nMats === 1 ? '' : 's'}`;
+    }
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-jobentry\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved AI-logged job(s) → create them. Numbers run JOB-YYYY-NNN off
   // the count of this year's jobs; status defaults to 'survey' (site visit); a new
   // client name is saved to Viðskiptavinir. Mirrors the Jobs screen's saveJob path.
@@ -1264,7 +1337,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                       const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterJob);
                       const { text: afterQuote, quotes: aiQuotes } = extractQuote(afterInvoice);
                       const { text: afterAccept, accepts: aiAccepts } = extractQuoteAccept(afterQuote);
-                      const { text: afterBook, book } = extractBook(afterAccept);
+                      const { text: afterJobEntry, entry: aiJobEntry } = extractJobEntry(afterAccept);
+                      const { text: afterBook, book } = extractBook(afterJobEntry);
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
                       const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
                       const { text: afterInvStatus, updates: aiInvStatus } = extractInvoiceStatus(afterContact);
@@ -1446,6 +1520,41 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                               </button>
                             </div>
                           )}
+                          {aiJobEntry && (() => {
+                            const j = (data.jobs ?? []).find(x => x.number.toLowerCase() === String(aiJobEntry.job || '').trim().toLowerCase())
+                              ?? (data.jobs ?? []).find(x => `${x.name} ${x.clientName ?? ''}`.toLowerCase().includes(String(aiJobEntry.job || '').trim().toLowerCase()));
+                            const times = aiJobEntry.time ?? [];
+                            const mats = aiJobEntry.materials ?? [];
+                            const nf = (n: number) => n.toLocaleString(lang === 'is' ? 'is-IS' : 'en-US');
+                            return (
+                              <div className="mt-3 border border-sky-200 rounded-lg overflow-hidden">
+                                <div className="bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">
+                                  {lang === 'is' ? 'Skrá á verk' : 'Log to job'} · {j ? `${j.number} — ${j.name}` : <span className="text-red-500">{lang === 'is' ? `„${aiJobEntry.job}" fannst ekki` : `"${aiJobEntry.job}" not found`}</span>}
+                                </div>
+                                {(times.length > 0 || mats.length > 0) && (
+                                  <div className="divide-y divide-gray-100">
+                                    {times.map((t, ti) => (
+                                      <div key={`t${ti}`} className="px-3 py-1.5 text-xs text-gray-700 flex justify-between gap-3">
+                                        <span>⏱ {Number(t.hours) || 0} {lang === 'is' ? 'klst' : 'hrs'}{t.who ? ` · ${t.who}` : ''}{t.description ? ` · ${t.description}` : ''}</span>
+                                        {t.rate ? <span className="font-mono flex-shrink-0 text-gray-500">@{nf(Number(t.rate))}</span> : null}
+                                      </div>
+                                    ))}
+                                    {mats.map((mt, mi) => (
+                                      <div key={`m${mi}`} className="px-3 py-1.5 text-xs text-gray-700 flex justify-between gap-3">
+                                        <span>📦 {mt.description}{Number(mt.qty) > 1 ? ` ×${Number(mt.qty)}` : ''}{mt.supplier ? ` · ${mt.supplier}` : ''}</span>
+                                        <span className="font-mono flex-shrink-0 text-gray-500">{nf(Number(mt.unitCost) || 0)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <button onClick={() => applyJobEntry(i, aiJobEntry)} disabled={!j}
+                                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50">
+                                  <CheckCircle className="w-4 h-4" />
+                                  {lang === 'is' ? 'Skrá á verkið' : 'Log to job'}
+                                </button>
+                              </div>
+                            );
+                          })()}
                           {book.length > 0 && (
                             <div className="mt-3 border border-blue-200 rounded-lg overflow-hidden">
                               <div className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
