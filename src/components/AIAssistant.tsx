@@ -118,6 +118,21 @@ function extractInvoice(content: string): { text: string; invoices: InvoicePropo
   return { text: content.replace(m[0], '').trim(), invoices };
 }
 
+// An ESTIMATE the AI drafts from a spoken/typed site-visit description
+// (```jobboks-quote``` block): the "just talk and the estimate writes itself"
+// moment. Each thing the contractor mentions (materials, labour, …) becomes its
+// own line; the app extracts the tax from each GROSS line amount. Created as a
+// DRAFT quote (number T####) on one tap — the AI drafts, the owner reviews/sends.
+interface QuoteLine { description?: string; amount: number; vatRate?: number }
+interface QuoteProposal { customer: string; address?: string; validDays?: number; description?: string; amount?: number; vatRate?: number; lines?: QuoteLine[] }
+function extractQuote(content: string): { text: string; quotes: QuoteProposal[] } {
+  const m = content.match(/```jobboks-quote\s*([\s\S]*?)```/);
+  if (!m) return { text: content, quotes: [] };
+  let quotes: QuoteProposal[] = [];
+  try { const p = JSON.parse(m[1].trim()); if (Array.isArray(p?.quotes)) quotes = p.quotes; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), quotes };
+}
+
 // A job / site-visit the AI logs from a sentence (```jobboks-job``` block). Default
 // status is 'survey' (the site-visit-first pipeline). The owner taps "Create job".
 interface JobProposal { name: string; client?: string; address?: string; status?: string; quotedAmount?: number; description?: string; }
@@ -627,6 +642,63 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice(?!-)\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner approved an AI-drafted ESTIMATE → create it as a DRAFT quote (T####),
+  // mirroring the Invoices screen's quote path: separate quoteLastNumber sequence,
+  // 14-day (or stated) validity, net extracted per line from the GROSS the customer
+  // pays. A new client name is saved to Viðskiptavinir so the quote can be reused.
+  function applyQuote(msgIndex: number, quotes: QuoteProposal[]) {
+    const s = data.settings;
+    const today = new Date().toISOString().split('T')[0];
+    let seq = s.quoteLastNumber;
+    const added: string[] = [];
+    let made = 0;
+    for (const q of quotes) {
+      const name = String(q.customer || '').trim();
+      // Lines: use the itemised list if given, else fall back to a single lump line.
+      const rawLines: QuoteLine[] = (Array.isArray(q.lines) && q.lines.length)
+        ? q.lines
+        : [{ description: q.description, amount: Number(q.amount) || 0, vatRate: q.vatRate }];
+      const lines = rawLines
+        .map(l => {
+          const gross = Number(l.amount) || 0;
+          const rate = Number(l.vatRate) || 0;
+          return { gross, rate, description: String(l.description || (lang === 'is' ? 'Verk og þjónusta' : 'Work and services')) };
+        })
+        .filter(l => l.gross > 0);
+      if (!name || !lines.length) continue;
+      seq += 1;
+      const validDays = Number(q.validDays) > 0 ? Number(q.validDays) : 14;
+      const due = new Date(Date.now() + validDays * 86400000).toISOString().split('T')[0];
+      const existing = (data.customers ?? []).find(c => c.name.trim().toLowerCase() === name.toLowerCase());
+      const inv: Invoice = {
+        id: `qte_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        type: 'quote',
+        number: `T${String(seq).padStart(4, '0')}`,
+        date: today, dueDate: due,
+        customer: existing
+          ? { name: existing.name, kennitala: existing.kennitala, address: existing.address, postalCode: existing.postalCode, city: existing.city, email: existing.email, phone: existing.phone }
+          : { name, address: q.address },
+        lines: lines.map(l => ({
+          id: `ln_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          description: l.description, quantity: 1,
+          unitPrice: l.rate ? l.gross / (1 + l.rate / 100) : l.gross,
+          vatRate: l.rate,
+        })),
+        notes: '', status: 'draft', currency: s.defaultCurrency, eurToIskRate: s.exchangeRates.EUR,
+      };
+      dispatch({ type: 'ADD_INVOICE', payload: inv });
+      made += 1;
+      const key = name.toLowerCase();
+      if (!existing && !added.includes(key)) {
+        added.push(key);
+        dispatch({ type: 'ADD_CUSTOMER', payload: { id: `cust_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name, address: q.address, createdAt: new Date().toISOString() } });
+      }
+    }
+    if (made) dispatch({ type: 'UPDATE_SETTINGS', payload: { quoteLastNumber: seq } });
+    const done = lang === 'is' ? `✅ ${made} tilboð búið til sem drög` : `✅ ${made} estimate${made === 1 ? '' : 's'} created as draft${made === 1 ? '' : 's'}`;
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-quote\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved AI-logged job(s) → create them. Numbers run JOB-YYYY-NNN off
   // the count of this year's jobs; status defaults to 'survey' (site visit); a new
   // client name is saved to Viðskiptavinir. Mirrors the Jobs screen's saveJob path.
@@ -1112,7 +1184,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                       const { text: afterSettings, settings: settingsSet } = extractSettings(afterSetup);
                       const { text: afterJob, jobs: aiJobs } = extractJob(afterSettings);
                       const { text: afterInvoice, invoices: aiInvoices } = extractInvoice(afterJob);
-                      const { text: afterBook, book } = extractBook(afterInvoice);
+                      const { text: afterQuote, quotes: aiQuotes } = extractQuote(afterInvoice);
+                      const { text: afterBook, book } = extractBook(afterQuote);
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
                       const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
                       const { text: afterInvStatus, updates: aiInvStatus } = extractInvoiceStatus(afterContact);
@@ -1229,6 +1302,44 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? `Búa til ${aiInvoices.length} reikning(a)` : `Create ${aiInvoices.length} invoice${aiInvoices.length === 1 ? '' : 's'}`}
+                              </button>
+                            </div>
+                          )}
+                          {aiQuotes.length > 0 && (
+                            <div className="mt-3 border border-orange-200 rounded-lg overflow-hidden">
+                              <div className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700">
+                                {lang === 'is' ? 'Tilboð — samþykktu til að búa til drög' : 'Estimate — approve to create draft'}
+                              </div>
+                              <div className="divide-y divide-gray-100">
+                                {aiQuotes.map((q, qi) => {
+                                  const qlines = (Array.isArray(q.lines) && q.lines.length)
+                                    ? q.lines
+                                    : [{ description: q.description, amount: Number(q.amount) || 0, vatRate: q.vatRate }];
+                                  const total = qlines.reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
+                                  const nf = (n: number) => n.toLocaleString(lang === 'is' ? 'is-IS' : 'en-US');
+                                  return (
+                                    <div key={qi} className="px-3 py-2 text-xs">
+                                      <div className="font-medium text-gray-800">{q.customer}{q.address ? <span className="text-gray-400"> · {q.address}</span> : null}</div>
+                                      <div className="mt-1 space-y-0.5">
+                                        {qlines.map((l, li) => (
+                                          <div key={li} className="flex justify-between gap-3 text-gray-600">
+                                            <span>{l.description || (lang === 'is' ? 'Verk og þjónusta' : 'Work and services')}{l.vatRate ? <span className="text-gray-400"> ({l.vatRate}%)</span> : null}</span>
+                                            <span className="font-mono flex-shrink-0">{nf(Number(l.amount) || 0)}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                      <div className="mt-1 flex justify-between gap-3 font-semibold text-gray-800 border-t border-gray-100 pt-1">
+                                        <span>{lang === 'is' ? 'Samtals' : 'Total'}</span>
+                                        <span className="font-mono">{nf(total)}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <button onClick={() => applyQuote(i, aiQuotes)}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-600 text-white text-sm font-medium hover:bg-orange-700">
+                                <CheckCircle className="w-4 h-4" />
+                                {lang === 'is' ? `Búa til ${aiQuotes.length} tilboð` : `Create ${aiQuotes.length} estimate${aiQuotes.length === 1 ? '' : 's'}`}
                               </button>
                             </div>
                           )}
