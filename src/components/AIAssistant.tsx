@@ -6,7 +6,8 @@ import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
 import { yearOf } from '../utils/calculations';
-import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus, CategoryRule } from '../types';
+import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus, CategoryRule, View } from '../types';
+import { getAttention } from '../utils/attention';
 import { COUNTRY_CONFIGS, findCaProvince } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
@@ -326,8 +327,9 @@ function renderMarkdown(text: string): string {
     .replace(/\n/g, '<br/>');
 }
 
-export default function AIAssistant() {
-  const { data, t, lang, dispatch } = useApp();
+export default function AIAssistant({ setView }: { setView?: (v: View) => void }) {
+  const { data, t, lang, dispatch, fmtISK } = useApp();
+  const attention = getAttention(data);
   const [tab, setTab] = useState<'chat' | 'insights' | 'memory'>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>(() => data.aiChat ?? []);
   // A brand-new user with an empty app — greet them like a concierge (slice 2)
@@ -1480,6 +1482,35 @@ export default function AIAssistant() {
       {/* Insights Tab */}
       {tab === 'insights' && (
         <div className="flex-1 overflow-y-auto">
+          {/* Proactive "needs your attention" — deterministic, no server; each item jumps to the fix */}
+          {attention.length > 0 && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <h3 className="text-sm font-bold text-amber-900 mb-2 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600" />{lang === 'is' ? 'Þarfnast athygli' : 'Needs your attention'}
+              </h3>
+              <div className="space-y-2">
+                {attention.map(a => {
+                  const msg = a.id === 'overdue'
+                    ? (lang === 'is' ? `${a.count} reikningur gjaldfallinn${a.amountISK ? ` (${fmtISK(a.amountISK)})` : ''} — rukkaðu þá` : `${a.count} invoice${a.count === 1 ? '' : 's'} overdue${a.amountISK ? ` (${fmtISK(a.amountISK)})` : ''} — chase payment`)
+                    : a.id === 'drafts'
+                    ? (lang === 'is' ? `${a.count} reikningur enn í drögum — sendu þá` : `${a.count} invoice${a.count === 1 ? '' : 's'} still in draft — send them`)
+                    : (lang === 'is' ? 'Stilling lítur út fyrir að vera röng' : 'A setting looks wrong — check it');
+                  const label = a.id === 'settings' ? (lang === 'is' ? 'Opna stillingar' : 'Open Settings') : (lang === 'is' ? 'Opna reikninga' : 'Open invoices');
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 justify-between">
+                      <span className="text-xs text-amber-800 flex-1">{msg}</span>
+                      {setView && (
+                        <button type="button" onClick={() => setView(a.view)}
+                          className="flex-shrink-0 px-2.5 py-1 rounded-md bg-amber-600 text-white text-xs font-medium hover:bg-amber-700">
+                          {label}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-4">
             <button
               onClick={doGenerateInsights}

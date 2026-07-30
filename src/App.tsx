@@ -162,7 +162,7 @@ function AppInner() {
       {safeView === 'reports'      && <Reports drill={(category, year) => { setTxDrill({ category, year }); setView('transactions'); }} />}
       {safeView === 'annual'       && <AnnualAccounts />}
       {safeView === 'settings'     && <Settings />}
-      {safeView === 'ai'           && <AIAssistant />}
+      {safeView === 'ai'           && <AIAssistant setView={setView} />}
       {safeView === 'stock'        && <Stock />}
       {safeView === 'jobs'         && <Jobs sessionUser={sessionUser} />}
       {safeView === 'users'        && <Users sessionUser={sessionUser} />}
