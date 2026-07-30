@@ -93,3 +93,6 @@ html.beta-dark input, html.beta-dark select, html.beta-dark textarea {
   background-color:#12141b !important; color:#e7e9ee !important; border-color:#2a2f3c !important;
 }
 html.beta-dark input::placeholder, html.beta-dark textarea::placeholder { color:#6b7280 !important; }
+
+/* Nav: the active item glows purple (the single accent) */
+html.beta-dark nav .text-blue-600 { color:#AFA9EC !important; }

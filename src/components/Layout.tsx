@@ -308,6 +308,28 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
         </div>
       </main>
 
+      {/* Mike — the AI carpenter, one tap to talk. Beta look only, phone only (sits
+          above the bottom nav, left corner). Placeholder art (HardHat) until the real
+          carpenter figurine is dropped in. Hidden if the user can't reach the AI. */}
+      {data.settings.betaLook && canAccessView('ai', perms ?? null) && (
+        <button
+          onClick={() => setView('ai')}
+          aria-label={lang === 'is' ? 'Talaðu við Mike' : 'Talk to Mike'}
+          className="md:hidden fixed left-4 bottom-24 z-40 no-print flex items-center gap-2 active:scale-95 transition-transform"
+        >
+          <span className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
+            style={{ background: '#211d3a', border: '2px solid #7F77DD', color: '#CECBF6' }}>
+            <HardHat className="w-7 h-7" />
+          </span>
+          {view !== 'ai' && (
+            <span className="text-xs font-medium px-2.5 py-1.5 rounded-xl"
+              style={{ background: '#7F77DD', color: '#1a1633', borderBottomLeftRadius: '3px' }}>
+              {lang === 'is' ? 'Talaðu við mig' : 'Talk to me'}
+            </span>
+          )}
+        </button>
+      )}
+
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 flex no-print safe-area-pb">
         {bottomNavItems.filter(item => canAccessView(item.id, perms ?? null)).map(({ id, icon: Icon }) => (
