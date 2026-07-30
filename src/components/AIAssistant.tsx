@@ -76,6 +76,18 @@ function extractInvoiceStatus(content: string): { text: string; updates: Invoice
   return { text: content.replace(m[0], '').trim(), updates };
 }
 
+// A request to connect ONLINE PAYMENTS (```jobboks-stripe``` block): the owner taps
+// "Connect Stripe" and the app sends them to Stripe's OWN secure page to enter their
+// bank/business details. The AI never sees or handles a banking detail — it only
+// opens the door. No data payload: the block just signals the intent to connect.
+function extractStripe(content: string): { text: string; connect: boolean } {
+  const m = content.match(/```jobboks-stripe\s*([\s\S]*?)```/);
+  if (!m) return { text: content, connect: false };
+  let connect = false;
+  try { connect = JSON.parse(m[1].trim())?.connect === true; } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), connect };
+}
+
 // The business setup the AI proposes for a new user (```jobboks-setup``` block):
 // country + (US) state/rate + company name. The owner taps "Set up" to apply — the
 // AI directs, the owner confirms. This is the "it set itself up for me" moment.
@@ -365,6 +377,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
   // Handles spreadsheets/CSV/text, photos of documents, and PDFs.
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attaching, setAttaching] = useState(false);
+  const [stripeBusy, setStripeBusy] = useState(false);
+  const [stripeErr, setStripeErr] = useState<string | null>(null);
 
   async function pickFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -786,6 +800,42 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-invoice-status\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The owner tapped "Connect Stripe" in chat → create (or reuse) their Stripe
+  // Connect account and send them to Stripe's OWN hosted page to enter their bank
+  // and business details. We store only the account id (acct_…, NOT a secret);
+  // nothing sensitive ever touches the app or the chat. Mirrors Settings.connectStripe
+  // so the two entry points behave identically. A clean 503 here means the platform
+  // owner hasn't switched payments on yet — we show that in plain words, not an error.
+  async function connectStripeFromChat() {
+    setStripeBusy(true); setStripeErr(null);
+    try {
+      const res = await fetch('/api/stripe-connect', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          country: data.settings.country || 'US',
+          email: data.settings.company.email || undefined,
+          accountId: data.settings.stripeConnectAccountId || undefined,
+          origin: window.location.origin,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.url) {
+        setStripeErr(d?.error?.message || (lang === 'is' ? 'Ekki tókst að tengja Stripe.' : 'Could not start Stripe connection.'));
+        return;
+      }
+      // Remember the account id before we leave, so the return trip can check status.
+      if (d.accountId && d.accountId !== data.settings.stripeConnectAccountId) {
+        dispatch({ type: 'UPDATE_SETTINGS', payload: { stripeConnectAccountId: d.accountId } });
+      }
+      window.location.href = d.url; // hand off to Stripe's secure page
+    } catch {
+      setStripeErr(lang === 'is' ? 'Villa við að tengja Stripe.' : 'Error connecting to Stripe.');
+    } finally {
+      setStripeBusy(false);
+    }
+  }
+
   // Point a proposed fix back at the real transaction. Returns null when the ref
   // no longer lines up — the books can change mid-chat (a Book, an import, an
   // edit in the Transactions screen), which shifts every row's position. Checking
@@ -1066,7 +1116,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
                       const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
                       const { text: afterInvStatus, updates: aiInvStatus } = extractInvoiceStatus(afterContact);
-                      const { text, fixes, matches, badBlock } = extractFix(afterInvStatus);
+                      const { text: afterStripe, connect: stripeConnect } = extractStripe(afterInvStatus);
+                      const { text, fixes, matches, badBlock } = extractFix(afterStripe);
                       return (
                         <>
                           <div dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />
@@ -1259,6 +1310,24 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
                                 <CheckCircle className="w-4 h-4" />
                                 {lang === 'is' ? 'Uppfæra' : 'Apply'}
+                              </button>
+                            </div>
+                          )}
+                          {stripeConnect && (
+                            <div className="mt-3 border border-indigo-200 rounded-lg overflow-hidden">
+                              <div className="bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700">
+                                {lang === 'is' ? 'Fá greitt á netinu' : 'Get paid online'}
+                              </div>
+                              <div className="px-3 py-2 text-xs text-gray-600">
+                                {lang === 'is'
+                                  ? 'Þú klárar á öruggri síðu Stripe — þú slærð inn banka- og fyrirtækjaupplýsingar þar, aldrei hér.'
+                                  : "You'll finish on Stripe's own secure page — you enter your bank and business details there, never here."}
+                              </div>
+                              {stripeErr && <div className="px-3 pb-2 text-xs text-red-600">{stripeErr}</div>}
+                              <button onClick={connectStripeFromChat} disabled={stripeBusy}
+                                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60">
+                                {stripeBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                {lang === 'is' ? 'Tengja Stripe' : 'Connect Stripe'}
                               </button>
                             </div>
                           )}
