@@ -49,6 +49,12 @@ function AppInner() {
   const [txDrill, setTxDrill] = useState<{ category?: string; year?: number } | null>(null);
   const clearTxDrill = useCallback(() => setTxDrill(null), []);
   const { data, dispatch } = useApp();
+  // Beta dark-premium look (opt-in via Settings → Beta útlit). Adds `beta-dark` on
+  // <html> so the theme-override layer in index.css restyles the whole app; off =
+  // the current stable light app, untouched. Fully reversible with the toggle.
+  useEffect(() => {
+    document.documentElement.classList.toggle('beta-dark', !!data.settings.betaLook);
+  }, [data.settings.betaLook]);
   // Land a brand-new user (empty app, hasn't chatted yet) on the AI concierge for
   // first open (slice 2) instead of the empty dashboard — the "easy and welcoming"
   // first minute. Lazy init runs once; once they chat or add anything, it's off.

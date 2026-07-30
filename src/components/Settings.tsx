@@ -592,6 +592,23 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Appearance — opt-in beta dark-premium look (applies instantly, reversible) */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Útlit' : 'Appearance'}</h2>
+            <p className="text-xs text-gray-500 mb-3">{lang === 'is' ? 'Prófaðu nýja dökka „premium“ útlitið. Þú getur slökkt hvenær sem er — venjulega appið breytist ekki.' : 'Try the new dark “premium” look. Switch it off anytime — your normal app is unchanged.'}</p>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" className="mt-0.5 w-4 h-4 rounded flex-shrink-0"
+                checked={data.settings.betaLook ?? false}
+                onChange={e => dispatch({ type: 'UPDATE_SETTINGS', payload: { betaLook: e.target.checked } })} />
+              <span className="text-sm text-gray-700">
+                {lang === 'is' ? 'Beta útlit — dökkt og glæsilegt' : 'Beta look — dark & premium'}
+                <span className="block text-xs text-gray-400 mt-0.5">
+                  {lang === 'is' ? 'Nýtt útlit í vinnslu — sumir skjáir eru enn í fínpússun.' : 'New look in progress — some screens are still being polished.'}
+                </span>
+              </span>
+            </label>
+          </div>
+
           {/* Payments (get paid online via Stripe Connect) */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-bold text-gray-800 mb-1">{lang === 'is' ? 'Fáðu greitt á netinu' : 'Get paid online'}</h2>

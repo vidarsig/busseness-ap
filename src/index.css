@@ -38,3 +38,58 @@
 @layer utilities {
   .scrollbar-thin { scrollbar-width: thin; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BETA DARK-PREMIUM LOOK  (opt-in: Settings → "Beta útlit" sets settings.betaLook,
+   App.tsx toggles `beta-dark` on <html>). A theme-override layer: it remaps the
+   app's light Tailwind surfaces / text / borders to charcoal + purple WITHOUT
+   editing every component, so the current stable app is 100% untouched when the
+   toggle is off. Hero screens (Stjórnstöð, nav) get hand-polished on top of this.
+   Print is left light (invoices/PDFs must stay on white paper).
+   ───────────────────────────────────────────────────────────────────────── */
+html.beta-dark { color-scheme: dark; background:#0f1116; }
+html.beta-dark body { background:#0f1116; color:#e7e9ee; }
+
+/* Surfaces (skip print containers so invoices stay on white paper) */
+html.beta-dark .bg-white:not(.print-container):not(.print-only),
+html.beta-dark .bg-slate-50 { background-color:#171a22 !important; }
+html.beta-dark .bg-gray-50 { background-color:#12141b !important; }
+html.beta-dark .bg-gray-100, html.beta-dark .bg-slate-100 { background-color:#1a1d26 !important; }
+html.beta-dark .bg-gray-200, html.beta-dark .bg-slate-200 { background-color:#232733 !important; }
+
+/* Text */
+html.beta-dark .text-black,
+html.beta-dark .text-gray-900, html.beta-dark .text-slate-900 { color:#f2f3f5 !important; }
+html.beta-dark .text-gray-800, html.beta-dark .text-gray-700,
+html.beta-dark .text-slate-800, html.beta-dark .text-slate-700 { color:#dfe2e8 !important; }
+html.beta-dark .text-gray-600, html.beta-dark .text-gray-500,
+html.beta-dark .text-slate-600, html.beta-dark .text-slate-500 { color:#9aa0ab !important; }
+html.beta-dark .text-gray-400, html.beta-dark .text-slate-400 { color:#6b7280 !important; }
+
+/* Borders + dividers */
+html.beta-dark .border-gray-100, html.beta-dark .border-gray-200, html.beta-dark .border-gray-300,
+html.beta-dark .border-slate-100, html.beta-dark .border-slate-200, html.beta-dark .border-slate-300,
+html.beta-dark .divide-gray-100 > * + *, html.beta-dark .divide-gray-200 > * + * { border-color:#262a36 !important; }
+
+/* Light accent tints → dark tints so the coloured badges/banners stay readable */
+html.beta-dark .bg-blue-50   { background-color:#18233a !important; }
+html.beta-dark .bg-blue-100  { background-color:#1d2b47 !important; }
+html.beta-dark .bg-purple-50, html.beta-dark .bg-indigo-50 { background-color:#211d3a !important; }
+html.beta-dark .bg-green-50, html.beta-dark .bg-emerald-50, html.beta-dark .bg-teal-50 { background-color:#12281f !important; }
+html.beta-dark .bg-amber-50, html.beta-dark .bg-yellow-50, html.beta-dark .bg-orange-50 { background-color:#2a2410 !important; }
+html.beta-dark .bg-red-50    { background-color:#2a1616 !important; }
+html.beta-dark .text-blue-700, html.beta-dark .text-blue-800 { color:#93b4f0 !important; }
+html.beta-dark .text-green-700, html.beta-dark .text-green-800, html.beta-dark .text-emerald-700 { color:#5DCAA5 !important; }
+html.beta-dark .text-amber-700, html.beta-dark .text-amber-800, html.beta-dark .text-yellow-800 { color:#e0b451 !important; }
+html.beta-dark .text-red-700, html.beta-dark .text-red-800 { color:#ec8a86 !important; }
+html.beta-dark .text-purple-700, html.beta-dark .text-indigo-700 { color:#AFA9EC !important; }
+
+/* Premium polish: softer card corners + a faint hairline on white cards */
+html.beta-dark .rounded-lg { border-radius:14px; }
+html.beta-dark .bg-white:not(.print-container):not(.print-only) { border:1px solid #23272f; }
+
+/* Inputs read as dark fields */
+html.beta-dark input, html.beta-dark select, html.beta-dark textarea {
+  background-color:#12141b !important; color:#e7e9ee !important; border-color:#2a2f3c !important;
+}
+html.beta-dark input::placeholder, html.beta-dark textarea::placeholder { color:#6b7280 !important; }
