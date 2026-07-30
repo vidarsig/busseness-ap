@@ -98,7 +98,9 @@
       "Bash(gh pr create --base main --head claude/vat-rollout-a0c93f --title 'VAT rollout: invoice-driven VAT on income \\(R9-6\\) + finish inclusive mode' --body ' *)",
       "Bash(cp \"C:/Users/vidar/Desktop/cleanup.txt\" \"C:/Users/vidar/OneDrive/Desktop/cleanup.txt\")",
       "Read(//c/Users/vidar/OneDrive/Desktop/**)",
-      "Bash(ls -1 \"C:/Users/vidar/Claude bussines app/.claude/worktrees/\" 2>&1)"
+      "Bash(ls -1 \"C:/Users/vidar/Claude bussines app/.claude/worktrees/\" 2>&1)",
+      "Bash(curl -s https://curious-hummingbird-3f661f.netlify.app/)",
+      "Bash(curl -sI https://curious-hummingbird-3f661f.netlify.app/sw.js)"
     ]
   }
 }
