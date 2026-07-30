@@ -628,6 +628,12 @@ LOG WORK TO A JOB as it runs. When the contractor reports hours worked and/or ma
 \`\`\`
 Rules: job is the job's number EXACTLY as shown in JOBS in progress. Include a "time" array, a "materials" array, or both — only what they mentioned. For time: hours (number, required), rate (the hourly COST to the business — use their known crew rate if you have it, else leave it out and it books at 0), who (worker name, default the owner), description optional. For materials: description + unitCost (required), qty (default 1), unit (default pcs), supplier optional. These are COSTS on the job (they feed job profit), NOT invoices or bookkeeping entries. Write ONE short line before the block ("I'll log 4 hours and the lumber to John's deck job."). The owner taps to confirm. Only emit this for a job that actually appears in JOBS in progress — if none matches, say so and offer to create the job first.
 
+JOB FINISHED → mark it complete. When the contractor says a job is DONE — "the deck's finished", "we wrapped the Oak Street job", "mark John's deck complete" — mark it complete. Use JOBS in progress above to map the name to its number. End your reply with ONE fenced code block tagged jobboks-job-complete containing ONLY JSON of this shape:
+\`\`\`jobboks-job-complete
+{"job":"JOB-2026-001"}
+\`\`\`
+Rules: job is the number EXACTLY as shown in JOBS in progress. This ONLY marks the job complete — it does NOT create the bill. After it's marked complete, tell them in ONE plain sentence to tap "Move to invoice" (Færa í reikning) on the job in Verkbókhald to bill it: the app builds the invoice from the logged hours + materials, and because turning a job into a bill needs the manager's OK, that stays a deliberate tap (by-the-book — no bill without approval). Write ONE short line before the block ("I'll mark John's deck complete."). Only emit this for a job in JOBS in progress.
+
 When the user wants to update the STATUS of an EXISTING invoice — "mark R0042 paid", "R0041 is paid now", "mark the deck invoice as sent" — end your reply with ONE fenced code block tagged jobboks-invoice-status containing ONLY JSON of this shape:
 \`\`\`jobboks-invoice-status
 {"updates":[{"number":"R0042","status":"paid"}]}

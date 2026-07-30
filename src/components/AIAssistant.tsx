@@ -164,6 +164,18 @@ function extractJobEntry(content: string): { text: string; entry: JobEntryPropos
   return { text: content.replace(m[0], '').trim(), entry };
 }
 
+// A job the contractor says is FINISHED (```jobboks-job-complete``` block): the AI
+// marks it complete, then nudges toward the existing one-tap "Move to invoice" — it
+// deliberately does NOT create the bill here, because job→invoice needs an approver
+// (by-the-book) and its billing logic lives in one audited place (Jobs.convertToInvoice).
+function extractJobComplete(content: string): { text: string; jobRef: string | null } {
+  const m = content.match(/```jobboks-job-complete\s*([\s\S]*?)```/);
+  if (!m) return { text: content, jobRef: null };
+  let jobRef: string | null = null;
+  try { const p = JSON.parse(m[1].trim()); if (typeof p?.job === 'string' && p.job.trim()) jobRef = p.job.trim(); } catch { /* ignore malformed block */ }
+  return { text: content.replace(m[0], '').trim(), jobRef };
+}
+
 // A job / site-visit the AI logs from a sentence (```jobboks-job``` block). Default
 // status is 'survey' (the site-visit-first pipeline). The owner taps "Create job".
 interface JobProposal { name: string; client?: string; address?: string; status?: string; quotedAmount?: number; description?: string; }
@@ -850,6 +862,32 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-jobentry\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // The contractor said a job is finished → mark it complete. Deliberately does NOT
+  // invoice: job→invoice stays the approver's one-tap "Move to invoice" (by-the-book,
+  // and its billing logic lives only in Jobs.convertToInvoice). We just flip the status
+  // and point them there, showing what's logged so far so the bill won't surprise them.
+  function applyJobComplete(msgIndex: number, jobRef: string) {
+    const refLc = String(jobRef || '').trim().toLowerCase();
+    const jobs = data.jobs ?? [];
+    const job = jobs.find(j => j.number.toLowerCase() === refLc)
+      ?? jobs.find(j => `${j.name} ${j.clientName ?? ''}`.toLowerCase().includes(refLc));
+    let done: string;
+    if (!job) {
+      done = lang === 'is' ? `⚠️ Verk „${jobRef}" fannst ekki.` : `⚠️ Job "${jobRef}" not found.`;
+    } else if (job.status === 'complete') {
+      done = lang === 'is' ? `✅ ${job.number} er þegar merkt lokið.` : `✅ ${job.number} is already complete.`;
+    } else {
+      dispatch({ type: 'UPDATE_JOB', payload: { ...job, status: 'complete', updatedAt: new Date().toISOString() } });
+      const hrs = (data.timeEntries ?? []).filter(t => t.jobId === job.id).reduce((s, t) => s + (Number(t.hours) || 0), 0);
+      const mats = (data.jobMaterials ?? []).filter(m => m.jobId === job.id).length;
+      const nudge = lang === 'is' ? 'Ýttu á „Færa í reikning" á verkinu til að reikningsfæra það.' : 'Tap "Move to invoice" on the job to bill it.';
+      done = lang === 'is'
+        ? `✅ ${job.number} merkt lokið (${hrs} klst, ${mats} efnislínur skráðar). ${nudge}`
+        : `✅ ${job.number} marked complete (${hrs} hrs, ${mats} material lines logged). ${nudge}`;
+    }
+    setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-job-complete\s*[\s\S]*?```/, `\n${done}`) } : m));
+  }
+
   // The owner approved AI-logged job(s) → create them. Numbers run JOB-YYYY-NNN off
   // the count of this year's jobs; status defaults to 'survey' (site visit); a new
   // client name is saved to Viðskiptavinir. Mirrors the Jobs screen's saveJob path.
@@ -1338,7 +1376,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                       const { text: afterQuote, quotes: aiQuotes } = extractQuote(afterInvoice);
                       const { text: afterAccept, accepts: aiAccepts } = extractQuoteAccept(afterQuote);
                       const { text: afterJobEntry, entry: aiJobEntry } = extractJobEntry(afterAccept);
-                      const { text: afterBook, book } = extractBook(afterJobEntry);
+                      const { text: afterJobDone, jobRef: aiJobDone } = extractJobComplete(afterJobEntry);
+                      const { text: afterBook, book } = extractBook(afterJobDone);
                       const { text: afterRule, rules: aiRules } = extractRule(afterBook);
                       const { text: afterContact, contacts: aiContacts } = extractContact(afterRule);
                       const { text: afterInvStatus, updates: aiInvStatus } = extractInvoiceStatus(afterContact);
@@ -1551,6 +1590,27 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50">
                                   <CheckCircle className="w-4 h-4" />
                                   {lang === 'is' ? 'Skrá á verkið' : 'Log to job'}
+                                </button>
+                              </div>
+                            );
+                          })()}
+                          {aiJobDone && (() => {
+                            const ref = String(aiJobDone).trim().toLowerCase();
+                            const j = (data.jobs ?? []).find(x => x.number.toLowerCase() === ref)
+                              ?? (data.jobs ?? []).find(x => `${x.name} ${x.clientName ?? ''}`.toLowerCase().includes(ref));
+                            return (
+                              <div className="mt-3 border border-green-200 rounded-lg overflow-hidden">
+                                <div className="bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
+                                  {lang === 'is' ? 'Merkja verk lokið' : 'Mark job complete'}
+                                </div>
+                                <div className="px-3 py-1.5 text-xs text-gray-700">
+                                  {j ? <><span className="font-medium">{j.number}</span> — {j.name}{j.clientName ? <span className="text-gray-400"> ({j.clientName})</span> : null}</>
+                                     : <span className="text-red-500">{lang === 'is' ? `„${aiJobDone}" fannst ekki` : `"${aiJobDone}" not found`}</span>}
+                                </div>
+                                <button onClick={() => applyJobComplete(i, aiJobDone)} disabled={!j}
+                                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                                  <CheckCircle className="w-4 h-4" />
+                                  {lang === 'is' ? 'Merkja lokið' : 'Mark complete'}
                                 </button>
                               </div>
                             );

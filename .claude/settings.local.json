@@ -100,7 +100,16 @@
       "Read(//c/Users/vidar/OneDrive/Desktop/**)",
       "Bash(ls -1 \"C:/Users/vidar/Claude bussines app/.claude/worktrees/\" 2>&1)",
       "Bash(curl -s https://curious-hummingbird-3f661f.netlify.app/)",
-      "Bash(curl -sI https://curious-hummingbird-3f661f.netlify.app/sw.js)"
+      "Bash(curl -sI https://curious-hummingbird-3f661f.netlify.app/sw.js)",
+      "Bash(curl *)",
+      "Bash(npm run build*)",
+      "Bash(git rev-parse *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.claude/settings.local.json','utf8'\\)\\); console.log\\('settings.local.json: valid JSON ✓'\\)\")"
     ]
   }
 }
