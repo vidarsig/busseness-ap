@@ -966,13 +966,33 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-settings\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
 
+  // Find a receipt/bill IMAGE the owner attached to the message(s) that led to this
+  // reply, as a data: URL — so a booked expense keeps the photo as proof (real
+  // document → real innskattur). Looks at the user turn just before this assistant
+  // message (and the one before that, in case of a follow-up), newest first.
+  function receiptImageFor(msgIndex: number): string | undefined {
+    for (let i = msgIndex - 1; i >= 0 && i >= msgIndex - 3; i--) {
+      const api = messages[i]?.api;
+      if (!Array.isArray(api)) continue;
+      const img = api.find(b => b.type === 'image') as Extract<ContentBlock, { type: 'image' }> | undefined;
+      if (img?.source?.data) return `data:${img.source.media_type};base64,${img.source.data}`;
+    }
+    return undefined;
+  }
+
   // The owner approved the AI's proposed entries → book them straight into Jobboks.
   // Then rewrite the message so the block can't be booked twice (persists in aiChat).
   function approveBook(msgIndex: number, book: BookTx[]) {
+    // If the owner attached a receipt/bill photo, keep it on the EXPENSE entries as
+    // proof — the same receiptUrl the Færslur camera sets, so it shows in the books.
+    const receipt = receiptImageFor(msgIndex);
+    let withPhoto = 0;
     for (const b of book) {
       const accountId = b.accountNumber
         ? data.accounts.find(a => a.number === String(b.accountNumber))?.id
         : undefined;
+      const attachReceipt = !!receipt && b.type === 'expense';
+      if (attachReceipt) withPhoto += 1;
       const tx: Transaction = {
         id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         date: b.date,
@@ -985,10 +1005,12 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
         vatRate: Number(b.vatRate) || 0,
         ...(accountId ? { accountId } : {}),
         ...(b.interestAmount ? { interestAmount: Number(b.interestAmount) } : {}),
+        ...(attachReceipt ? { receiptUrl: receipt } : {}),
       };
       dispatch({ type: 'ADD_TRANSACTION', payload: tx });
     }
-    const done = lang === 'is' ? `✅ Bókað í Jobboks: ${book.length} færsla(r)` : `✅ Booked into Jobboks: ${book.length} entr${book.length === 1 ? 'y' : 'ies'}`;
+    const photoNote = withPhoto > 0 ? (lang === 'is' ? ' (með kvittanamynd)' : ' (with receipt photo)') : '';
+    const done = (lang === 'is' ? `✅ Bókað í Jobboks: ${book.length} færsla(r)` : `✅ Booked into Jobboks: ${book.length} entr${book.length === 1 ? 'y' : 'ies'}`) + photoNote;
     setMessages(prev => prev.map((m, idx) =>
       idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-book\s*[\s\S]*?```/, `\n${done}`) } : m));
   }
