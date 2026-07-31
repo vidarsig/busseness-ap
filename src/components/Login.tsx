@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { signIn, signUp, resetPassword } from '../utils/supabase';
 import { BookOpen, Mail, Lock, User, Eye, EyeOff, ArrowLeft, CheckCircle } from 'lucide-react';
 
-type AuthMode = 'signin' | 'signup' | 'forgot' | 'forgot_sent';
+type AuthMode = 'signin' | 'signup' | 'signup_sent' | 'forgot' | 'forgot_sent';
 
 interface LoginProps {
   onSuccess: (userId: string, userName: string, userEmail: string) => void;
@@ -31,9 +31,14 @@ export default function Login({ onSuccess }: LoginProps) {
     const result = await signIn(supabaseUrl, supabaseKey, email, password);
     setLoading(false);
     if (result.error) {
-      setError(result.error === 'Invalid login credentials'
-        ? t('Rangt netfang eða lykilorð', 'Wrong email or password')
-        : result.error);
+      if (result.error === 'Invalid login credentials') {
+        setError(t('Rangt netfang eða lykilorð', 'Wrong email or password'));
+      } else if (/email not confirmed/i.test(result.error)) {
+        setError(t('Staðfestu netfangið þitt fyrst — smelltu á hlekkinn í póstinum sem við sendum.',
+                   'Please confirm your email first — click the link we sent you.'));
+      } else {
+        setError(result.error);
+      }
       return;
     }
     if (result.user) {
@@ -51,10 +56,18 @@ export default function Login({ onSuccess }: LoginProps) {
     const result = await signUp(supabaseUrl, supabaseKey, email, password, name.trim());
     setLoading(false);
     if (result.error) { setError(result.error); return; }
-    if (result.user) {
+    if (result.alreadyExists) {
+      setError(t('Þetta netfang er þegar skráð — skráðu þig inn.', 'That email is already registered — please sign in.'));
+      return;
+    }
+    // Session present → email confirmation is off, log straight in.
+    if (result.session && result.user) {
       const displayName = name.trim() || result.user.email || 'User';
       onSuccess(result.user.id, displayName, result.user.email || '');
+      return;
     }
+    // Account created but needs email confirmation before a session exists.
+    setMode('signup_sent');
   }
 
   async function handleForgot(e: React.FormEvent) {
@@ -186,6 +199,28 @@ export default function Login({ onSuccess }: LoginProps) {
               </button>
             </div>
           </>
+        )}
+
+        {/* ── SIGN UP SENT (confirm email) ────────────────── */}
+        {mode === 'signup_sent' && (
+          <div className="text-center py-4">
+            <Mail className="w-12 h-12 text-blue-400 mx-auto mb-3" />
+            <h2 className="text-base font-semibold text-white mb-2">
+              {t('Aðgangur búinn til!', 'Account created!')}
+            </h2>
+            <p className="text-xs text-slate-400 mb-2">
+              {t(`Við sendum staðfestingarhlekk á ${email}.`, `We sent a confirmation link to ${email}.`)}
+            </p>
+            <p className="text-xs text-slate-400 mb-5">
+              {t('Smelltu á hlekkinn til að virkja aðganginn, skráðu þig svo inn. Athugaðu ruslpóstinn ef hann birtist ekki.',
+                 'Click the link to activate your account, then sign in. Check your spam folder if it doesn\'t arrive.')}
+            </p>
+            <button onClick={() => { setMode('signin'); setError(''); }}
+              className="text-xs text-blue-400 hover:text-blue-300 transition inline-flex items-center gap-1">
+              <ArrowLeft className="w-3 h-3" />
+              {t('Til baka', 'Back to sign in')}
+            </button>
+          </div>
         )}
 
         {/* ── FORGOT PASSWORD ─────────────────────────────── */}

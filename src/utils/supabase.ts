@@ -28,7 +28,15 @@ export async function signUp(url: string, key: string, email: string, password: 
     options: { data: { name, role: 'owner' } },
   });
   if (error) return { error: error.message };
-  return { user: data.user };
+  // When the email already exists (and confirmation is on), Supabase returns an
+  // obfuscated user with an empty identities array and no error — surface it so
+  // we can tell the person to sign in instead of silently doing nothing.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    return { alreadyExists: true as const };
+  }
+  // data.session is null when email confirmation is required; the caller uses
+  // its presence to decide "straight in" vs "check your email to confirm".
+  return { user: data.user, session: data.session };
 }
 
 export async function signIn(url: string, key: string, email: string, password: string) {
