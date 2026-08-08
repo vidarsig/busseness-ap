@@ -317,9 +317,10 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
           aria-label={lang === 'is' ? 'Talaðu við Mike' : 'Talk to Mike'}
           className="md:hidden fixed left-4 bottom-24 z-40 no-print flex items-center gap-2 active:scale-95 transition-transform"
         >
-          <span className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
-            style={{ background: '#211d3a', border: '2px solid #7F77DD', color: '#CECBF6' }}>
-            <HardHat className="w-7 h-7" />
+          <span className="mike-bob w-14 h-14 rounded-full overflow-hidden shadow-lg block"
+            style={{ background: '#211d3a', border: '2px solid #7F77DD' }}>
+            <img src="/mike-head.png" alt=""
+              className="w-full h-full object-cover" style={{ objectPosition: 'center top' }} />
           </span>
           {view !== 'ai' && (
             <span className="text-xs font-medium px-2.5 py-1.5 rounded-xl"

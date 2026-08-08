@@ -21,6 +21,16 @@
   animation: slide-in 0.22s ease-out;
 }
 
+/* Mike — gentle idle bob for the corner AI helper */
+@keyframes mike-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+.mike-bob { animation: mike-bob 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .mike-bob { animation: none; }
+}
+
 /* Safe area for iPhone notch / home indicator */
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);
