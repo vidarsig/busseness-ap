@@ -89,7 +89,7 @@
         <div class="card" data-i="5">
           <div class="stagelabel">6 · Invoice</div>
           <div class="row"><div class="txt"><div class="muted">Invoice #1042 · from the job</div><div class="amt">$4,200</div></div></div>
-          <div class="row"><span class="pill bl">Send</span><div class="txt muted">Hours + materials, filled in</div></div>
+          <div class="row"><span class="pill ok">✓ Sent to John</span><div class="txt muted">Automatically · hours + materials filled in</div></div>
         </div>
         <div class="card" data-i="6">
           <div class="stagelabel">7 · Paid</div>
@@ -117,7 +117,7 @@
     { say: "It lands on your calendar. Three days, booked.", show: "On your calendar — <span class='em'>booked.</span>" },
     { say: "On the job, log hours, materials and photos. Say it or snap it.", show: "Log hours, materials, photos — <span class='em'>just say it.</span>" },
     { say: "Say it's done, and I mark the job complete.", show: "\"It's done\" — <span class='em'>marked complete.</span>" },
-    { say: "The invoice writes itself, straight from the job.", show: "The invoice <span class='em'>writes itself.</span>" },
+    { say: "The invoice writes itself and goes straight to your customer.", show: "The invoice writes itself — <span class='em'>sent automatically.</span>" },
     { say: "They pay in the app. You're finished, and you're paid.", show: "They pay in the app — <span class='em'>you're paid.</span>" }
   ];
   var cards = [].slice.call(document.querySelectorAll('.card'));
