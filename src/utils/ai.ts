@@ -226,6 +226,31 @@ Category breakdown:
 ${Object.entries(catBreakdown).map(([c, a]) => `  ${c}: ${fmtNum(a)}`).join('\n')}`;
 }
 
+// One compact line per year (revenue / expenses / net), so the AI always has the
+// SHAPE of every year even while working one year in detail — enough to compare
+// years or say which year looks off, without the heavy per-year category breakdowns.
+function allYearsBrief(data: AppData): string {
+  const years = [...new Set(data.transactions.map(tx => yearOf(tx.date)))].sort((a, b) => b - a);
+  if (!years.length) return '  (no transactions yet)';
+  return years.map(y => {
+    const txs = filterByYear(data.transactions, y);
+    const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+    return `  ${y}: revenue ${fmtNum(pl.totalRevenue)} | expenses ${fmtNum(pl.totalOperatingExpenses)} | net ${fmtNum(pl.netResult)}`;
+  }).join('\n');
+}
+
+// Find a year the owner names in their message (e.g. "af hverju er 2025 ekki í
+// jafnvægi?"), limited to years that actually have data — so the chat can load THAT
+// year automatically instead of telling the owner to switch. Returns the first
+// data-year mentioned, or null. \b avoids matching amounts like "20250"/"2.025.000".
+export function detectYear(text: string, years: number[]): number | null {
+  if (!text) return null;
+  const hits = text.match(/\b(?:19|20)\d{2}\b/g);
+  if (!hits) return null;
+  for (const h of hits) { const y = Number(h); if (years.includes(y)) return y; }
+  return null;
+}
+
 // Month-by-month totals for every year with data (Jan→Dec), so the AI can look
 // at any single month or spot seasonal patterns — not just whole-year figures.
 function monthlyBreakdown(data: AppData, year?: number): string {
@@ -398,11 +423,13 @@ export function buildContext(data: AppData, lang: string, year?: number): string
     .join('\n');
 
   return `${year != null ? `>>> WORKING YEAR: ${year} <<<
-The owner is working on ${year} and nothing else. Answer about ${year} unless they
-name another year. Every transaction of ${year} is listed below — if something is
-not in that list, it is not in the books for ${year}, so say so plainly instead of
-guessing at it. For OTHER years you have the summaries only, not the individual
-rows: if asked for a specific old row, say the owner needs to switch to that year.
+You are analysing ${year}. Every transaction of ${year} is listed below IN FULL — if
+something is not in that list, it is not in the books for ${year}, so say so plainly
+instead of guessing. The app AUTOMATICALLY loads whichever year the owner asks about,
+so this working year already matches their question: NEVER tell the owner to "switch
+years", and NEVER ask them to read figures to you — just answer the year they asked
+about and DO the work. You also have the ALL-YEARS BRIEF and every balance key's
+year-end figure below, so you can compare years and diagnose right now.
 
 ` : ''}COMPANY: ${data.settings.company.name || 'Unknown'}
 COUNTRY: ${data.settings.country} | CURRENCY: ${data.settings.defaultCurrency}
@@ -413,10 +440,13 @@ YEARS WITH DATA: ${years.join(', ') || 'none'}
 
 These per-year totals are calculated by the same engine as the Reports and Annual
 Accounts screens, so they reconcile exactly.${year != null
-  ? ` EVERYTHING BELOW IS ${year} ONLY. Every figure, party
-and month you can see is ${year}. You have NO figures for any other year — if the
-owner asks about one, say they need to switch the year rather than answering.`
+  ? ` The detailed summary, months and rows below are ${year}; the ALL-YEARS BRIEF
+gives every other year's revenue/expenses/net so you can still compare years or point
+at another year WITHOUT anyone switching.`
   : ' Use them when asked about any year.'}
+
+ALL-YEARS BRIEF (revenue / expenses / net for every year — compare, or spot the year that looks off):
+${allYearsBrief(data)}
 
 FULL-YEAR FINANCIAL SUMMARIES:
 ${perYear}
@@ -708,7 +738,7 @@ HOW THIS APP KEEPS THE BOOKS (so your guidance matches what the app actually doe
 - LOAN PAYMENTS = principal + interest. When a loan payment is booked onto a loan key, the owner enters the interest portion in the "Þar af vextir / of which interest" box: only the PRINCIPAL (amount − interest) reduces the loan, and the INTEREST is recognised as a financial expense (fjármagnsgjöld). When the owner asks how to book a loan payment, tell them to book the whole payment onto the loan key and fill in the interest — do NOT tell them to make two separate entries.
 - LOAN DIRECTION on a loan/liability key (CRITICAL — money IN vs money OUT go on DIFFERENT categories): a loan RECEIVED (money IN from a lender — e.g. a family member lends money into the account) must be category "lan_mottekid" (type transfer); it INCREASES what the company owes. A repayment (money OUT to the lender) is category "lan_afborgun"; it REDUCES the balance. The app ADDS a "lan_mottekid" entry to the key and SUBTRACTS every other transfer. So when reclassifying ALL of a lender's rows onto their loan key, the money-IN rows are "lan_mottekid" and the money-OUT rows are "lan_afborgun" — NOT all the same category. If you put the money-in rows on plain "transfer"/"lan_afborgun", the app subtracts the borrowed money instead of adding it and the loan balance comes out wrong (too negative). A lender's incoming loan is NOT income — never book it as "income" (that inflates revenue).
 - DEPRECIATION (afskriftir) is a NON-CASH expense. To depreciate an asset, the owner adds an expense with category "Afskriftir" and books it ONTO the fixed-asset key (e.g. 1200 Varanlegir rekstrarfjármunir): it lowers profit and the asset's book value, but does NOT reduce cash. Advise this when asked about depreciation. There is no automatic depreciation schedule — the owner enters the yearly amount themselves (straight-line = cost ÷ useful life); you may help them work out the amount, but the entry is manual.
-- YEARS ARE OPEN PERIODS the owner closes manually when satisfied; balances carry forward provisionally in the meantime. ANNUAL ACCOUNTS (Ársreikningur) can be viewed for ANY year and downloaded as PDF or emailed. The income statement is correct per year; the balance-sheet section is still partly manual (per-year carry-forward wiring in progress) — say so if asked for a formal balance sheet.
+- YEARS ARE OPEN PERIODS the owner closes manually when satisfied; balances carry forward provisionally in the meantime. ANNUAL ACCOUNTS (Ársreikningur) can be viewed for ANY year and downloaded as PDF or emailed. The income statement is correct per year. When the owner asks about the annual accounts, or WHY they are "not balanced" (ekki í jafnvægi), BUILD the accounts and DIAGNOSE the imbalance yourself from the transactions and the balance-key year-end figures you already have — do NOT refuse, do NOT ask the owner to read the numbers to you, do NOT tell them to switch year. The usual causes are the ones in the HEALTH CHECK list below (loan repayments booked as expenses, loans-in booked as income, owner draws/contributions mis-booked) — go find them in the rows and propose one-tap fixes. You may note that the formal balance-sheet carry-forward is still provisional, but do the analysis FIRST.
 ${data.settings.country === 'IS' ? `- PAYROLL (Laun), ICELAND, uses these company rates: withholding (staðgreiðsla) ${data.settings.taxWithholdingRate}%, persónuafsláttur (personal tax credit) ${fmtNum(data.settings.personalDeductionMonthly)}/month, employee pension ${data.settings.employeePensionRate}%, employer pension ${data.settings.employerPensionRate}%, tryggingagjald (social insurance) ${data.settings.socialInsuranceRate}%. For a monthly salary the correct math is: employee pension = gross × ${data.settings.employeePensionRate}%; TAX BASE = max(0, gross − employee pension − persónuafsláttur); withholding = tax base × ${data.settings.taxWithholdingRate}%; net = gross − employee pension − withholding. Employer cost on top = gross + employer pension + tryggingagjald. Persónuafsláttur is per-employee via their registered tax card (skattkort) — 0% if none (e.g. used on a pension). ALWAYS subtract persónuafsláttur before applying the withholding rate — NEVER apply the tax rate to the full gross. For ACTUAL salary slips, tell the owner to use the Laun (Payroll) screen; your chat figures are estimates.`
 : data.settings.country === 'US' ? `- PAYROLL (Laun), US (2026): from the paycheck — Social Security 6.2% (only on wages up to $184,500/yr) + Medicare 1.45% (no cap). Federal income tax and state income tax are each a per-employee % from the worker's W-4 (some states have no income tax → 0%); there is NO persónuafsláttur. Net = gross − Social Security − Medicare − federal − state. Employer pays a matching 6.2% + 1.45% plus FUTA 0.6%. Do NOT use the Icelandic formula. For actual slips tell the owner to use the Laun screen (it stores them); your chat figures are estimates.`
 : data.settings.country === 'CA' ? `- PAYROLL (Laun), CANADA (2026): from the paycheck — CPP 5.95% on pensionable pay (gross minus the $3,500/yr basic exemption, up to $74,600/yr) + EI 1.63% (up to $68,900/yr). Federal and provincial income tax are each a per-employee % from the TD1. Net = gross − CPP − EI − federal − provincial. Employer pays matching CPP 5.95% and EI at 1.4× (2.282%). Do NOT use the Icelandic formula. For actual slips tell the owner to use the Laun screen; your chat figures are estimates.`

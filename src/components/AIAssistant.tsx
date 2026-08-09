@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights, txPool } from '../utils/ai';
+import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights, txPool, detectYear } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
@@ -504,6 +504,14 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     const chips = attachments.map(a => `📎 ${a.name}`).join('\n');
     const shown = (chips ? chips + '\n' : '') + input.trim();
 
+    // Fetch whatever year the owner NAMES, automatically — so the AI never tells
+    // them to "switch to 2025" for data it can just load. If they mention a year
+    // with data, that becomes the working year for this turn (and the UI dropdown,
+    // so a later fix's row-refs resolve against the same year — see applyFix).
+    const askedYear = detectYear(input, yearsWithData);
+    const effYear = askedYear ?? aiYear ?? undefined;
+    if (askedYear && askedYear !== aiYear) setAiYear(askedYear);
+
     const textFiles = attachments.filter((a): a is Extract<Attachment, { kind: 'text' }> => a.kind === 'text');
     const mediaFiles = attachments.filter(a => a.kind !== 'text');
     // If the user picked a year for a big file, send that year's rows — a whole
@@ -553,7 +561,7 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
 
     try {
       await streamClaude(
-        buildChatSystem(data, lang, aiYear ?? undefined),
+        buildChatSystem(data, lang, effYear),
         allMessages,
         chunk => {
           assistantText += chunk;
