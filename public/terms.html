@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms of Service — Jobboks</title>
+  <meta name="description" content="Terms of Service for Jobboks — the bookkeeping app for contractors and engineers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.7; }
+
+    .topbar { background: #1e293b; border-bottom: 1px solid #334155; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+    .topbar a { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #38bdf8; font-weight: 700; font-size: 1.1rem; }
+    .topbar a span { font-size: 1.4rem; }
+    .topbar-right { margin-left: auto; font-size: 0.75rem; color: #64748b; }
+
+    .container { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    h1 { font-size: 2rem; font-weight: 800; color: #f8fafc; margin-bottom: 8px; }
+    .meta { font-size: 0.8rem; color: #64748b; margin-bottom: 40px; }
+
+    h2 { font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin: 32px 0 10px; }
+    p { color: #cbd5e1; margin-bottom: 12px; font-size: 0.95rem; }
+    ul { color: #cbd5e1; margin-bottom: 12px; padding-left: 20px; font-size: 0.95rem; }
+    ul li { margin-bottom: 4px; }
+    a { color: #38bdf8; }
+
+    .highlight { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
+    .highlight p { margin: 0; }
+
+    .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+    .plan { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px; }
+    .plan-name { font-weight: 700; color: #f8fafc; font-size: 0.9rem; margin-bottom: 4px; }
+    .plan-price { font-size: 0.8rem; color: #38bdf8; margin-bottom: 8px; }
+    .plan ul { margin: 0; padding-left: 16px; }
+    .plan li { font-size: 0.8rem; color: #94a3b8; margin-bottom: 2px; }
+
+    .footer { text-align: center; margin-top: 60px; padding-top: 24px; border-top: 1px solid #1e293b; font-size: 0.75rem; color: #475569; }
+    .footer a { color: #64748b; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/"><span>📚</span> Jobboks</a>
+  <div class="topbar-right">jobboks.com</div>
+</div>
+
+<div class="container">
+  <h1>Terms of Service</h1>
+  <p class="meta">Last updated: May 2026 &nbsp;·&nbsp; Effective date: May 2026</p>
+
+  <div class="highlight">
+    <p><strong style="color:#f8fafc">Summary:</strong> Use Jobboks fairly, pay for what you use, don't misuse the service. Your data is yours. We provide the app as-is and are not liable for financial decisions made using it.</p>
+  </div>
+
+  <h2>1. Acceptance of Terms</h2>
+  <p>By downloading, installing, or using Jobboks ("the App", "the Service"), you agree to these Terms of Service. If you do not agree, do not use the app.</p>
+  <p>These terms apply to all users, including free users, paid subscribers, and businesses accessing the service on behalf of their employees.</p>
+
+  <h2>2. Description of Service</h2>
+  <p>Jobboks is a bookkeeping and business management application designed for contractors, engineers, architects, and tradespeople. Features include:</p>
+  <ul>
+    <li>Transaction tracking and categorisation</li>
+    <li>Invoice creation and management</li>
+    <li>VAT calculation and reporting</li>
+    <li>Payroll management</li>
+    <li>Job costing and time tracking</li>
+    <li>Stock and inventory management</li>
+    <li>AI-assisted bookkeeping (requires your own API key)</li>
+    <li>Optional cloud sync (requires your own Supabase account)</li>
+  </ul>
+
+  <h2>3. Subscription Plans</h2>
+  <p>Jobboks offers the following plans:</p>
+  <div class="plan-grid">
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price">€0 / month</div>
+      <ul>
+        <li>All core features</li>
+        <li>Local storage only</li>
+        <li>Single user</li>
+        <li>Community support</li>
+      </ul>
+    </div>
+    <div class="plan">
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">€9 / month</div>
+      <ul>
+        <li>Everything in Free</li>
+        <li>Cloud sync</li>
+        <li>Up to 3 users</li>
+        <li>Priority support</li>
+      </ul>
+    </div>
+    <div class="plan">
+      <div class="plan-name">Business</div>
+      <div class="plan-price">€19 / month</div>
+      <ul>
+        <li>Everything in Pro</li>
+        <li>Unlimited users</li>
+        <li>Advanced roles</li>
+        <li>Dedicated support</li>
+      </ul>
+    </div>
+  </div>
+  <p>Prices are in EUR and may vary by region. Subscriptions are billed monthly or annually. Annual billing offers a discount equivalent to 2 months free.</p>
+
+  <h2>4. Payment and Billing</h2>
+  <p>Payments are processed by <a href="https://paddle.com" target="_blank">Paddle</a>, our Merchant of Record. Paddle handles all billing, tax collection, and refunds on our behalf.</p>
+  <ul>
+    <li>You will be charged at the start of each billing period</li>
+    <li>Subscriptions renew automatically unless cancelled</li>
+    <li>You can cancel at any time — access continues until the end of the paid period</li>
+    <li>Refunds are handled by Paddle within 30 days of purchase</li>
+    <li>All applicable taxes (VAT, GST, etc.) are included in the displayed price</li>
+  </ul>
+
+  <h2>5. Free Trial</h2>
+  <p>We may offer a free trial period for paid plans. At the end of the trial, you will be charged unless you cancel before the trial ends. We will remind you before the trial expires.</p>
+
+  <h2>6. Your Data</h2>
+  <p>You own all data you create in Jobboks. We do not claim any ownership over your business records, invoices, or financial data.</p>
+  <ul>
+    <li>You can export all your data at any time using the built-in backup feature</li>
+    <li>You can delete your data by clearing local storage or deleting your Supabase project</li>
+    <li>We do not sell or share your data with third parties</li>
+  </ul>
+  <p>See our <a href="/privacy.html">Privacy Policy</a> for full details.</p>
+
+  <h2>7. Acceptable Use</h2>
+  <p>You agree not to:</p>
+  <ul>
+    <li>Use Jobboks for illegal purposes or to facilitate financial fraud</li>
+    <li>Attempt to reverse-engineer, decompile, or copy the app</li>
+    <li>Share your account credentials with users outside your subscription plan</li>
+    <li>Use automated scripts to abuse the AI or sync features</li>
+    <li>Resell or sublicense access to Jobboks</li>
+  </ul>
+
+  <h2>8. Not Financial or Tax Advice</h2>
+  <div class="highlight">
+    <p><strong style="color:#f8fafc">Important:</strong> Jobboks is a tool to help you organise your finances. It is not a substitute for professional accounting, tax, or legal advice. Always consult a qualified accountant or tax adviser for decisions affecting your business finances, VAT filings, or tax returns. We are not liable for errors in calculations or filings made using the app.</p>
+  </div>
+
+  <h2>9. Disclaimer of Warranties</h2>
+  <p>Jobboks is provided "as is" without warranties of any kind. We do not guarantee that the app will be error-free, uninterrupted, or suitable for your specific accounting requirements. VAT rates and tax rules change — you are responsible for verifying that the app's defaults match current legislation in your country.</p>
+
+  <h2>10. Limitation of Liability</h2>
+  <p>To the maximum extent permitted by law, Jobboks and its developers shall not be liable for any indirect, incidental, or consequential damages arising from your use of the app, including but not limited to financial losses, missed tax deadlines, or errors in submitted accounts.</p>
+  <p>Our total liability for any claim shall not exceed the amount you paid for the subscription in the 12 months preceding the claim.</p>
+
+  <h2>11. Intellectual Property</h2>
+  <p>The Jobboks app, its design, code, and branding are owned by Jobboks and protected by copyright. You may not copy, modify, or distribute the app without written permission.</p>
+
+  <h2>12. Account Termination</h2>
+  <p>We reserve the right to suspend or terminate accounts that violate these terms. You may close your account at any time by contacting <a href="mailto:hello@jobboks.com">hello@jobboks.com</a>. Upon termination, local data remains on your device until you remove it.</p>
+
+  <h2>13. Changes to Terms</h2>
+  <p>We may update these terms from time to time. We will notify you of material changes via the app or email at least 14 days before they take effect. Continued use of the app after that date constitutes acceptance of the new terms.</p>
+
+  <h2>14. Governing Law</h2>
+  <p>These terms are governed by the laws of Iceland. Any disputes shall be subject to the jurisdiction of the Icelandic courts, unless mandatory consumer protection laws in your country provide otherwise.</p>
+
+  <h2>15. Contact</h2>
+  <p>Questions about these terms:</p>
+  <ul>
+    <li>Email: <a href="mailto:hello@jobboks.com">hello@jobboks.com</a></li>
+    <li>Website: <a href="https://jobboks.com">jobboks.com</a></li>
+  </ul>
+
+  <div class="footer">
+    <p><a href="/">jobboks.com</a> &nbsp;·&nbsp; <a href="/privacy.html">Privacy Policy</a> &nbsp;·&nbsp; <a href="mailto:hello@jobboks.com">hello@jobboks.com</a></p>
+    <p style="margin-top:8px">© 2026 Jobboks. All rights reserved.</p>
+  </div>
+</div>
+
+</body>
+</html>

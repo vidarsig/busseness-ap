@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Jobboks</title>
+  <meta name="description" content="Privacy Policy for Jobboks — the bookkeeping app for contractors and engineers." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.7; }
+
+    .topbar { background: #1e293b; border-bottom: 1px solid #334155; padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
+    .topbar a { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #38bdf8; font-weight: 700; font-size: 1.1rem; }
+    .topbar a span { font-size: 1.4rem; }
+    .topbar-right { margin-left: auto; font-size: 0.75rem; color: #64748b; }
+
+    .container { max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    h1 { font-size: 2rem; font-weight: 800; color: #f8fafc; margin-bottom: 8px; }
+    .meta { font-size: 0.8rem; color: #64748b; margin-bottom: 40px; }
+
+    h2 { font-size: 1.1rem; font-weight: 700; color: #38bdf8; margin: 32px 0 10px; }
+    p { color: #cbd5e1; margin-bottom: 12px; font-size: 0.95rem; }
+    ul { color: #cbd5e1; margin-bottom: 12px; padding-left: 20px; font-size: 0.95rem; }
+    ul li { margin-bottom: 4px; }
+    a { color: #38bdf8; }
+
+    .highlight { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 16px 20px; margin: 16px 0; }
+    .highlight p { margin: 0; }
+
+    .footer { text-align: center; margin-top: 60px; padding-top: 24px; border-top: 1px solid #1e293b; font-size: 0.75rem; color: #475569; }
+    .footer a { color: #64748b; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/"><span>📚</span> Jobboks</a>
+  <div class="topbar-right">jobboks.com</div>
+</div>
+
+<div class="container">
+  <h1>Privacy Policy</h1>
+  <p class="meta">Last updated: May 2026 &nbsp;·&nbsp; Effective date: May 2026</p>
+
+  <div class="highlight">
+    <p><strong style="color:#f8fafc">Short version:</strong> Your business data stays on your device. We do not collect it, sell it, or share it with anyone. Cloud sync is optional and uses your own Supabase account.</p>
+  </div>
+
+  <h2>1. Who We Are</h2>
+  <p>Jobboks is a bookkeeping application for contractors, engineers, and tradespeople, developed and operated by Jobboks ("we", "us", "our"). You can contact us at <a href="mailto:hello@jobboks.com">hello@jobboks.com</a>.</p>
+
+  <h2>2. What Data We Collect</h2>
+  <p>Jobboks is designed with privacy first. The app operates primarily offline and stores data locally on your device.</p>
+  <p><strong style="color:#f8fafc">Data stored on your device (localStorage):</strong></p>
+  <ul>
+    <li>Company name, address, and contact details you enter</li>
+    <li>Financial transactions, invoices, and receipts you create</li>
+    <li>Payroll records, budget entries, and VAT calculations</li>
+    <li>Job records, time entries, and stock inventory</li>
+    <li>App settings and preferences</li>
+  </ul>
+  <p>This data never leaves your device unless you explicitly enable cloud sync (see Section 4).</p>
+
+  <h2>3. Data We Do Not Collect</h2>
+  <p>We do not collect, store, or process:</p>
+  <ul>
+    <li>Your name or email address (unless you create an account via Supabase)</li>
+    <li>Usage analytics or tracking data</li>
+    <li>Device identifiers or advertising IDs</li>
+    <li>Location data</li>
+    <li>Any financial data from your transactions</li>
+  </ul>
+  <p>We do not use cookies for tracking, and we do not run any third-party advertising.</p>
+
+  <h2>4. Optional Cloud Sync (Supabase)</h2>
+  <p>If you choose to enable cloud sync, you connect your own <a href="https://supabase.com" target="_blank">Supabase</a> project. In this case:</p>
+  <ul>
+    <li>Your app data is encrypted in transit (TLS) and stored in your own Supabase database</li>
+    <li>We have no access to your Supabase project or the data within it</li>
+    <li>Supabase's own privacy policy applies: <a href="https://supabase.com/privacy" target="_blank">supabase.com/privacy</a></li>
+    <li>You can disable sync and delete your Supabase database at any time</li>
+  </ul>
+
+  <h2>5. Optional AI Assistant (Anthropic)</h2>
+  <p>If you use the AI assistant feature, you provide your own Anthropic API key. When you send a message:</p>
+  <ul>
+    <li>The message text is sent directly to Anthropic's API using your key</li>
+    <li>We do not proxy, log, or store AI conversations</li>
+    <li>Anthropic's privacy policy applies: <a href="https://www.anthropic.com/privacy" target="_blank">anthropic.com/privacy</a></li>
+  </ul>
+
+  <h2>6. Optional Subscription (Paddle)</h2>
+  <p>If you upgrade to a paid plan, payment is processed by <a href="https://www.paddle.com" target="_blank">Paddle</a>, our Merchant of Record. We receive only your email address and subscription status. We never see or store your payment card details. Paddle's privacy policy applies: <a href="https://www.paddle.com/legal/privacy" target="_blank">paddle.com/legal/privacy</a>.</p>
+
+  <h2>7. Receipt Scanning</h2>
+  <p>When you use the receipt scanner, your camera or photo library is accessed. Images are processed locally on your device or sent directly to the Anthropic API using your key. We do not store or receive any images.</p>
+
+  <h2>8. Children's Privacy</h2>
+  <p>Jobboks is a business application intended for adults (18+). We do not knowingly collect data from children under 13. If you believe a child has provided data, contact us at <a href="mailto:hello@jobboks.com">hello@jobboks.com</a>.</p>
+
+  <h2>9. Your Rights (GDPR)</h2>
+  <p>If you are in the European Economic Area, you have the right to:</p>
+  <ul>
+    <li><strong style="color:#f8fafc">Access</strong> — request a copy of any data we hold about you</li>
+    <li><strong style="color:#f8fafc">Deletion</strong> — request deletion of your account and associated data</li>
+    <li><strong style="color:#f8fafc">Portability</strong> — export your data at any time using the built-in backup feature</li>
+    <li><strong style="color:#f8fafc">Correction</strong> — correct any inaccurate personal data</li>
+  </ul>
+  <p>Since most data is stored locally on your device, you can delete it at any time by clearing the app's storage or uninstalling the app. For account data, email us at <a href="mailto:hello@jobboks.com">hello@jobboks.com</a>.</p>
+
+  <h2>10. Data Security</h2>
+  <p>Your data is stored in your device's local browser storage (localStorage), protected by your device's own security. Cloud sync data is transmitted over TLS and stored in your own Supabase project. We recommend enabling device lock and using strong passwords for your Supabase account.</p>
+
+  <h2>11. Data Retention</h2>
+  <p>Local data is retained until you clear it or uninstall the app. If you close your Supabase project, that data is deleted. If you cancel a paid subscription, your account email is retained for billing records as required by law.</p>
+
+  <h2>12. Changes to This Policy</h2>
+  <p>We may update this policy from time to time. We will notify users of significant changes via the app or by email. The current version is always available at <a href="https://jobboks.com/privacy">jobboks.com/privacy</a>.</p>
+
+  <h2>13. Contact</h2>
+  <p>Questions about this privacy policy? Contact us:</p>
+  <ul>
+    <li>Email: <a href="mailto:hello@jobboks.com">hello@jobboks.com</a></li>
+    <li>Website: <a href="https://jobboks.com">jobboks.com</a></li>
+  </ul>
+
+  <div class="footer">
+    <p><a href="/">jobboks.com</a> &nbsp;·&nbsp; <a href="/terms.html">Terms of Service</a> &nbsp;·&nbsp; <a href="mailto:hello@jobboks.com">hello@jobboks.com</a></p>
+    <p style="margin-top:8px">© 2026 Jobboks. All rights reserved.</p>
+  </div>
+</div>
+
+</body>
+</html>
