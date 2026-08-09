@@ -267,6 +267,88 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
     </>
   );
 
+  // PHONE-VIEW-ON-LAPTOP (beta look): render the whole app inside a centered
+  // phone-width frame with the mobile chrome (top bar, bottom nav, Mike corner,
+  // drawer) so a laptop looks like the Android app. Gated to betaLook so the
+  // stable desktop layout is untouched. Bars are `absolute` within the frame (not
+  // `fixed` to the viewport) so they stay the width of the phone column.
+  const phoneLook = data.settings.betaLook;
+  if (phoneLook) {
+    return (
+      <div className="min-h-screen bg-slate-200 flex justify-center">
+        <div className="relative w-full max-w-[440px] h-screen bg-gray-50 shadow-2xl overflow-hidden flex flex-col">
+          {/* Top bar */}
+          <div className="absolute top-0 inset-x-0 z-30 h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3 shadow-sm no-print">
+            <button onClick={() => setDrawerOpen(true)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="Menu">
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="font-bold text-blue-600 text-sm tracking-wide uppercase flex-shrink-0">Jobboks</span>
+            <span className="text-gray-400 text-sm truncate flex-1">{companyName !== 'Jobboks' ? companyName : ''}</span>
+            <SyncIndicator />
+          </div>
+
+          {/* Drawer */}
+          {drawerOpen && (
+            <div className="absolute inset-0 z-50 flex no-print">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+              <div className="relative flex flex-col w-72 max-w-[85%] bg-white h-full shadow-2xl animate-slide-in">
+                <button onClick={() => setDrawerOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 p-1" aria-label="Close">
+                  <X className="w-5 h-5" />
+                </button>
+                <NavContent />
+              </div>
+            </div>
+          )}
+
+          {/* Main content */}
+          <main className="flex-1 overflow-auto pt-14 pb-24">
+            <div className="p-4">{children}</div>
+          </main>
+
+          {/* Mike — one tap to talk (beta corner helper) */}
+          {canAccessView('ai', perms ?? null) && (
+            <button
+              onClick={() => setView('ai')}
+              aria-label={lang === 'is' ? 'Talaðu við Mike' : 'Talk to Mike'}
+              className="absolute left-4 bottom-24 z-40 no-print flex items-center gap-2 active:scale-95 transition-transform"
+            >
+              <span className="mike-bob w-14 h-14 rounded-full overflow-hidden shadow-lg block"
+                style={{ background: '#211d3a', border: '2px solid #7F77DD' }}>
+                <img src="/mike-head.png" alt=""
+                  className="w-full h-full object-cover" style={{ objectPosition: 'center top' }} />
+              </span>
+              {view !== 'ai' && (
+                <span className="text-xs font-medium px-2.5 py-1.5 rounded-xl"
+                  style={{ background: '#7F77DD', color: '#1a1633', borderBottomLeftRadius: '3px' }}>
+                  {lang === 'is' ? 'Talaðu við mig' : 'Talk to me'}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Bottom nav */}
+          <nav className="absolute bottom-0 inset-x-0 z-30 bg-white border-t border-gray-200 flex no-print safe-area-pb">
+            {bottomNavItems.filter(item => canAccessView(item.id, perms ?? null)).map(({ id, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 ${
+                  view === id ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] font-medium leading-tight">{navLabel(id)}</span>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Desktop sidebar */}
