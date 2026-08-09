@@ -30,8 +30,8 @@
   "enableSiteSettingsShortcut": true,
   "isTrustedWebActivity": true,
   "rotationEnabled": false,
-  "appVersion": "1.0.0",
-  "appVersionCode": 1,
+  "appVersion": "1.2.3",
+  "appVersionCode": 6,
   "signingKey": {
     "path": "android.keystore",
     "alias": "jobboks"
