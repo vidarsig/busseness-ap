@@ -106,3 +106,11 @@ html.beta-dark input::placeholder, html.beta-dark textarea::placeholder { color:
 
 /* Nav: the active item glows purple (the single accent) */
 html.beta-dark nav .text-blue-600 { color:#AFA9EC !important; }
+
+/* Sidebar/drawer ACTIVE item: a rich purple pill with a soft glow — the current
+   page catches the eye. Scoped to nav buttons so the blue logo tile stays blue. */
+html.beta-dark aside button.bg-blue-600,
+html.beta-dark .animate-slide-in button.bg-blue-600 {
+  background-color:#4f46b5 !important;
+  box-shadow:0 6px 20px -6px rgba(127,119,221,.6), 0 0 0 1px rgba(127,119,221,.35) !important;
+}

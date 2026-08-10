@@ -55,6 +55,15 @@ function AppInner() {
   useEffect(() => {
     document.documentElement.classList.toggle('beta-dark', !!data.settings.betaLook);
   }, [data.settings.betaLook]);
+  // ?demo sandbox → default the beta dark-premium look ON, so a fresh demo load
+  // shows the desktop redesign without needing the Settings toggle. Dev-only; the
+  // real app (no ?demo) keeps beta opt-in and is untouched.
+  useEffect(() => {
+    const inDemo = import.meta.env.DEV && new URLSearchParams(window.location.search).has('demo');
+    if (inDemo && !data.settings.betaLook) {
+      dispatch({ type: 'UPDATE_SETTINGS', payload: { betaLook: true } });
+    }
+  }, [data.settings.betaLook, dispatch]);
   // Land a brand-new user (empty app, hasn't chatted yet) on the AI concierge for
   // first open (slice 2) instead of the empty dashboard — the "easy and welcoming"
   // first minute. Lazy init runs once; once they chat or add anything, it's off.

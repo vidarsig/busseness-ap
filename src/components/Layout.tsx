@@ -108,6 +108,14 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
   useEffect(() => {
     try { localStorage.setItem('nav.businessOpen', businessOpen ? '1' : '0'); } catch { /* ignore */ }
   }, [businessOpen]);
+  // Beta look shows a real DESKTOP shell on a wide screen and the phone frame only
+  // on an actual narrow (phone) viewport — so a laptop stops looking like the app.
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 900);
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const companyName = data.settings.company.name || t('appName');
   const isOperator = isOperatorAccount(data.settings);
 
@@ -273,7 +281,7 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
   // stable desktop layout is untouched. Bars are `absolute` within the frame (not
   // `fixed` to the viewport) so they stay the width of the phone column.
   const phoneLook = data.settings.betaLook;
-  if (phoneLook) {
+  if (phoneLook && isNarrow) {
     return (
       <div className="min-h-screen bg-slate-200 flex justify-center">
         <div className="relative w-full max-w-[440px] h-screen bg-gray-50 shadow-2xl overflow-hidden flex flex-col">
@@ -345,6 +353,42 @@ export default function Layout({ view, setView, children, sessionUser, perms, on
             ))}
           </nav>
         </div>
+      </div>
+    );
+  }
+
+  // PREMIUM DESKTOP (beta look, wide screen): a real desktop shell wearing the
+  // app's skin — roomy sidebar + wide content on a soft canvas, Mike in the
+  // corner — instead of shrinking the app into a phone column.
+  if (phoneLook) {
+    return (
+      <div className="min-h-screen flex bg-gray-50">
+        <aside className="flex flex-col w-64 flex-shrink-0 h-screen sticky top-0 no-print bg-white border-r border-gray-200 shadow-sm">
+          <NavContent />
+        </aside>
+        <div className="flex-1 min-w-0 flex flex-col">
+          <main className="flex-1 overflow-auto">
+            <div className="max-w-7xl mx-auto p-6 lg:p-8">{children}</div>
+          </main>
+        </div>
+        {canAccessView('ai', perms ?? null) && (
+          <button
+            onClick={() => setView('ai')}
+            aria-label={lang === 'is' ? 'Talaðu við Mike' : 'Talk to Mike'}
+            className="fixed right-6 bottom-6 z-40 no-print flex items-center gap-2 active:scale-95 transition-transform"
+          >
+            {view !== 'ai' && (
+              <span className="text-xs font-medium px-3 py-2 rounded-xl shadow"
+                style={{ background: '#7F77DD', color: '#1a1633', borderBottomRightRadius: '3px' }}>
+                {lang === 'is' ? 'Talaðu við mig' : 'Talk to me'}
+              </span>
+            )}
+            <span className="mike-bob w-16 h-16 rounded-full overflow-hidden shadow-lg block"
+              style={{ background: '#211d3a', border: '2px solid #7F77DD' }}>
+              <img src="/mike-head.png" alt="" className="w-full h-full object-cover" style={{ objectPosition: 'center top' }} />
+            </span>
+          </button>
+        )}
       </div>
     );
   }

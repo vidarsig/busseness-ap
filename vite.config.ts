@@ -69,7 +69,9 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true,
+        // Off in dev: the service worker only caused stale-cache confusion while
+        // iterating locally. Production still gets the full PWA from the build.
+        enabled: false,
       },
     }),
   ],
