@@ -1127,23 +1127,39 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     }
   }
 
-  // Point a proposed fix back at the real transaction. Returns null when the ref
-  // no longer lines up — the books can change mid-chat (a Book, an import, an
-  // edit in the Transactions screen), which shifts every row's position. Checking
-  // the AI's remembered date/amount means a stale ref is refused, never applied
-  // to whatever row happens to sit at that number now.
-  // Returns the row to change, or why it can't be changed. A fix naming a key
-  // that isn't in the chart of accounts is refused rather than applied without
-  // it — the key IS the change in most fixes, so silently dropping it would tell
-  // the owner "fixed" while leaving the entry exactly as wrong as before.
+  // Point a proposed fix back at the real transaction. The AI numbers rows by
+  // their 1-based position in the SELECTED year (see ai.ts), so a bare ref only
+  // lands when the app sits on the exact year the AI saw — switch away and #10
+  // now points at a different row (or none). To kill that fragility, resolveFix
+  // SELF-HEALS: it tries the positional ref first, and if that row is gone or no
+  // longer carries the date+amount the AI remembered, it looks the transaction up
+  // by that remembered date+amount across the WHOLE book. A ref then finds its row
+  // regardless of which year the app is on. It only heals to a UNIQUE match — zero
+  // or several candidates stay refused, never applied to the wrong row (and since
+  // date is a full YYYY-MM-DD, a same-amount row in another year can't be mistaken
+  // for it). A fix naming a key that isn't in the chart of accounts is refused
+  // rather than applied without it — the key IS the change in most fixes, so
+  // silently dropping it would tell the owner "fixed" while leaving it as wrong.
   function resolveFix(f: FixTx): { tx: Transaction } | { tx: null; why: string } {
     const stale = lang === 'is'
       ? `Færsla #${f.ref} fannst ekki lengur — sleppt. Spurðu aftur svo AI-ið sjái nýju stöðuna.`
       : `Entry #${f.ref} no longer matches — skipped. Ask again so the AI sees the current books.`;
-    const tx = txPool(data.transactions, aiYear ?? undefined)[Number(f.ref) - 1];
+    const wantDate = f.was?.date;
+    const wantAmt = f.was?.amount != null ? Math.round(Number(f.was.amount)) : null;
+    const fits = (t: Transaction) =>
+      (!wantDate || wantDate === t.date) &&
+      (wantAmt == null || wantAmt === Math.round(t.amount));
+    // 1) Positional ref for the year the AI saw — the fast path when the app agrees.
+    let tx: Transaction | null = txPool(data.transactions, aiYear ?? undefined)[Number(f.ref) - 1] ?? null;
+    // 2) Self-heal: the row is missing or shifted → find the ONE entry carrying the
+    //    remembered date + amount. Needs both, and exactly one candidate, to be safe.
+    if ((!tx || !fits(tx)) && wantDate && wantAmt != null) {
+      const hits = data.transactions.filter(t => t.date === wantDate && Math.round(t.amount) === wantAmt);
+      tx = hits.length === 1 ? hits[0] : null;
+    } else if (tx && !fits(tx)) {
+      tx = null;
+    }
     if (!tx) return { tx: null, why: stale };
-    if (f.was?.date && f.was.date !== tx.date) return { tx: null, why: stale };
-    if (f.was?.amount != null && Math.round(Number(f.was.amount)) !== Math.round(tx.amount)) return { tx: null, why: stale };
     if (f.set.accountNumber && !data.accounts.some(a => a.number === String(f.set.accountNumber))) {
       return { tx: null, why: lang === 'is'
         ? `Lykill ${f.set.accountNumber} er ekki til í lyklaskránni — sleppt. Búðu hann til fyrst, eða veldu lykil sem er til.`

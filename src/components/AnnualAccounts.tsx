@@ -1,4 +1,4 @@
-﻿import { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
@@ -696,7 +696,7 @@ export default function AnnualAccounts() {
             </table>
             {Math.abs(bsDiff) > 1 ? (
               <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-200 text-xs text-yellow-800">
-                âš  {lang === 'is' ? 'Efnahagsreikningur jafnast ekki â€” uppfÃ¦rÃ°u opnunarstÃ¶Ã°ur' : 'Balance sheet does not balance â€” update opening balances'}
+                ⚠️ {lang === 'is' ? 'Efnahagsreikningur jafnast ekki — uppfærðu opnunarstöður' : 'Balance sheet does not balance — update opening balances'}
               </div>
             ) : (
               <div className="px-4 py-2 bg-green-50 border-t border-green-200 text-xs text-green-700">
