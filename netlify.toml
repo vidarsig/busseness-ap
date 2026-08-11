@@ -30,6 +30,12 @@
   to = "/hub.html"
   status = 200
 
+# Clean URL for the English marketing / landing page
+[[redirects]]
+  from = "/welcome"
+  to = "/welcome.html"
+  status = 200
+
 [[edge_functions]]
   path = "/api/claude-stream"
   function = "claude-stream"
