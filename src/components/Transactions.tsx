@@ -6,7 +6,7 @@ import PhotoViewer from './PhotoViewer';
 import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
-  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
+  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES, KEY_REQUIRED_CATEGORIES,
 } from '../types';
 import { getVATAmountISK, getTotalISK, invoiceReceivedISK, yearOf } from '../utils/calculations';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
@@ -114,8 +114,14 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
     setForm(f => ({ ...f, type: newType, category: defaultCat, vatRate: newType === 'transfer' ? 0 : f.vatRate, invoiceId: newType === 'income' ? f.invoiceId : undefined, vatExempt: newType === 'income' ? f.vatExempt : undefined }));
   }
 
+  // A contribution, a draw or a loan movement has to land on a key or it lands
+  // nowhere — the entry silently misses the balance sheet. Block the save instead.
+  const keyRequired = (KEY_REQUIRED_CATEGORIES as readonly string[]).includes(form.category);
+  const keyMissing = keyRequired && !data.accounts.some(a => a.id === form.accountId && a.isActive);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (keyMissing) return;
     const rates = data.settings.exchangeRates;
     const rate = form.currency === 'ISK' ? 1 : (form.currency === 'EUR' ? form.eurToIskRate : rates[form.currency as keyof typeof rates] ?? 1);
     const tx: Transaction = { ...form, id: initial.id ?? newId(), eurToIskRate: rate };
@@ -245,8 +251,11 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 
           {data.accounts.filter(a => a.isActive).length > 0 && (
             <div>
-              <label className={labelCls}>{lang === 'is' ? 'Bókhaldslykill (valfrjálst)' : 'Key / account (optional)'}</label>
-              <select className={inputCls} value={form.accountId ?? ''} onChange={e => set('accountId', e.target.value)}>
+              <label className={labelCls}>{keyRequired
+                ? (lang === 'is' ? 'Bókhaldslykill (skylda)' : 'Key / account (required)')
+                : (lang === 'is' ? 'Bókhaldslykill (valfrjálst)' : 'Key / account (optional)')}</label>
+              <select className={keyMissing ? inputCls.replace('border-gray-300', 'border-red-400') : inputCls}
+                value={form.accountId ?? ''} onChange={e => set('accountId', e.target.value)}>
                 <option value="">{lang === 'is' ? 'Enginn lykill' : 'No key'}</option>
                 {data.accounts.filter(a => a.isActive)
                   .sort((a, b) => a.number.localeCompare(b.number))
@@ -254,7 +263,13 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
                     <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
                   ))}
               </select>
-              <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Bókar færsluna á tiltekinn lykil (t.d. veðskuldabréf, leigutekjur).' : 'Books this entry onto a specific key (e.g. a loan, rent income).'}</p>
+              {keyMissing ? (
+                <p className="text-xs text-red-600 mt-1">{lang === 'is'
+                  ? 'Veldu lykilinn sem þessi færsla á að fara á — t.d. viðskiptareikning eiganda eða lánið. Annars kemur hún hvergi fram á efnahagsreikningnum.'
+                  : 'Pick the key this entry belongs to — the owner account, or the loan. Without it the entry never reaches the balance sheet.'}</p>
+              ) : (
+                <p className="text-xs text-gray-400 mt-1">{lang === 'is' ? 'Bókar færsluna á tiltekinn lykil (t.d. veðskuldabréf, leigutekjur).' : 'Books this entry onto a specific key (e.g. a loan, rent income).'}</p>
+              )}
             </div>
           )}
 
@@ -380,8 +395,8 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-xl text-sm font-medium hover:bg-gray-50">
               {t('cancel')}
             </button>
-            <button type="submit"
-              className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-blue-700">
+            <button type="submit" disabled={keyMissing}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300">
               {t('save')}
             </button>
           </div>

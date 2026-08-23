@@ -553,8 +553,15 @@ export const TRANSFER_CATEGORIES = [
   'lan_afborgun',
   'lan_mottekid',
   'framlag',
+  'uttekt',
   'ekki_rekstur',
 ] as const;
+
+// The four categories above 'ekki_rekstur' MOVE A BALANCE-SHEET KEY, so a key is
+// mandatory on them. Without one the entry lands nowhere: that is exactly how six
+// years of owner draws were booked as plain expenses and never reached key 2420,
+// leaving the owner account showing only the money paid IN.
+export const KEY_REQUIRED_CATEGORIES = ['lan_afborgun', 'lan_mottekid', 'framlag', 'uttekt'] as const;
 
 export type IncomeCategory = typeof INCOME_CATEGORIES[number];
 export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
