@@ -80,6 +80,71 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
   return rows;
 }
 
+// Money IN and money OUT booked onto a key, per year — the two halves that
+// accountBalanceByYear nets into one closing figure. Kept separate because the
+// SPLIT is the diagnostic: a balance key that only ever receives, or only ever
+// pays, is almost always missing entries rather than telling the truth. The
+// owner account of this app's first company ran one-way for six years — every
+// contribution booked, every draw filed as a plain expense with no key — and
+// read as a 16 M liability when the owner in fact owed the company. Netted to a
+// closing balance that is invisible; split in two it is obvious at a glance.
+export function accountFlowByYear(account: Account, transactions: Transaction[]): { year: number; in: number; out: number }[] {
+  const movs = transactions.filter(tx => tx.accountId === account.id);
+  if (!movs.length) return [];
+  const years = [...new Set(movs.map(tx => yearOf(tx.date)))].sort();
+  return years.map(y => {
+    let moneyIn = 0, moneyOut = 0;
+    for (const tx of movs) {
+      if (yearOf(tx.date) !== y) continue;
+      const gross = getTransactionISK(tx);
+      // Same direction test as accountBalanceByYear, so the two never disagree.
+      if (tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') moneyIn += gross;
+      else moneyOut += gross;
+    }
+    return { year: y, in: moneyIn, out: moneyOut };
+  });
+}
+
+// KEYING GAPS — the single most useful health check in the books.
+// Signature: ONE counterparty whose rows are keyed on some entries and carry NO key
+// at all on others. That is not a style difference, it is half a relationship
+// falling out of the balance sheet. Every serious error in this app's first set of
+// books had exactly this shape: the owner keyed on 2420 for 128 rows and unkeyed on
+// 86 (18,7 M of draws that never reached his account); Arion and Fylkir loan
+// repayments keyed on the loan for some rows and filed as ordinary expenses for the
+// rest. Netted balances hide it; this comparison shows it in one line.
+export function keyingGaps(
+  transactions: Transaction[],
+  accounts: Account[],
+  limit = 12,
+): { name: string; keyedRows: number; keys: string[]; bareRows: number; bareAmount: number }[] {
+  const byId = new Map(accounts.map(a => [a.id, a]));
+  const g = new Map<string, { keyed: number; keys: Set<string>; bare: number; bareAmt: number }>();
+  for (const tx of transactions) {
+    const name = (tx.description || '').trim();
+    if (!name) continue;
+    let e = g.get(name);
+    if (!e) { e = { keyed: 0, keys: new Set(), bare: 0, bareAmt: 0 }; g.set(name, e); }
+    const acc = tx.accountId ? byId.get(tx.accountId) : undefined;
+    if (acc) { e.keyed++; e.keys.add(acc.number); }
+    else { e.bare++; e.bareAmt += getTransactionISK(tx); }
+  }
+  return [...g.entries()]
+    .filter(([, e]) => e.keyed > 0 && e.bare > 0)
+    .map(([name, e]) => ({ name, keyedRows: e.keyed, keys: [...e.keys].sort(), bareRows: e.bare, bareAmount: e.bareAmt }))
+    .sort((a, b) => b.bareAmount - a.bareAmount)
+    .slice(0, limit);
+}
+
+// True when a key has moved in only ONE direction across its whole life — the
+// shape that means "entries are missing", not "this is the balance".
+export function isOneWayAccount(flow: { in: number; out: number }[]): boolean {
+  if (flow.length < 2) return false;   // a single year is not yet a pattern
+  const totIn = flow.reduce((s, f) => s + f.in, 0);
+  const totOut = flow.reduce((s, f) => s + f.out, 0);
+  return (totIn > 0 && totOut === 0) || (totOut > 0 && totIn === 0);
+}
+
 // A missing/invalid vatRate is treated as 0% so the VAT math never yields NaN
 // (which would corrupt totals on the return). Guards imported/legacy rows.
 const safeRate = (t: Transaction) => (typeof t.vatRate === 'number' && !Number.isNaN(t.vatRate)) ? t.vatRate : 0;

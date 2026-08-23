@@ -1,5 +1,5 @@
 import { AppData, Transaction } from '../types';
-import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear, yearOf, monthOf } from './calculations';
+import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear, accountFlowByYear, isOneWayAccount, keyingGaps, yearOf, monthOf } from './calculations';
 
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
@@ -418,9 +418,22 @@ export function buildContext(data: AppData, lang: string, year?: number): string
       const byYear = isBalance ? accountBalanceByYear(a, data.transactions) : [];
       const yearEnd = byYear.length
         ? `\n      year-end: ${byYear.map(r => `${r.year}=${fmtNum(r.closing)}`).join(', ')}` : '';
-      return `  ${a.number} ${a.name}${en} [${a.type}${isBalance ? ', balance — carries forward' : ', P&L — resets yearly'}${ob}]${yearEnd}`;
+      // The in/out SPLIT, not just the net — this is what makes a missing side visible.
+      const flow = isBalance ? accountFlowByYear(a, data.transactions) : [];
+      const flowLine = flow.length
+        ? `\n      in/out: ${flow.map(r => `${r.year} in ${fmtNum(r.in)} / out ${fmtNum(r.out)}`).join(' · ')}` : '';
+      const oneWay = isOneWayAccount(flow)
+        ? `\n      ⚠ ONE-WAY: this key has only ever moved in one direction. Treat the balance as UNRELIABLE — the other side is almost certainly booked elsewhere (typically as ordinary expenses with no key). Say so and go find those entries before quoting this figure.`
+        : '';
+      return `  ${a.number} ${a.name}${en} [${a.type}${isBalance ? ', balance — carries forward' : ', P&L — resets yearly'}${ob}]${yearEnd}${flowLine}${oneWay}`;
     })
     .join('\n');
+
+  // Counterparties keyed on some rows and not on others — see keyingGaps().
+  const gaps = keyingGaps(data.transactions, data.accounts ?? []);
+  const gapsList = gaps.length
+    ? gaps.map(g => `  ${g.name} — ${g.keyedRows} rows on key ${g.keys.join('/')}, but ${g.bareRows} rows with NO key (${fmtNum(g.bareAmount)})`).join('\n')
+    : '  (none — every counterparty is keyed consistently)';
 
   return `${year != null ? `>>> WORKING YEAR: ${year} <<<
 You are analysing ${year}. Every transaction of ${year} is listed below IN FULL — if
@@ -464,8 +477,23 @@ booked onto. "balance" keys (asset/liability/equity, e.g. loans/veðskuldabréf)
 carry their balance forward year to year from the opening figure; "P&L" keys
 (revenue/expense) reset each year. When asked where something should be booked,
 name the exact key from this list; remember per-counterparty booking choices via
-a jobboks-remember block so they stick:
+a jobboks-remember block so they stick.
+Each balance key also shows its MONEY IN and MONEY OUT for every year, not only the net
+year-end figure. READ THAT SPLIT. A key that receives every year and never pays out (or
+the reverse) is missing its other side — it is marked ⚠ ONE-WAY, and you must raise that
+instead of quoting the balance. It is the cheapest health check in the app: run your eye
+over it whenever the owner asks about a balance, an owner account, a loan, or why the
+annual accounts do not balance:
 ${keysList || '  (no keys defined yet — see Bókhaldslyklar)'}
+
+KEYING GAPS — the same counterparty booked onto a key on SOME rows and onto NO key at
+all on others. This is the highest-value check in the book: it means half of that
+relationship never reached the balance sheet. It is how this app's first company came
+to show the owner account one-way for six years. When the owner asks about a balance,
+a loan, an owner account, or why the accounts do not balance, START HERE — name the
+counterparty, say how much is sitting unkeyed, and propose ONE jobboks-fix block that
+puts those rows on the right key. Do not make the owner find them.
+${gapsList}
 
 COUNTERPARTY INDEX — ${year != null
   ? `every party in ${year} ONLY (grouped by description; n=number of transactions,
