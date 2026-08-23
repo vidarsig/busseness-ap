@@ -349,6 +349,8 @@ export default function BankImport() {
   const [importing, setImporting] = useState(false);
   const [done, setDone] = useState(0);
   const [findings, setFindings] = useState<ImportFinding[]>([]);
+  const [imported, setImported] = useState<Transaction[]>([]);
+  const [taught, setTaught] = useState<Record<string, string>>({});
   const fmt = (n: number) => formatCurrency(Math.abs(n), (data.settings.defaultCurrency || 'ISK') as never, lang as never);
   const [error, setError] = useState('');
   const [learnPattern, setLearnPattern] = useState('');
@@ -575,12 +577,59 @@ export default function BankImport() {
     });
     setDone(newTxs.length);
     // React to what just came in, instead of ending on a green tick.
+    setImported(newTxs);
+    setTaught({});
     setFindings(newTxs.length
       ? reviewImport(newTxs, [...data.transactions, ...newTxs], data.accounts ?? [], data.settings.taxAuthority)
       : []);
     setRows([]);
     setImporting(false);
     if (fileRef.current) fileRef.current.value = '';
+  }
+
+  // ONE TAP TO TEACH THE BOOKS WHO SOMEBODY IS.
+  // Naming a new party used to mean three separate jobs — a rule in Flokkunarreglur,
+  // a key in Færslur, and telling the AI — so in practice nobody did any of them and
+  // the same party arrived unkeyed every month. This does all three at once.
+  type Role = 'tenant' | 'supplier' | 'owner' | 'lender';
+  function findKey(role: Role) {
+    const acc = (data.accounts ?? []).filter(a => a.isActive);
+    const txt = (a: typeof acc[number]) => `${a.number} ${a.name} ${a.nameEn || ''}`.toLowerCase();
+    if (role === 'tenant') return acc.find(a => a.type === 'revenue' && (a.number === '6000' || /leig|rent/.test(txt(a))));
+    if (role === 'owner') return acc.find(a => a.type === 'liability' && /eigand|owner/.test(txt(a)));
+    if (role === 'lender') {
+      const loans = acc.filter(a => a.type === 'liability' && /l[aá]n|loan|skuldabr/.test(txt(a)));
+      return loans.length === 1 ? loans[0] : undefined;   // only when it is unambiguous
+    }
+    return undefined;
+  }
+  function teachParty(party: string, role: Role) {
+    const key = findKey(role);
+    const rows = imported.filter(t => t.description.trim().toLowerCase() === party.trim().toLowerCase());
+    rows.forEach(t => {
+      const isIn = t.type === 'income' || t.amount > 0;
+      const patch: Transaction = { ...t };
+      if (key) patch.accountId = key.id;
+      if (role === 'tenant') { patch.type = 'income'; patch.category = 'sala_thjonustu'; patch.vatRate = 0; patch.vatExempt = true; }
+      if (role === 'supplier') { patch.type = 'expense'; patch.category = 'adrir_rekstrargjold'; }
+      if (role === 'owner') { patch.type = 'transfer'; patch.category = isIn ? 'framlag' : 'uttekt'; patch.vatRate = 0; }
+      if (role === 'lender') { patch.type = 'transfer'; patch.category = isIn ? 'lan_mottekid' : 'lan_afborgun'; patch.vatRate = 0; }
+      dispatch({ type: 'UPDATE_TRANSACTION', payload: patch });
+    });
+    const cat = role === 'tenant' ? 'sala_thjonustu' : role === 'supplier' ? 'adrir_rekstrargjold'
+      : role === 'owner' ? 'uttekt' : 'lan_afborgun';
+    const ttype: TransactionType = role === 'tenant' ? 'income' : role === 'supplier' ? 'expense' : 'transfer';
+    const existing = data.categoryRules.find(r => r.pattern.toLowerCase() === party.toLowerCase());
+    if (existing) dispatch({ type: 'UPDATE_RULE', payload: { ...existing, category: cat, type: ttype, vatRate: 0 } });
+    else dispatch({ type: 'ADD_RULE', payload: { id: `rule_${Date.now()}`, pattern: party, category: cat, type: ttype, vatRate: 0, useCount: 0, createdAt: todayISO() } });
+    const label = role === 'tenant' ? 'a tenant — rent' : role === 'supplier' ? 'a supplier — a cost'
+      : role === 'owner' ? 'the owner himself — draws and contributions' : 'a lender — loan movements';
+    const note = `${party} is ${label}${key ? `, booked on key ${key.number}` : ''}.`;
+    const mem = (data.aiMemory || '').trim();
+    if (!mem.includes(party)) dispatch({ type: 'SET_AI_MEMORY', payload: mem ? `${mem}${String.fromCharCode(10)}${note}` : note });
+    const roleIs = { tenant: 'leigjandi', supplier: 'birgir', owner: 'eigandi', lender: 'lánveitandi' }[role];
+    const roleEn = { tenant: 'a tenant', supplier: 'a supplier', owner: 'the owner', lender: 'a lender' }[role];
+    setTaught(t => ({ ...t, [party]: `${lang === 'is' ? roleIs : roleEn}${key ? ` · ${key.number}` : ''}` }));
   }
 
   const inp = 'border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500';
@@ -667,9 +716,27 @@ export default function BankImport() {
                     {f.kind === 'keyed-elsewhere' && (lang === 'is'
                       ? <><b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}) án lykils, en þessi aðili er annars bókaður á lykil <b>{f.key}</b>.</>
                       : <><b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>)}
-                    {f.kind === 'new-party' && (lang === 'is'
-                      ? <>Nýr aðili: <b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}). Hef ekki séð hann áður.</>
-                      : <>New party: <b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}). Never seen before.</>)}
+                    {f.kind === 'new-party' && (taught[f.title]
+                      ? (lang === 'is'
+                          ? <><b>{f.title}</b> — skráð sem <b>{taught[f.title]}</b>. Ég man þetta og flokka hann sjálfkrafa næst{taught[f.title].includes('·') ? '' : ' — en ég fann engan lykil sem passar, veldu hann í Færslum'}.</>
+                          : <><b>{f.title}</b> — saved as <b>{taught[f.title]}</b>. I will remember and categorise it myself next time{taught[f.title].includes('·') ? '' : ' — but I found no matching key, pick one in Transactions'}.</>)
+                      : <>
+                          {lang === 'is'
+                            ? <>Nýr aðili: <b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}). Hver er þetta?</>
+                            : <>New party: <b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}). Who is this?</>}
+                          <span className="flex flex-wrap gap-1.5 mt-1.5">
+                            {([['tenant', lang === 'is' ? 'Leigjandi' : 'Tenant'],
+                               ['supplier', lang === 'is' ? 'Birgir' : 'Supplier'],
+                               ['owner', lang === 'is' ? 'Ég sjálfur' : 'Me'],
+                               ['lender', lang === 'is' ? 'Lánveitandi' : 'Lender']] as [Role, string][])
+                              .map(([role, txt]) => (
+                                <button key={role} onClick={() => teachParty(f.title, role)}
+                                  className="px-2 py-1 rounded-md bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 text-[11px] font-medium">
+                                  {txt}
+                                </button>
+                              ))}
+                          </span>
+                        </>)}
                   </span>
                 </li>
               ))}
