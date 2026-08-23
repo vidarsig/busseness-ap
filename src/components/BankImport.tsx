@@ -7,7 +7,8 @@ import { Transaction, TransactionType, Invoice, EXPENSE_CATEGORIES, INCOME_CATEG
 import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/ai';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { matchRule } from './AutoRules';
-import { todayISO } from '../utils/formatters';
+import { reviewImport, ImportFinding } from '../utils/calculations';
+import { todayISO, formatCurrency } from '../utils/formatters';
 
 function newId() { return `tx_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
@@ -347,6 +348,8 @@ export default function BankImport() {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [done, setDone] = useState(0);
+  const [findings, setFindings] = useState<ImportFinding[]>([]);
+  const fmt = (n: number) => formatCurrency(Math.abs(n), (data.settings.defaultCurrency || 'ISK') as never, lang as never);
   const [error, setError] = useState('');
   const [learnPattern, setLearnPattern] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -571,6 +574,10 @@ export default function BankImport() {
       if (rule) dispatch({ type: 'UPDATE_RULE', payload: { ...rule, useCount: rule.useCount + count, lastUsed: new Date().toISOString().split('T')[0] } });
     });
     setDone(newTxs.length);
+    // React to what just came in, instead of ending on a green tick.
+    setFindings(newTxs.length
+      ? reviewImport(newTxs, [...data.transactions, ...newTxs], data.accounts ?? [], data.settings.taxAuthority)
+      : []);
     setRows([]);
     setImporting(false);
     if (fileRef.current) fileRef.current.value = '';
@@ -640,6 +647,38 @@ export default function BankImport() {
         {done > 0 && (
           <div className="mt-3 flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
             <Check className="w-4 h-4 flex-shrink-0" />{done} {lang === 'is' ? 'færslur fluttar inn' : 'transactions imported'}
+          </div>
+        )}
+
+        {done > 0 && findings.length > 0 && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900 mb-2">
+              <Bot className="w-4 h-4 flex-shrink-0" />
+              {lang === 'is' ? 'Ég leit yfir það sem kom inn' : 'I looked over what came in'}
+            </div>
+            <ul className="space-y-1.5 text-xs text-amber-900">
+              {findings.map((f, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-amber-500">•</span>
+                  <span>
+                    {f.kind === 'tax' && (lang === 'is'
+                      ? <><b>{f.rows} greiðsla til innheimtumanns</b> ({fmt(f.amount)}) bókaðist sem kostnaður. Greiðsla á skatti er ekki rekstrarkostnaður — hún lækkar skuldina. Settu hana á skuldalykilinn.</>
+                      : <><b>{f.rows} payment(s) to the tax authority</b> ({fmt(f.amount)}) landed as a cost. Paying tax is not an expense — it settles a debt. Put these on the liability key.</>)}
+                    {f.kind === 'keyed-elsewhere' && (lang === 'is'
+                      ? <><b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}) án lykils, en þessi aðili er annars bókaður á lykil <b>{f.key}</b>.</>
+                      : <><b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>)}
+                    {f.kind === 'new-party' && (lang === 'is'
+                      ? <>Nýr aðili: <b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}). Hef ekki séð hann áður.</>
+                      : <>New party: <b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}). Never seen before.</>)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-amber-700 mt-2">
+              {lang === 'is'
+                ? 'Farðu í Færslur, síaðu á "Enginn lykill" og settu réttan lykil á þær — eða spurðu mig í spjallinu.'
+                : 'Go to Transactions, filter on "No key" and set the right key — or ask me in the chat.'}
+            </p>
           </div>
         )}
 

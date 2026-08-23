@@ -105,6 +105,74 @@ export function accountFlowByYear(account: Account, transactions: Transaction[])
   });
 }
 
+// WHAT THE AI SAYS BACK AFTER A BANK IMPORT.
+// Importing used to end with a green tick and nothing else, so every mistake the
+// import made sat there until somebody went looking months later. These are the
+// checks that would have caught this app's first company: 6.880.851 of tax payments
+// filed as ordinary expenses, and six years of owner draws landing with no key
+// because history taught the importer to call them "adrir_rekstrargjold".
+export interface ImportFinding {
+  kind: 'tax' | 'keyed-elsewhere' | 'new-party';
+  title: string;
+  rows: number;
+  amount: number;
+  key?: string;
+}
+
+export function reviewImport(
+  imported: Transaction[],
+  all: Transaction[],
+  accounts: Account[],
+  taxAuthority?: string,
+): ImportFinding[] {
+  const byId = new Map(accounts.map(a => [a.id, a]));
+  const out: ImportFinding[] = [];
+  const norm = (s: string) => (s || '').trim().toLowerCase();
+
+  // 1. Money paid to the tax authority is a SETTLEMENT of a debt, never a cost.
+  const taxWords = ['ríkissjóðsinnheimt', 'rikissjodsinnheimt', 'sýslumað', 'syslumad',
+    'skatturinn', 'tollstjóri', 'tollstjori', 'innheimtumað', 'innheimtumad']
+    .concat(taxAuthority ? [norm(taxAuthority)] : []);
+  const taxRows = imported.filter(t =>
+    taxWords.some(w => w && norm(t.description).includes(w)) && !byId.get(t.accountId || ''));
+  if (taxRows.length) {
+    out.push({ kind: 'tax', rows: taxRows.length,
+      amount: taxRows.reduce((s2, t) => s2 + getTransactionISK(t), 0),
+      title: 'paid to the tax authority but booked as a cost' });
+  }
+
+  // 2. This party is normally booked onto a key — these rows arrived without one.
+  const keyOf = new Map<string, string>();
+  for (const t of all) {
+    const acc = t.accountId ? byId.get(t.accountId) : undefined;
+    if (acc) keyOf.set(norm(t.description), acc.number);
+  }
+  const groups = new Map<string, { n: number; amt: number; key: string }>();
+  for (const t of imported) {
+    if (byId.get(t.accountId || '')) continue;
+    const k = keyOf.get(norm(t.description));
+    if (!k) continue;
+    const g = groups.get(t.description) || { n: 0, amt: 0, key: k };
+    g.n++; g.amt += getTransactionISK(t); groups.set(t.description, g);
+  }
+  for (const [name, g] of [...groups.entries()].sort((a, b) => b[1].amt - a[1].amt)) {
+    out.push({ kind: 'keyed-elsewhere', title: name, rows: g.n, amount: g.amt, key: g.key });
+  }
+
+  // 3. Somebody the books have never seen — worth a glance, not a fault.
+  const known = new Set(all.filter(t => !imported.includes(t)).map(t => norm(t.description)));
+  const fresh = new Map<string, { n: number; amt: number }>();
+  for (const t of imported) {
+    if (known.has(norm(t.description))) continue;
+    const g = fresh.get(t.description) || { n: 0, amt: 0 };
+    g.n++; g.amt += getTransactionISK(t); fresh.set(t.description, g);
+  }
+  for (const [name, g] of [...fresh.entries()].sort((a, b) => b[1].amt - a[1].amt).slice(0, 5)) {
+    out.push({ kind: 'new-party', title: name, rows: g.n, amount: g.amt });
+  }
+  return out;
+}
+
 // KEYING GAPS — the single most useful health check in the books.
 // Signature: ONE counterparty whose rows are keyed on some entries and carry NO key
 // at all on others. That is not a style difference, it is half a relationship
