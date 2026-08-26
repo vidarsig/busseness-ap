@@ -417,25 +417,79 @@ export default function BankImport() {
     setAiProgress(0);
     setAiTotal(todo.length);
 
-    // The AI sees ~40 transactions per request. Big historical imports (6000+
-    // rows) are processed in sequential batches with a live progress counter,
-    // so one slow/failed batch never sinks the whole run.
+    // DECIDE ONCE PER MERCHANT, NOT ONCE PER ROW.
+    //
+    // Every row used to be judged on its own inside a batch of 40, and each batch
+    // was an independent call with no memory of the last one. So the SAME merchant
+    // got different answers depending on where it happened to fall in the file: on
+    // a real import, 32 fuel rows (N1 / Orkan / OB) came back as four different
+    // categories — including húsaleiga — at two different VAT rates. Books that
+    // disagree with themselves are worse than books that are consistently wrong,
+    // because nothing reconciles and the owner cannot see the pattern.
+    //
+    // So: group the rows by their normalised description, ask about each distinct
+    // merchant ONCE, and apply that answer to every row it owns. Sorting the
+    // merchants first also puts "N1 Laekjargata" next to "N1 ehf." in the same
+    // call, so near-identical names are judged together instead of hours apart.
+    // On the 188-row import this cut the rows sent to the AI by well over half.
+    //
+    // Bank lines also carry the BRANCH — "N1 Laekjargata", "N1 Haholt", "Orkan
+    // Dalvegi", "Orkan Fitjum" — so grouping on the whole name still leaves one
+    // petrol chain looking like four different suppliers. Telling the model to
+    // treat them as one was not enough, so the code decides it: rows whose first
+    // word matches join one family. Merging on a first word could in principle
+    // put two people who share a forename together, so a family only forms when
+    // the first word is clearly a trading name rather than a given name — it has
+    // a digit in it (N1), is very short (OB, BK), or the same word already heads
+    // three or more different lines. Anything else stays on its own.
+    const first = (s: string) => foldName(s).split(' ')[0] || '';
+    const heads = new Map<string, Set<string>>();
+    for (const item of todo) {
+      const h = first(item.r.description);
+      if (!h) continue;
+      const set = heads.get(h) ?? new Set<string>();
+      set.add(foldName(item.r.description));
+      heads.set(h, set);
+    }
+    const isFamily = (h: string) =>
+      !!h && (/\d/.test(h) || h.length <= 3 || (heads.get(h)?.size ?? 0) >= 3);
+    const keyOf = (desc: string) => {
+      const h = first(desc);
+      return isFamily(h) ? `#${h}` : (foldName(desc) || desc);
+    };
+
+    const groups = new Map<string, { rows: typeof todo; sample: string; total: number }>();
+    for (const item of todo) {
+      const k = keyOf(item.r.description);
+      const g = groups.get(k);
+      if (g) { g.rows.push(item); g.total += item.r.amount; }
+      else groups.set(k, { rows: [item], sample: item.r.description, total: item.r.amount });
+    }
+    const merchants = [...groups.values()].sort((a, b) => a.sample.localeCompare(b.sample));
+
+    // Batches are now merchants, not rows.
     const BATCH = 40;
     let processed = 0;
     try {
-      for (let start = 0; start < todo.length; start += BATCH) {
-        const slice = todo.slice(start, start + BATCH);
+      for (let start = 0; start < merchants.length; start += BATCH) {
+        const slice = merchants.slice(start, start + BATCH);
         try {
           const results = await categorizeBatch(
-            slice.map(({ r }) => ({ description: r.description, amount: r.amount, detectedType: r.type })),
+            slice.map(g => ({
+              description: g.sample,
+              amount: Math.round(g.total / g.rows.length),   // the typical amount
+              detectedType: g.rows[0].r.type,
+              rowCount: g.rows.length,
+            })),
             allCategories,
             validVats,
           );
           setRows(prev => {
             const next = [...prev];
-            slice.forEach(({ i }, k) => {
+            slice.forEach((g, k) => {
               const s = results[k];
               if (!s) return;
+              for (const { i } of g.rows) {
               const base = next[i];
               const unsure = s.confidence === 'low';
               if (s.type === 'transfer') {
@@ -445,21 +499,32 @@ export default function BankImport() {
                 const cat = (TRANSFER_CATEGORIES as readonly string[]).includes(s.category)
                   ? s.category : 'ekki_rekstur';
                 next[i] = { ...base, type: 'transfer', category: cat, vatRate: 0, matchedRule: undefined, needsReview: unsure };
+              } else if (s.type !== base.type) {
+                // THE BANK DECIDES THE DIRECTION, NOT THE MODEL. The statement
+                // already says whether money came in or went out; a minus sign is
+                // not a matter of opinion. Left unguarded, the model turned a
+                // petrol station — "OLIS ESJUB AKR", money OUT — into sala_vara
+                // INCOME on seven rows, which inflates both turnover and the VAT
+                // payable on it. Marking something a "transfer" is different and
+                // still allowed: that reclassifies the row without flipping it.
+                // So keep the bank's direction, drop the category that belonged to
+                // the wrong side, and put the row in front of the owner.
+                next[i] = { ...base, matchedRule: undefined, needsReview: true };
               } else {
                 next[i] = {
                   ...base,
-                  type: s.type === 'income' || s.type === 'expense' ? s.type : base.type,
                   category: allCategories.includes(s.category) ? s.category : base.category,
                   vatRate: validVats.includes(s.vatRate) ? s.vatRate : base.vatRate,
                   matchedRule: undefined,
                   needsReview: unsure,
                 };
               }
+              }
             });
             return next;
           });
         } catch { /* skip this batch, keep going */ }
-        processed += slice.length;
+        processed += slice.reduce((n, g) => n + g.rows.length, 0);
         setAiProgress(processed);
       }
     } finally {

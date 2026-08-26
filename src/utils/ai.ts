@@ -873,13 +873,44 @@ ${buildContext(data, lang, year)}`;
 }
 
 export async function categorizeBatch(
-  rows: Array<{ description: string; amount: number; detectedType: string }>,
+  rows: Array<{ description: string; amount: number; detectedType: string; rowCount?: number }>,
   categories: string[],
   vatRates: number[],
 ): Promise<Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number; confidence: 'high' | 'low' }>> {
+  const standard = Math.max(...vatRates);
   const system = `You are a bookkeeping categorization engine. Analyze bank transaction descriptions and categorize them.
 Available income/expense categories: ${categories.join(', ')}
 Available VAT rates: ${vatRates.join(', ')}%
+
+ONE LINE = ONE MERCHANT, NOT ONE PAYMENT. Each line is a distinct counterparty and your answer is
+applied to EVERY transaction with that name — "×12" means twelve rows ride on this one decision.
+Repeat purchases from the same shop are the same category every time; decide what that shop IS.
+
+THE SAME BUSINESS AT DIFFERENT BRANCHES IS ONE BUSINESS. Bank lines carry the branch: "N1 Laekjargata",
+"N1 Haholt", "Orkan Dalvegi", "Orkan Fitjum" are one petrol chain each, not four different kinds of
+supplier. The list is sorted, so those lines sit next to each other — read them as a group and give
+every line sharing a leading name the SAME category and the SAME VAT rate. Answering one branch
+"samgongur" and the next "rafmagn_hiti" makes the books disagree with themselves.
+
+"detected" IS THE BANK'S OWN DIRECTION AND IT IS NOT YOURS TO OVERRULE. Money out is money out. Never
+answer "income" for a line detected as an expense, or the reverse — a shop you buy from is not a
+customer. If a line looks like the wrong direction, the honest answer is "transfer" (it may be a
+refund, a loan movement or an owner draw) with confidence "low", never a flip.
+
+VAT: DO NOT DEFAULT TO 0%. On this business's ordinary purchases the standard rate is ${standard}%,
+and booking them at 0% silently throws away the input VAT the owner is entitled to reclaim — real
+money, every month. Fuel, building materials, tools, hardware, equipment hire, vehicle costs,
+software, phone and office supplies all carry ${standard}% unless you have a concrete reason to say
+otherwise. Use 0% only where the transaction genuinely carries no VAT: wages and payroll taxes,
+loan payments and interest, insurance premiums, residential rent, payments to the tax authority,
+transfers, and anything you have marked as "transfer". If you are unsure between ${standard}% and
+0% on a normal business purchase, choose ${standard}% and set confidence "low".
+
+PERSONAL SPENDING IS NOT A BUSINESS COST. Supermarkets, off-licences and liquor stores, restaurants
+and takeaways, pharmacies, clothing and consumer electronics are almost never deductible for a
+one-person contractor. Do not quietly file them as an operating expense: categorize them as best
+you can and ALWAYS set confidence "low" so the owner is asked. A wrongly deducted grocery bill is
+the first thing a tax audit finds.
 
 IMPORTANT — not every inflow is income, and not every outflow is an expense.
 If a transaction is NOT real business income or expense, set "type":"transfer". Pick the transfer category:
@@ -897,7 +928,8 @@ Respond with ONLY a valid JSON array, one object per transaction (same order as 
 No explanation, just the JSON array.`;
 
   const userMsg = rows.map((r, i) =>
-    `${i + 1}. "${r.description}" amount:${r.amount} detected:${r.detectedType}`
+    `${i + 1}. "${r.description}" typical amount:${r.amount} detected:${r.detectedType}`
+    + (r.rowCount && r.rowCount > 1 ? ` ×${r.rowCount} rows` : '')
   ).join('\n');
 
   const text = await callClaude(system, [{ role: 'user', content: userMsg }], 'claude-haiku-4-5-20251001', 2048);
