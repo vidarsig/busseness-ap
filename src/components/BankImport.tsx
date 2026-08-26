@@ -481,9 +481,28 @@ export default function BankImport() {
     }
     const merchants = [...groups.values()].sort((a, b) => a.sample.localeCompare(b.sample));
 
+    // The categoriser used to see a description, an amount and a direction, and
+    // nothing else — not the settings, not the chat, not what the owner had already
+    // taught it. So a company that had just said "I'm on my own, no employees" got
+    // twelve rows booked to Laun. Hand it the few facts that actually change an
+    // answer.
+    const staff = (data.employees ?? []).length;
+    const businessContext = [
+      `Company: ${data.settings.company.name || '(unnamed)'} in ${data.settings.country || 'unknown country'}.`,
+      staff === 0
+        ? 'Nobody is on the payroll — there are no employees, so a payment is never wages.'
+        : `${staff} ${staff === 1 ? 'person is' : 'people are'} on the payroll.`,
+      (data.aiMemory || '').trim()
+        ? `Parties the owner has already identified:
+${(data.aiMemory || '').trim()}`
+        : '',
+    ].filter(Boolean).join(String.fromCharCode(10));
+
     // Batches are now merchants, not rows.
     const BATCH = 40;
     let processed = 0;
+    let failed = 0;
+    let lastError = '';
     try {
       for (let start = 0; start < merchants.length; start += BATCH) {
         const slice = merchants.slice(start, start + BATCH);
@@ -497,6 +516,7 @@ export default function BankImport() {
             })),
             allCategories,
             validVats,
+            businessContext,
           );
           setRows(prev => {
             const next = [...prev];
@@ -537,9 +557,26 @@ export default function BankImport() {
             });
             return next;
           });
-        } catch { /* skip this batch, keep going */ }
+        } catch (e) {
+          // One bad batch must not sink a 6000-row import, so we keep going —
+          // but silence is worse. Tapping the button, waiting, and getting
+          // nothing back reads as a broken app; it is usually an expired session
+          // (the endpoint is signed-in only) or a dropped connection.
+          failed++;
+          lastError = e instanceof Error ? e.message : String(e);
+        }
         processed += slice.reduce((n, g) => n + g.rows.length, 0);
         setAiProgress(processed);
+      }
+      if (failed > 0) {
+        const done = merchants.length - failed * BATCH;
+        setError(lang === 'is'
+          ? (done > 0
+              ? `Náði ekki að flokka allt — ${failed} ${isPlural(failed, 'lota', 'lotur')} mistókst. Farðu yfir þær sem eftir standa eða reyndu aftur. (${lastError})`
+              : `Náði ekki að flokka. Ertu örugglega skráð/ur inn? (${lastError})`)
+          : (done > 0
+              ? `Could not sort everything — ${failed} ${failed === 1 ? 'batch' : 'batches'} failed. Review what is left, or try again. (${lastError})`
+              : `Could not sort. Are you signed in? (${lastError})`));
       }
     } finally {
       setAiLoading(false);
@@ -896,8 +933,8 @@ export default function BankImport() {
             </ul>
             <p className="text-[11px] text-amber-700 mt-2">
               {lang === 'is'
-                ? 'Farðu í Færslur, síaðu á "Enginn lykill" og settu réttan lykil á þær — eða spurðu mig í spjallinu.'
-                : 'Go to Transactions, filter on "No key" and set the right key — or ask me in the chat.'}
+                ? 'Svaraðu hér að ofan og ég set lyklana sjálfur. Ef eitthvað er óljóst, spurðu mig í spjallinu — þú þarft ekki að leita að neinu.'
+                : 'Answer above and I will set the keys myself. If anything is unclear, ask me in the chat — you should not have to go looking for it.'}
             </p>
           </div>
         )}

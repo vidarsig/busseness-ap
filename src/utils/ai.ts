@@ -763,6 +763,13 @@ Read your sentence back as an Icelander before you send it: if it only makes sen
 knows the English original, rewrite it.
 ` : ''}
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
+
+LAST THING BEFORE YOU ANSWER — YOUR FIRST WORDS. Rule 4 above is the one you break most, so read it
+again here, where you cannot forget it between the instruction and the reply. You opened with
+"Frábært", "Velkominn! Skulum koma þessu í lag" and "You're right" — including once while answering
+the owner asking whether you exist to please him. Do not open with praise of the question, an
+exclamation, or agreement. Your first sentence carries the finding, the number, or the answer.
+Warmth belongs in HOW you explain something, never in an opening compliment.
 When asked about specific transactions, reference the data provided.
 ${data.aiMemory && data.aiMemory.trim() ? `
 THINGS TO ALWAYS REMEMBER (the owner told you these — honour them in every reply):
@@ -937,6 +944,7 @@ export async function categorizeBatch(
   rows: Array<{ description: string; amount: number; detectedType: string; rowCount?: number }>,
   categories: string[],
   vatRates: number[],
+  business?: string,
 ): Promise<Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number; confidence: 'high' | 'low' }>> {
   const standard = Math.max(...vatRates);
   const system = `You are a bookkeeping categorization engine. Analyze bank transaction descriptions and categorize them.
@@ -967,7 +975,13 @@ loan payments and interest, insurance premiums, residential rent, payments to th
 transfers, and anything you have marked as "transfer". If you are unsure between ${standard}% and
 0% on a normal business purchase, choose ${standard}% and set confidence "low".
 
-PERSONAL SPENDING IS NOT A BUSINESS COST. Supermarkets, off-licences and liquor stores, restaurants
+${business ? `THIS BUSINESS — use it, do not guess around it:
+${business}
+These are facts the owner already told the app, so contradicting them is not a judgement call, it
+is an error. A one-person company with nobody on the payroll cannot have wage payments; a party the
+owner has already identified is that party on every row it appears in.
+
+` : ''}PERSONAL SPENDING IS NOT A BUSINESS COST. Supermarkets, off-licences and liquor stores, restaurants
 and takeaways, pharmacies, clothing and consumer electronics are almost never deductible for a
 one-person contractor. Do not quietly file them as an operating expense: categorize them as best
 you can and ALWAYS set confidence "low" so the owner is asked. A wrongly deducted grocery bill is
