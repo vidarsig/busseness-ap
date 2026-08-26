@@ -75,4 +75,15 @@ export default defineConfig({
       },
     }),
   ],
+  // Dev only — production is served by Netlify and is untouched by this.
+  // The AI lives in Netlify functions (/api/claude) and an edge function
+  // (/api/claude-stream), neither of which runs under `vite dev`. Without a
+  // proxy the AI is simply dead locally, which makes testing a fresh empty app
+  // pointless — the one thing you want to watch is how it reacts to an import
+  // it has never seen. So point /api at the deployed site.
+  server: {
+    proxy: {
+      '/api': { target: 'https://jobboks.app', changeOrigin: true, secure: true },
+    },
+  },
 })
