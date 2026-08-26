@@ -1,4 +1,4 @@
-import { Transaction, Currency, Account } from '../types';
+import { Transaction, Currency, Account, BalanceSheetItem } from '../types';
 
 // Transaction dates are stored as date-only "YYYY-MM-DD". `new Date("2025-01-01")`
 // parses as UTC midnight, so `.getFullYear()` returns the LOCAL year — off by one
@@ -171,6 +171,24 @@ export function reviewImport(
     out.push({ kind: 'new-party', title: name, rows: g.n, amount: g.amt });
   }
   return out;
+}
+
+// Fixed assets live in balanceSheetItems, NOT as transactions — so anything that
+// reads only the transaction rows misses them entirely. The AI did exactly that and
+// reported total assets of 39.955 for a company holding 50 M of property.
+// land + the building depreciated straight-line from the acquired year; 0 before it.
+export function assetBookValue(item: BalanceSheetItem, y: number): number {
+  if (item.cost == null || item.acquiredYear == null) return item.amount;
+  if (y < item.acquiredYear) return 0;
+  const land = item.landValue ?? 0;
+  const building = Math.max(item.cost - land, 0);
+  const rate = (item.depreciationRate ?? 0) / 100;
+  const yearsHeld = Math.max(y - item.acquiredYear, 0);
+  const depreciated = Math.min(building * rate * yearsHeld, building);
+  return land + (building - depreciated);
+}
+export function assetVisible(item: BalanceSheetItem, y: number): boolean {
+  return item.acquiredYear == null || y >= item.acquiredYear;
 }
 
 // KEYING GAPS — the single most useful health check in the books.

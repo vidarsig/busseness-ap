@@ -1,5 +1,5 @@
 import { AppData, Transaction } from '../types';
-import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear, accountFlowByYear, isOneWayAccount, keyingGaps, yearOf, monthOf } from './calculations';
+import { calcProfitLoss, calcVATSummary, filterByYear, accountBalanceByYear, accountFlowByYear, isOneWayAccount, keyingGaps, assetBookValue, assetVisible, yearOf, monthOf } from './calculations';
 
 const CLAUDE_URL = '/api/claude';
 const CLAUDE_STREAM_URL = '/api/claude-stream';
@@ -429,6 +429,35 @@ export function buildContext(data: AppData, lang: string, year?: number): string
     })
     .join('\n');
 
+  // Fixed assets and opening balances live in balanceSheetItems, not in the rows.
+  // Without this the AI cannot see that the company owns any property at all.
+  const bsItems = data.balanceSheetItems ?? [];
+  const bsYears = (() => {
+    const ys = data.transactions.map(t => yearOf(t.date)).filter(Number.isFinite);
+    const hi = ys.length ? Math.max(...ys) : new Date().getFullYear();
+    return [hi - 5, hi - 4, hi - 3, hi - 2, hi - 1, hi].filter(y => y > 2015);
+  })();
+  const bsBySection = (sec: string) => bsItems.filter(b => b.section === sec);
+  const bsList = ['fixed_assets', 'current_assets', 'long_term_liabilities', 'current_liabilities', 'equity']
+    .map(sec => {
+      const rows = bsBySection(sec);
+      if (!rows.length) return '';
+      const body = rows.map(b => {
+        const depreciating = b.cost != null && b.acquiredYear != null;
+        const head = depreciating
+          ? `    ${b.name} — kostnaðarverð ${fmtNum(b.cost as number)}, keypt ${b.acquiredYear}`
+            + `${b.landValue ? `, þar af lóð ${fmtNum(b.landValue)}` : ''}`
+            + `${b.depreciationRate ? `, afskrift ${b.depreciationRate}%/ári` : ''}`
+        : `    ${b.name}: ${fmtNum(b.amount)}`;
+        const byYear = depreciating
+          ? '\n      bókfært verð: ' + bsYears.filter(y => assetVisible(b, y))
+              .map(y => `${y}=${fmtNum(assetBookValue(b, y))}`).join(', ')
+          : '';
+        return head + byYear;
+      }).join('\n');
+      return `  ${sec}:\n${body}`;
+    }).filter(Boolean).join('\n');
+
   // Counterparties keyed on some rows and not on others — see keyingGaps().
   const gaps = keyingGaps(data.transactions, data.accounts ?? []);
   const gapsList = gaps.length
@@ -485,6 +514,13 @@ instead of quoting the balance. It is the cheapest health check in the app: run 
 over it whenever the owner asks about a balance, an owner account, a loan, or why the
 annual accounts do not balance:
 ${keysList || '  (no keys defined yet — see Bókhaldslyklar)'}
+
+EFNAHAGSLIÐIR (Stofnstöður) — fixed assets, opening balances and share capital. These are
+NOT transactions and appear NOWHERE in the rows or the keys below, so you must add them in
+by hand when you build a balance sheet. A property is carried at BÓKFÆRT VERÐ = land (never
+depreciated) + building less straight-line depreciation from the year it was acquired, and it
+does not exist at all before that year. If this block is empty the company owns no fixed assets:
+${bsList || '  (engir efnahagsliðir skráðir)'}
 
 KEYING GAPS — the same counterparty booked onto a key on SOME rows and onto NO key at
 all on others. This is the highest-value check in the book: it means half of that

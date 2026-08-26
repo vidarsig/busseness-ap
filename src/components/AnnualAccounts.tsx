@@ -4,6 +4,7 @@ import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem, Account } from '../types';
+import { assetBookValue, assetVisible } from '../utils/calculations';
 
 function newId() {
   return `bs_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -11,24 +12,6 @@ function newId() {
 
 // Year-end BOOK VALUE of a balance-sheet item for a given year. A plain item just
 // returns its static amount; a depreciating fixed asset (cost + acquiredYear set)
-// returns land + the building depreciated straight-line at depreciationRate from the
-// acquired year — and 0 before it was acquired (so a property only appears once owned).
-function assetBookValue(item: BalanceSheetItem, y: number): number {
-  if (item.cost == null || item.acquiredYear == null) return item.amount;
-  if (y < item.acquiredYear) return 0;
-  const land = item.landValue ?? 0;
-  const building = Math.max(item.cost - land, 0);
-  const rate = (item.depreciationRate ?? 0) / 100;
-  const yearsHeld = Math.max(y - item.acquiredYear, 0);
-  const depreciated = Math.min(building * rate * yearsHeld, building);
-  return land + (building - depreciated);
-}
-// Whether an item should appear in year y — a plain item always does; a fixed asset
-// with an acquired year only from that year on.
-function assetVisible(item: BalanceSheetItem, y: number): boolean {
-  return item.acquiredYear == null || y >= item.acquiredYear;
-}
-
 interface BSModalProps {
   initial?: BalanceSheetItem;
   onSave: (item: BalanceSheetItem) => void;
