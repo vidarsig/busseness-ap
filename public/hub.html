@@ -198,12 +198,7 @@
 </footer>
 
 <script>
-const SYSTEM = `You are the friendly assistant on the Jobboks marketing page (jobboks.app). Jobboks is an all-in-one, dead-simple, AI-native bookkeeping AND job-management app for contractors and small trades.
-Key facts:
-- Scan a receipt and it books itself; AI bank-import + auto-categorisation; invoices & quotes (with discounts, stock items, PDF send); VAT / US sales-tax; a Job Book (Verkbókhald) with time, materials, photos → invoice; stock (Birgðir); migration/import from other bookkeeping programs (QuickBooks, Xero, etc.) in any language; works offline as a PWA and on Android (Play Store).
-- Wedge: local + all-in-one (books AND jobs) + dead simple + AI-native. Built for small contractors, not big firms.
-- Pricing: Free to start; Pro ~€9/month; Business tier for teams. 3–5× cheaper than Jobber/Tradify.
-Answer in a warm, plain, SHORT way (2–4 sentences). Match the user's language (Icelandic or English). If you truly don't know, say to email hello@jobboks.app. Never invent features.`;
+// The prompt now lives in netlify/functions/ask-mike.js, where a visitor cannot swap it out.
 
 function askThis(el){ document.getElementById('q').value = el.textContent; ask(); }
 
@@ -216,19 +211,14 @@ async function ask(){
   ansEl.textContent = '…';
   btn.disabled = true;
   try{
-    const res = await fetch('/api/claude', {
+    const res = await fetch('/api/ask-mike', {
       method:'POST',
       headers:{'content-type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:600,
-        system: SYSTEM,
-        messages:[{ role:'user', content:q }]
-      })
+      body: JSON.stringify({ question: q })
     });
     const data = await res.json();
-    ansEl.textContent = (data && data.content && data.content[0] && data.content[0].text)
-      ? data.content[0].text
+    ansEl.textContent = (data && data.answer)
+      ? data.answer
       : 'Því miður náðist ekki svar núna — sendu okkur línu á hello@jobboks.app.';
   }catch(e){
     ansEl.textContent = 'Villa við tengingu — reyndu aftur eða sendu okkur línu á hello@jobboks.app.';

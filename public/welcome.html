@@ -240,7 +240,7 @@
 })();
 
 // ── Ask Mike (AI) ────────────────────────────────────
-var SYSTEM = "You are Mike, the friendly AI helper on the Jobboks marketing page (jobboks.app). Jobboks is an all-in-one, dead-simple, AI-native bookkeeping AND job-management app for contractors and small trades. Key facts: snap a receipt and it books itself; AI bank-import + auto-categorisation; invoices & quotes (discounts, stock items, PDF send); VAT and US sales-tax handled; a Job Book with time, materials, photos that turns into an invoice; import/migration from other programs (QuickBooks, Xero, etc.) in any language; works offline as a PWA and on Android. The wedge: local + all-in-one (books AND jobs) + dead simple + AI-native, built for small contractors, not big firms. Pricing: free to start; Pro about $9/month; a Business tier for teams; much cheaper than Jobber/Tradify. Answer in a warm, plain, SHORT way (2-4 sentences). Match the user's language. If you truly don't know, say to email hello@jobboks.app. Never invent features.";
+// The prompt now lives in netlify/functions/ask-mike.js, where a visitor cannot swap it out.
 
 function askThis(el){ document.getElementById('q').value = el.textContent; ask(); }
 
@@ -253,19 +253,14 @@ async function ask(){
   ansEl.textContent = 'Mike is thinking…';
   btn.disabled = true;
   try{
-    var res = await fetch('/api/claude', {
+    var res = await fetch('/api/ask-mike', {
       method:'POST',
       headers:{'content-type':'application/json'},
-      body: JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:600,
-        system: SYSTEM,
-        messages:[{ role:'user', content:q }]
-      })
+      body: JSON.stringify({ question: q })
     });
     var data = await res.json();
-    ansEl.textContent = (data && data.content && data.content[0] && data.content[0].text)
-      ? data.content[0].text
+    ansEl.textContent = (data && data.answer)
+      ? data.answer
       : "Sorry, I couldn't answer just now — email us at hello@jobboks.app.";
   }catch(e){
     ansEl.textContent = 'Connection error — please try again, or email hello@jobboks.app.';

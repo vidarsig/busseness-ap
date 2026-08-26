@@ -3,6 +3,14 @@
   to = "/.netlify/functions/claude"
   status = 200
 
+# The public marketing pages ask through this one instead of /api/claude: it is
+# open by necessity (no login on those pages) but takes only a question — the
+# prompt, model and token ceiling are fixed server-side.
+[[redirects]]
+  from = "/api/ask-mike"
+  to = "/.netlify/functions/ask-mike"
+  status = 200
+
 [[redirects]]
   from = "/api/send-email"
   to = "/.netlify/functions/send-email"

@@ -27,6 +27,7 @@ import ReviewManager from './components/ReviewManager';
 import Login from './components/Login';
 import { View } from './types';
 import { getSession } from './utils/supabase';
+import { setAuthTokenProvider } from './utils/ai';
 import { resolvePermissions, canAccessView, isOperatorAccount } from './utils/access';
 import UpdatePrompt from './components/UpdatePrompt';
 import TestModeBanner from './components/TestModeBanner';
@@ -84,6 +85,10 @@ function AppInner() {
       setAuthChecked(true);
       return;
     }
+    // The AI endpoints check that the caller is signed in, so give ai.ts a way to
+    // read the CURRENT token on every request — reading it once here would go
+    // stale the moment Supabase refreshes the session.
+    setAuthTokenProvider(async () => (await getSession(supabaseUrl, supabaseKey))?.access_token ?? '');
     getSession(supabaseUrl, supabaseKey).then(session => {
       if (session?.user) {
         const meta = session.user.user_metadata as { name?: string } | undefined;

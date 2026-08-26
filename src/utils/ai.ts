@@ -24,10 +24,23 @@ export type ContentBlock =
 
 export interface ApiMessage { role: 'user' | 'assistant'; content: string | ContentBlock[]; }
 
+// The AI endpoints are no longer open to the world: they check that the caller is
+// a signed-in user. The app registers ONE way to fetch the current session token
+// at start-up, so every request here can carry it without each call site having to
+// know anything about auth. In the ?demo sandbox there is no session and this
+// simply returns nothing.
+let authTokenProvider: () => Promise<string> = async () => '';
+export function setAuthTokenProvider(fn: () => Promise<string>) { authTokenProvider = fn; }
+
+export async function aiAuthHeaders(): Promise<Record<string, string>> {
+  const token = await authTokenProvider().catch(() => '');
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
 async function apiPost(body: object): Promise<Response> {
   return fetch(CLAUDE_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await aiAuthHeaders()) },
     body: JSON.stringify(body),
   });
 }
@@ -174,7 +187,7 @@ export async function streamClaude(
   try {
     res = await fetch(CLAUDE_STREAM_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await aiAuthHeaders()) },
     // Send the system prompt as a cacheable block. It holds the whole financial
     // context (every year's summary + up to 2000 transactions) and is identical
     // across turns in a chat, so prompt caching means the model reads it once and

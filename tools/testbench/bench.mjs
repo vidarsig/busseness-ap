@@ -19,6 +19,8 @@
 //   --say "..."       ask one question and exit
 //   --script <path>   a text file, one question per line
 //   --host <url>      API host (default https://jobboks.app)
+//   --token <jwt>     Supabase access token (or set JOBBOKS_TOKEN) — the AI
+//                     endpoints are signed-in only
 //
 // With no --say and no --script it drops into a prompt where you just type.
 // ---------------------------------------------------------------------------
@@ -50,6 +52,7 @@ const opt = {
   say: flag('say'),
   script: flag('script'),
   host: flag('host', 'https://jobboks.app'),
+  token: flag('token', process.env.JOBBOKS_TOKEN || ''),
 };
 
 // ---- the app's own modules, bundled on demand ------------------------------
@@ -82,13 +85,20 @@ function buildApp() {
   return out;
 }
 
-// The app calls "/api/claude" because in the browser that is same-origin.
-// In Node there is no origin, so point relative /api calls at a real host.
-function patchFetch(host) {
+// The app calls "/api/claude" because in the browser that is same-origin. In Node
+// there is no origin, so point relative /api calls at a real host — and attach a
+// session, because those endpoints are signed-in only now (netlify/functions/_guard.js).
+// Set JOBBOKS_TOKEN to a Supabase access token: in the running app, devtools ->
+// Application -> Local Storage -> the sb-*-auth-token entry -> access_token.
+function patchFetch(host, token) {
   const real = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = (url, init) => {
-    if (typeof url === 'string' && url.startsWith('/api/')) { calls++; url = host + url; }
+    if (typeof url === 'string' && url.startsWith('/api/')) {
+      calls++;
+      url = host + url;
+      if (token) init = { ...init, headers: { ...(init && init.headers), authorization: `Bearer ${token}` } };
+    }
     return real(url, init);
   };
   return () => calls;
@@ -129,13 +139,13 @@ const rule = (s = '') => console.log('\n' + '─'.repeat(76) + (s ? '\n' + s : '
 
 // ---- main ------------------------------------------------------------------
 const app = await import(pathToFileURL(buildApp()).href);
-const apiCalls = patchFetch(opt.host);
+const apiCalls = patchFetch(opt.host, opt.token);
 
 console.log('\n╔' + '═'.repeat(74) + '╗');
 console.log('║  JOBBOKS TEST BENCH — nýr viðskiptavinur, tómt bókhald' + ' '.repeat(19) + '║');
 console.log('╚' + '═'.repeat(74) + '╝');
 console.log(`  fyrirtæki : ${opt.company}   land: ${opt.country}   tungumál: ${opt.lang}`);
-console.log(`  API       : ${opt.host}/api/claude`);
+console.log(`  API       : ${opt.host}/api/claude` + (opt.token ? '  (með aðgangslykli)' : '  ⚠ enginn aðgangslykill — AI-köll verða 401'));
 
 const data = freshBooks(app, opt);
 

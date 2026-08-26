@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { aiAuthHeaders } from '../utils/ai';
 import { View } from '../types';
 import {
   Star, MessageSquare, Bug, Lightbulb, XCircle, Copy, Check,
@@ -157,6 +158,8 @@ Be specific and actionable. For bugs, focus on what developers can actually fix 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          // The endpoint is signed-in only now — see netlify/functions/_guard.js.
+          ...(await aiAuthHeaders()),
         },
         body: JSON.stringify({
           model: 'claude-opus-4-5',
