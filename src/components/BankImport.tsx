@@ -3,7 +3,7 @@ import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt, Fi
 import ReceiptMatcher from './ReceiptMatcher';
 import OpeningBalances from './OpeningBalances';
 import { useApp } from '../contexts/AppContext';
-import { Transaction, TransactionType, Invoice, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
+import { Transaction, TransactionType, Invoice, Account, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
 import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/ai';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { matchRule } from './AutoRules';
@@ -350,7 +350,8 @@ export default function BankImport() {
   const [done, setDone] = useState(0);
   const [findings, setFindings] = useState<ImportFinding[]>([]);
   const [imported, setImported] = useState<Transaction[]>([]);
-  const [taught, setTaught] = useState<Record<string, string>>({});
+  // What each party was taught, and whether teaching it had to CREATE the key.
+  const [taught, setTaught] = useState<Record<string, { role: string; keyNumber?: string; keyName?: string; created: boolean }>>({});
   const fmt = (n: number) => formatCurrency(Math.abs(n), (data.settings.defaultCurrency || 'ISK') as never, lang as never);
   const [error, setError] = useState('');
   const [learnPattern, setLearnPattern] = useState('');
@@ -592,19 +593,59 @@ export default function BankImport() {
   // a key in Færslur, and telling the AI — so in practice nobody did any of them and
   // the same party arrived unkeyed every month. This does all three at once.
   type Role = 'tenant' | 'supplier' | 'owner' | 'lender';
-  function findKey(role: Role) {
+  function findKey(role: Role, party = '') {
     const acc = (data.accounts ?? []).filter(a => a.isActive);
     const txt = (a: typeof acc[number]) => `${a.number} ${a.name} ${a.nameEn || ''}`.toLowerCase();
     if (role === 'tenant') return acc.find(a => a.type === 'revenue' && (a.number === '6000' || /leig|rent/.test(txt(a))));
     if (role === 'owner') return acc.find(a => a.type === 'liability' && /eigand|owner/.test(txt(a)));
     if (role === 'lender') {
-      const loans = acc.filter(a => a.type === 'liability' && /l[aá]n|loan|skuldabr/.test(txt(a)));
-      return loans.length === 1 ? loans[0] : undefined;   // only when it is unambiguous
+      // Only a key that names THIS lender counts. The generic "Langtímalán" is a
+      // catch-all, and putting a second lender on it makes both loans impossible to
+      // reconcile against their own payment schedules afterwards — every lender
+      // gets its own key instead (ensureKey creates it).
+      const who = party.trim().toLowerCase();
+      return acc.find(a => a.type === 'liability' && who && txt(a).includes(who));
     }
     return undefined;
   }
+  // A brand-new set of books has NO owner account and NO rent-income key — neither
+  // is in DEFAULT_ACCOUNTS — and a first-time user has no loan keys either. Until
+  // now the app worked out exactly which key was missing and then told the owner to
+  // go and pick it in Transactions, which is the one thing it is told never to do:
+  // it dead-ends the very tap that was supposed to teach it. So make the key here,
+  // in the same tap, and say so.
+  function nextFreeNumber(from: string) {
+    const taken = new Set((data.accounts ?? []).map(a => a.number));
+    let n = Number(from);
+    while (taken.has(String(n))) n += 10;
+    return String(n);
+  }
+
+  function ensureKey(role: Role, party: string): { key?: Account; created: boolean } {
+    const found = findKey(role, party);
+    if (found) return { key: found, created: false };
+    // A supplier is a running cost — it belongs in the P&L, not on a balance key.
+    if (role === 'supplier') return { created: false };
+    const spec = role === 'owner'
+      ? { number: nextFreeNumber('2420'), name: 'Viðskiptareikningur eiganda',
+          nameEn: "Owner's current account", type: 'liability' as const }
+      : role === 'tenant'
+      ? { number: nextFreeNumber('3300'), name: 'Húsaleigutekjur',
+          nameEn: 'Rental income', type: 'revenue' as const }
+      // Every lender needs its OWN key: two loans sharing one key can never be
+      // reconciled against their schedules afterwards.
+      : { number: nextFreeNumber('2310'), name: `Lán — ${party}`,
+          nameEn: `Loan — ${party}`, type: 'liability' as const };
+    const key: Account = {
+      id: `ac_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      ...spec, isSystem: false, isActive: true,
+    };
+    dispatch({ type: 'ADD_ACCOUNT', payload: key });
+    return { key, created: true };
+  }
+
   function teachParty(party: string, role: Role) {
-    const key = findKey(role);
+    const { key, created } = ensureKey(role, party);
     const rows = imported.filter(t => t.description.trim().toLowerCase() === party.trim().toLowerCase());
     rows.forEach(t => {
       const isIn = t.type === 'income' || t.amount > 0;
@@ -629,7 +670,8 @@ export default function BankImport() {
     if (!mem.includes(party)) dispatch({ type: 'SET_AI_MEMORY', payload: mem ? `${mem}${String.fromCharCode(10)}${note}` : note });
     const roleIs = { tenant: 'leigjandi', supplier: 'birgir', owner: 'eigandi', lender: 'lánveitandi' }[role];
     const roleEn = { tenant: 'a tenant', supplier: 'a supplier', owner: 'the owner', lender: 'a lender' }[role];
-    setTaught(t => ({ ...t, [party]: `${lang === 'is' ? roleIs : roleEn}${key ? ` · ${key.number}` : ''}` }));
+    setTaught(t => ({ ...t, [party]: { role: lang === 'is' ? roleIs : roleEn,
+      keyNumber: key?.number, keyName: key?.name, created } }));
   }
 
   const inp = 'border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500';
@@ -718,8 +760,16 @@ export default function BankImport() {
                       : <><b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>)}
                     {f.kind === 'new-party' && (taught[f.title]
                       ? (lang === 'is'
-                          ? <><b>{f.title}</b> — skráð sem <b>{taught[f.title]}</b>. Ég man þetta og flokka hann sjálfkrafa næst{taught[f.title].includes('·') ? '' : ' — en ég fann engan lykil sem passar, veldu hann í Færslum'}.</>
-                          : <><b>{f.title}</b> — saved as <b>{taught[f.title]}</b>. I will remember and categorise it myself next time{taught[f.title].includes('·') ? '' : ' — but I found no matching key, pick one in Transactions'}.</>)
+                          ? <><b>{f.title}</b> — skráð sem <b>{taught[f.title].role}</b>. Ég man þetta og flokka hann sjálfkrafa næst
+                              {taught[f.title].keyNumber
+                                ? <> og setti færslurnar á lykil <b>{taught[f.title].keyNumber} {taught[f.title].keyName}</b>
+                                    {taught[f.title].created ? <>, sem ég bjó til í leiðinni</> : null}.</>
+                                : <>.</>}</>
+                          : <><b>{f.title}</b> — saved as <b>{taught[f.title].role}</b>. I will remember and categorise it myself next time
+                              {taught[f.title].keyNumber
+                                ? <> and put the rows on key <b>{taught[f.title].keyNumber} {taught[f.title].keyName}</b>
+                                    {taught[f.title].created ? <>, which I created for you</> : null}.</>
+                                : <>.</>}</>)
                       : <>
                           {lang === 'is'
                             ? <>Nýr aðili: <b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}). Hver er þetta?</>
