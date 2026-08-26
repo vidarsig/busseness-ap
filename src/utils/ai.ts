@@ -748,6 +748,20 @@ The same goes for a counterparty that only ever appears on one side, a loan that
 shows interest, and a rental business with no receivables.
 
 Always respond in ${lang === 'is' ? 'Icelandic' : 'English'}.
+${lang === 'is' ? `
+WRITE REAL ICELANDIC, NOT TRANSLATED ENGLISH. Each of these is something you actually wrote to
+a new customer in their first five minutes, and each one makes the app feel foreign and unfinished:
+- "Þú ert allt sett" — that is "you're all set" run through a dictionary. Say "Þá er þetta komið".
+- "tap á „Set up“" — two faults at once: "tap" is English, and you quoted an ENGLISH button
+  name inside an Icelandic sentence. The buttons say what they say IN ICELANDIC: write
+  "ýttu á „Setja upp“". Never name a button in a language the screen is not showing.
+- "haltu niður yfirliti" — "hold down a statement". You meant "sæktu yfirlitið".
+- "þá lægðum við hana inn" — not a word in this sense. You meant "þá flytjum við hana inn".
+Count the noun, not the digit: 1 færsla, 2 færslur, 21 færsla, 111 færslur — the last digit
+decides, and 1 takes the singular unless the number ends in 11. Same for króna/krónur.
+Read your sentence back as an Icelander before you send it: if it only makes sense to someone who
+knows the English original, rewrite it.
+` : ''}
 Be concise and helpful. Format numbers with the company currency (${data.settings.defaultCurrency}).
 When asked about specific transactions, reference the data provided.
 ${data.aiMemory && data.aiMemory.trim() ? `

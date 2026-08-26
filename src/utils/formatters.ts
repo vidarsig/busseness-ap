@@ -1,8 +1,26 @@
 import { Language, Currency } from '../types';
 
+// Not every browser ships Icelandic locale data — Android WebViews in particular
+// are often built with a trimmed ICU — and when it is missing Intl does not
+// complain: it quietly resolves "is-IS" to something like en-GB and every number
+// in the app comes out with English separators. "1.632.000 kr." became
+// "1,632,000 kr." on the very screen a new customer reads first, and the same
+// silent fallback reaches invoices, reports and the annual accounts.
+//
+// So ask Intl what it actually resolved to, and fall back to German, which groups
+// and decimalises exactly like Icelandic (1.632.000,50) and dates the same way
+// (31.12.2025). Resolved once — this runs on every formatted figure.
+const localeFor = (lang: Language): string => {
+  if (lang !== 'is') return 'en-US';
+  return icelandicLocale ??= new Intl.NumberFormat('is-IS').resolvedOptions().locale.startsWith('is')
+    ? 'is-IS'
+    : 'de-DE';
+};
+let icelandicLocale: string | undefined;
+
 export function formatISK(amount: number, lang: Language = 'is'): string {
   const abs = Math.abs(amount);
-  const formatted = new Intl.NumberFormat(lang === 'is' ? 'is-IS' : 'en-US', {
+  const formatted = new Intl.NumberFormat(localeFor(lang), {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(abs);
@@ -11,7 +29,7 @@ export function formatISK(amount: number, lang: Language = 'is'): string {
 }
 
 export function formatEUR(amount: number, lang: Language = 'is'): string {
-  return new Intl.NumberFormat(lang === 'is' ? 'is-IS' : 'en-US', {
+  return new Intl.NumberFormat(localeFor(lang), {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
@@ -26,7 +44,7 @@ export function formatCurrency(
 ): string {
   if (currency === 'ISK') return formatISK(amount, lang);
   const noDecimals = ['DKK', 'NOK', 'SEK'].includes(currency);
-  return new Intl.NumberFormat(lang === 'is' ? 'is-IS' : 'en-US', {
+  return new Intl.NumberFormat(localeFor(lang), {
     style: 'currency',
     currency,
     minimumFractionDigits: noDecimals ? 0 : 2,
@@ -36,7 +54,7 @@ export function formatCurrency(
 
 export function formatDate(dateStr: string, lang: Language = 'is'): string {
   const date = new Date(dateStr + 'T00:00:00');
-  return new Intl.DateTimeFormat(lang === 'is' ? 'is-IS' : 'en-US', {
+  return new Intl.DateTimeFormat(localeFor(lang), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

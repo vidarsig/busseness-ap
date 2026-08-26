@@ -12,6 +12,18 @@ import { todayISO, formatCurrency } from '../utils/formatters';
 
 function newId() { return `tx_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
+// Icelandic counts the noun, not the digit: 1 færsla, 2 færslur, 21 færsla,
+// 111 færslur. The rule is the last digit — 1 takes the singular unless the
+// number ends in 11. The import screen read "14 færsla" five times in a row on
+// a new customer's very first screen, which is the kind of thing that makes a
+// piece of software feel foreign.
+function isPlural(n: number, one: string, many: string) {
+  const abs = Math.abs(Math.round(n));
+  return abs % 10 === 1 && abs % 100 !== 11 ? one : many;
+}
+const rowsWord = (n: number, lang: string) =>
+  lang === 'is' ? isPlural(n, 'færsla', 'færslur') : (Math.abs(n) === 1 ? 'row' : 'rows');
+
 type BankFormat = 'arion' | 'islandsbanki' | 'landsbankinn' | 'generic' | 'auto';
 
 interface ParsedRow {
@@ -348,6 +360,8 @@ export default function BankImport() {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [done, setDone] = useState(0);
+  // How many rows were already in the books — shown, never swallowed.
+  const [skippedDupes, setSkippedDupes] = useState(0);
   const [findings, setFindings] = useState<ImportFinding[]>([]);
   const [imported, setImported] = useState<Transaction[]>([]);
   // What each party was taught, and whether teaching it had to CREATE the key.
@@ -554,6 +568,7 @@ export default function BankImport() {
     if (parsed.length === 0) { setError(lang === 'is' ? 'Engar færslur fundust — prófaðu annað snið' : 'No rows parsed — try a different format'); return; }
     setRows(applyRulesToRows(parsed));
     setDone(0);
+    setSkippedDupes(0);
   }
 
   function processFile(file: File) {
@@ -618,13 +633,24 @@ export default function BankImport() {
     const rate = cur === 'ISK' ? 1 : ((data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1);
     const ruleHits: Record<string, number> = {};
 
-    // De-duplicate against existing transactions (and within this batch) using a
-    // date|amount|description key, so re-importing an overlapping file is safe.
-    const seen = new Set(data.transactions.map(tx => `${tx.date}|${Math.round(tx.amount)}|${tx.description}`));
+    // De-duplicate against existing transactions (and within this batch), so
+    // re-importing an overlapping file is safe.
+    //
+    // The key USED to be date|amount|description, which quietly ate real
+    // transactions: two coffees at the same place on the same day for the same
+    // price is an ordinary thing to do, and the second one vanished. On a
+    // 188-row test import two rows disappeared for exactly that reason and the
+    // screen just said 186 with no explanation. The bank already hands us a
+    // unique receipt number per movement, so include it — a re-import of the
+    // same file still carries the same numbers and still dedupes correctly.
+    const keyFor = (date: string, amount: number, desc: string, ref?: string) =>
+      `${date}|${Math.round(amount)}|${desc}|${ref ?? ''}`;
+    const seen = new Set(data.transactions.map(tx => keyFor(tx.date, tx.amount, tx.description, tx.reference)));
     const newTxs: Transaction[] = [];
+    let skipped = 0;
     selected.forEach(r => {
-      const key = `${r.date}|${Math.round(r.amount)}|${r.description}`;
-      if (seen.has(key)) return;
+      const key = keyFor(r.date, r.amount, r.description, r.reference);
+      if (seen.has(key)) { skipped++; return; }
       seen.add(key);
       newTxs.push({
         id: newId(), date: r.date, description: r.description,
@@ -642,6 +668,7 @@ export default function BankImport() {
       if (rule) dispatch({ type: 'UPDATE_RULE', payload: { ...rule, useCount: rule.useCount + count, lastUsed: new Date().toISOString().split('T')[0] } });
     });
     setDone(newTxs.length);
+    setSkippedDupes(skipped);
     // React to what just came in, instead of ending on a green tick.
     setImported(newTxs);
     setTaught({});
@@ -800,9 +827,20 @@ export default function BankImport() {
             <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
           </div>
         )}
-        {done > 0 && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded-lg px-3 py-2">
-            <Check className="w-4 h-4 flex-shrink-0" />{done} {lang === 'is' ? 'færslur fluttar inn' : 'transactions imported'}
+        {/* Also shown when NOTHING was imported: a re-run of the same file used to
+            leave the screen completely silent, which reads as "it did not work". */}
+        {(done > 0 || skippedDupes > 0) && (
+          <div className={`mt-3 flex items-center gap-2 text-sm rounded-lg px-3 py-2 ${
+            done > 0 ? 'text-green-700 bg-green-50' : 'text-amber-800 bg-amber-50'}`}>
+            <Check className="w-4 h-4 flex-shrink-0" />
+            <span>
+              {done} {lang === 'is'
+                ? `${isPlural(done, 'færsla', 'færslur')} ${isPlural(done, 'flutt', 'fluttar')} inn`
+                : `${done === 1 ? 'transaction' : 'transactions'} imported`}
+              {skippedDupes > 0 && (lang === 'is'
+                ? ` · ${skippedDupes} ${rowsWord(skippedDupes, lang)} ${isPlural(skippedDupes, 'var', 'voru')} þegar í bókhaldinu og ${isPlural(skippedDupes, 'kom', 'komu')} ekki aftur inn`
+                : ` · ${skippedDupes} ${rowsWord(skippedDupes, lang)} ${skippedDupes === 1 ? 'was' : 'were'} already in the books and ${skippedDupes === 1 ? 'was' : 'were'} not imported again`)}
+            </span>
           </div>
         )}
 
@@ -818,11 +856,11 @@ export default function BankImport() {
                   <span className="text-amber-500">•</span>
                   <span>
                     {f.kind === 'tax' && (lang === 'is'
-                      ? <><b>{f.rows} greiðsla til innheimtumanns</b> ({fmt(f.amount)}) bókaðist sem kostnaður. Greiðsla á skatti er ekki rekstrarkostnaður — hún lækkar skuldina. Settu hana á skuldalykilinn.</>
-                      : <><b>{f.rows} payment(s) to the tax authority</b> ({fmt(f.amount)}) landed as a cost. Paying tax is not an expense — it settles a debt. Put these on the liability key.</>)}
+                      ? <><b>{f.rows} {isPlural(f.rows, 'greiðsla', 'greiðslur')} til innheimtumanns</b> ({fmt(f.amount)}) bókaðist sem kostnaður. Greiðsla á skatti er ekki rekstrarkostnaður — hún lækkar skuldina. Settu hana á skuldalykilinn.</>
+                      : <><b>{f.rows} {f.rows === 1 ? 'payment' : 'payments'} to the tax authority</b> ({fmt(f.amount)}) landed as a cost. Paying tax is not an expense — it settles a debt. Put these on the liability key.</>)}
                     {f.kind === 'keyed-elsewhere' && (lang === 'is'
-                      ? <><b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}) án lykils, en þessi aðili er annars bókaður á lykil <b>{f.key}</b>.</>
-                      : <><b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>)}
+                      ? <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}) án lykils, en þessi aðili er annars bókaður á lykil <b>{f.key}</b>.</>
+                      : <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>)}
                     {f.kind === 'new-party' && (taught[f.title]
                       ? (lang === 'is'
                           ? <><b>{f.title}</b> — skráð sem <b>{taught[f.title].role}</b>. Ég man þetta og flokka hann sjálfkrafa næst
@@ -837,8 +875,8 @@ export default function BankImport() {
                                 : <>.</>}</>)
                       : <>
                           {lang === 'is'
-                            ? <>Nýr aðili: <b>{f.title}</b> — {f.rows} færsla ({fmt(f.amount)}). Hver er þetta?</>
-                            : <>New party: <b>{f.title}</b> — {f.rows} row(s) ({fmt(f.amount)}). Who is this?</>}
+                            ? <>Nýr aðili: <b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}). Hver er þetta?</>
+                            : <>New party: <b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}). Who is this?</>}
                           <span className="flex flex-wrap gap-1.5 mt-1.5">
                             {([['tenant', lang === 'is' ? 'Leigjandi' : 'Tenant'],
                                ['supplier', lang === 'is' ? 'Birgir' : 'Supplier'],
@@ -881,7 +919,7 @@ export default function BankImport() {
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-gray-800">{lang === 'is' ? '2. Yfirfarðu og veldu' : '2. Review and select'}</h2>
-              <p className="text-xs text-gray-500">{selectedCount}/{rows.length} {lang === 'is' ? 'valdar' : 'selected'}</p>
+              <p className="text-xs text-gray-500">{selectedCount}/{rows.length} {lang === 'is' ? isPlural(selectedCount, 'valin', 'valdar') : 'selected'}</p>
             </div>
             <div className="flex gap-2 items-center">
               <button onClick={aiCategorizeAll} disabled={aiLoading}
@@ -1074,7 +1112,9 @@ export default function BankImport() {
             <button onClick={handleImport} disabled={selectedCount === 0 || importing}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40">
               <Check className="w-4 h-4" />
-              {lang === 'is' ? `Flytja inn ${selectedCount} færslur` : `Import ${selectedCount} transactions`}
+              {lang === 'is'
+                ? `Flytja inn ${selectedCount} ${isPlural(selectedCount, 'færslu', 'færslur')}`
+                : `Import ${selectedCount} ${selectedCount === 1 ? 'transaction' : 'transactions'}`}
             </button>
           </div>
         </div>
