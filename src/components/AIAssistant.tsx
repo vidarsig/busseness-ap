@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Send, Trash2, Sparkles, Loader2, AlertCircle, RefreshCw, Mic, Paperclip, X, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { ChatMessage, ApiMessage, ContentBlock, streamClaude, buildContext, buildChatSystem, generateInsights, txPool, detectYear } from '../utils/ai';
+import { ChatMessage, ApiMessage, ContentBlock, streamClaude, TransientAIError, buildContext, buildChatSystem, generateInsights, txPool, detectYear } from '../utils/ai';
 import { useSpeechRecognition } from '../utils/useSpeechRecognition';
 import { prepareAttachment, Attachment } from '../utils/attachment';
 import { exportExcelTable } from '../utils/exports';
@@ -543,6 +543,8 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     }
 
     const userMsg: ChatMessage = { role: 'user', content: shown, api: apiContent };
+    // Kept so a failed send can hand the question straight back to the owner.
+    const sentAttachments = attachments;
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setAttachments([]);
@@ -580,8 +582,22 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
         dispatch({ type: 'SET_AI_MEMORY', payload: updateMemory(data.aiMemory ?? '', remember, forget).text });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('aiError'));
-      setMessages(prev => prev.slice(0, -1));
+      // A failed turn used to strip only the empty assistant bubble and leave the
+      // question stranded in the thread with a bare "API error 502" under it —
+      // and that orphan then rode along in the context of every later message.
+      // Take the question back out and put it in the box, so sending again is one
+      // tap and the thread stays clean either way.
+      const transient = e instanceof TransientAIError;
+      setMessages(prev => prev.slice(0, assistantText ? -1 : -2));
+      if (!assistantText) {
+        setInput(input);
+        setAttachments(sentAttachments);
+      }
+      setError(transient
+        ? (lang === 'is'
+            ? 'Náði ekki sambandi við aðstoðarmanninn. Spurningin þín er komin aftur í reitinn — reyndu aftur eftir augnablik.'
+            : "Couldn't reach the assistant. Your question is back in the box — try again in a moment.")
+        : (e instanceof Error ? e.message : t('aiError')));
     } finally {
       setLoading(false);
     }

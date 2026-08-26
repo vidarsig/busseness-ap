@@ -150,14 +150,29 @@ Rules (all column values are 0-based indices into a row):
   };
 }
 
+// Thrown when the request never got off the ground — a cold edge function, a
+// dropped connection, a rate limit. Nothing was streamed, so the caller can put
+// the question back in the box and let the owner send it again.
+export class TransientAIError extends Error {
+  constructor(public status: number) {
+    super(`transient ${status}`);
+    this.name = 'TransientAIError';
+  }
+}
+
+const TRANSIENT = new Set([429, 500, 502, 503, 504, 522, 524]);
+
 export async function streamClaude(
   system: string,
   messages: ApiMessage[],
   onChunk: (text: string) => void,
   model = 'claude-sonnet-4-6',
   webSearch = false,
+  attempt = 0,
 ): Promise<void> {
-  const res = await fetch(CLAUDE_STREAM_URL, {
+  let res: Response;
+  try {
+    res = await fetch(CLAUDE_STREAM_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     // Send the system prompt as a cacheable block. It holds the whole financial
@@ -172,9 +187,28 @@ export async function streamClaude(
       // Live web lookup (tax rules/rates/deadlines) when enabled. max_uses caps
       // cost per message; the model only searches when it needs current facts.
       ...(webSearch ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : {}),
-    }),
-  });
+      }),
+    });
+  } catch (e) {
+    // The connection itself failed — a dropped mobile signal is the common one.
+    if (attempt === 0) {
+      await new Promise(r => setTimeout(r, 1200));
+      return streamClaude(system, messages, onChunk, model, webSearch, 1);
+    }
+    throw new TransientAIError(0);
+  }
   if (!res.ok) {
+    // The edge function cold-starts, and the first request of a session can come
+    // back 502 through no fault of the question. That used to surface to a
+    // first-time user as the bare words "API error 502" with their message
+    // stranded in the thread — the point at which a new subscriber decides the
+    // app is broken. Nothing has been streamed yet, so it is safe to just ask
+    // again once before giving up.
+    if (TRANSIENT.has(res.status) && attempt === 0) {
+      await new Promise(r => setTimeout(r, 1200));
+      return streamClaude(system, messages, onChunk, model, webSearch, 1);
+    }
+    if (TRANSIENT.has(res.status)) throw new TransientAIError(res.status);
     const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
     throw new Error(err?.error?.message ?? `API error ${res.status}`);
   }
