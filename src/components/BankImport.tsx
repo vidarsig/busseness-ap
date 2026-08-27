@@ -364,6 +364,8 @@ export default function BankImport() {
   const [skippedDupes, setSkippedDupes] = useState(0);
   const [findings, setFindings] = useState<ImportFinding[]>([]);
   const [imported, setImported] = useState<Transaction[]>([]);
+  // Parties whose usual key was applied straight from the finding.
+  const [keyed, setKeyed] = useState<Record<string, string>>({});
   // What each party was taught, and whether teaching it had to CREATE the key.
   const [taught, setTaught] = useState<Record<string, { role: string; keyNumber?: string; keyName?: string; created: boolean }>>({});
   const fmt = (n: number) => formatCurrency(Math.abs(n), (data.settings.defaultCurrency || 'ISK') as never, lang as never);
@@ -734,6 +736,7 @@ ${(data.aiMemory || '').trim()}`
     // React to what just came in, instead of ending on a green tick.
     setImported(newTxs);
     setTaught({});
+    setKeyed({});
     setFindings(newTxs.length
       ? reviewImport(newTxs, [...data.transactions, ...newTxs], data.accounts ?? [], data.settings.taxAuthority)
       : []);
@@ -796,6 +799,18 @@ ${(data.aiMemory || '').trim()}`
     };
     dispatch({ type: 'ADD_ACCOUNT', payload: key });
     return { key, created: true };
+  }
+
+  // The review already knows exactly which key this party is normally booked on —
+  // it says so in the sentence. Telling the owner to go to Færslur and set it by
+  // hand, on 53 rows, is the one thing the assistant is told never to do. One tap
+  // applies it.
+  function applyKnownKey(title: string, keyNumber: string) {
+    const acc = (data.accounts ?? []).find(a => a.number === keyNumber);
+    if (!acc) return;
+    const rows = imported.filter(t => t.description === title);
+    rows.forEach(t => dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...t, accountId: acc.id } }));
+    setKeyed(k => ({ ...k, [title]: `${acc.number} ${acc.name}` }));
   }
 
   function teachParty(party: string, role: Role) {
@@ -920,9 +935,21 @@ ${(data.aiMemory || '').trim()}`
                     {f.kind === 'tax' && (lang === 'is'
                       ? <><b>{f.rows} {isPlural(f.rows, 'greiðsla', 'greiðslur')} til innheimtumanns</b> ({fmt(f.amount)}) bókaðist sem kostnaður. Greiðsla á skatti er ekki rekstrarkostnaður — hún lækkar skuldina. Settu hana á skuldalykilinn.</>
                       : <><b>{f.rows} {f.rows === 1 ? 'payment' : 'payments'} to the tax authority</b> ({fmt(f.amount)}) landed as a cost. Paying tax is not an expense — it settles a debt. Put these on the liability key.</>)}
-                    {f.kind === 'keyed-elsewhere' && (lang === 'is'
-                      ? <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}) án lykils, en þessi aðili er annars bókaður á lykil <b>{f.key}</b>.</>
-                      : <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>)}
+                    {f.kind === 'keyed-elsewhere' && (keyed[f.title]
+                      ? (lang === 'is'
+                          ? <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} settar á lykil <b>{keyed[f.title]}</b>.</>
+                          : <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} put on key <b>{keyed[f.title]}</b>.</>)
+                      : <>
+                          {lang === 'is'
+                            ? <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}) án lykils, en þessi aðili er annars bókaður á lykil <b>{f.key}</b>.</>
+                            : <><b>{f.title}</b> — {f.rows} {rowsWord(f.rows, lang)} ({fmt(f.amount)}) with no key, but this party is otherwise booked on key <b>{f.key}</b>.</>}
+                          <span className="flex flex-wrap gap-1.5 mt-1.5">
+                            <button onClick={() => applyKnownKey(f.title, f.key || '')}
+                              className="px-2 py-1 rounded-md bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 text-[11px] font-medium">
+                              {lang === 'is' ? `Setja á ${f.key}` : `Put on ${f.key}`}
+                            </button>
+                          </span>
+                        </>)}
                     {f.kind === 'new-party' && (taught[f.title]
                       ? (lang === 'is'
                           ? <><b>{f.title}</b> — skráð sem <b>{taught[f.title].role}</b>. Ég man þetta og flokka hann sjálfkrafa næst
