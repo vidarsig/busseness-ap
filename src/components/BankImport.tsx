@@ -487,11 +487,25 @@ export default function BankImport() {
     // twelve rows booked to Laun. Hand it the few facts that actually change an
     // answer.
     const staff = (data.employees ?? []).length;
+    // Does this business have VAT-EXEMPT activity as well as taxable work? It
+    // changes the answer on every builders' merchant: a landlord refurbishing
+    // residential flats cannot reclaim the VAT on the materials, however plainly
+    // the timber yard charged it. Letting shows up as an active rent revenue key,
+    // or as income the owner has marked VAT-exempt.
+    const rentKey = (data.accounts ?? []).some(a =>
+      a.isActive && a.type === 'revenue' && /leig|rent|h[uú]saleig/i.test(`${a.name} ${a.nameEn || ''}`));
+    const exemptIncome = data.transactions.some(t => t.type === 'income' && (t.vatExempt || t.vatRate === 0));
     const businessContext = [
       `Company: ${data.settings.company.name || '(unnamed)'} in ${data.settings.country || 'unknown country'}.`,
       staff === 0
         ? 'Nobody is on the payroll — there are no employees, so a payment is never wages.'
         : `${staff} ${staff === 1 ? 'person is' : 'people are'} on the payroll.`,
+      rentKey || exemptIncome
+        ? 'This business ALSO has VAT-exempt activity (it lets property / books VAT-exempt income) '
+          + 'alongside its taxable work. So a purchase is only reclaimable if it served the TAXABLE '
+          + 'side. Materials for refurbishing let residential property are NOT reclaimable — do not '
+          + 'put the standard rate on a builders\' merchant here without asking.'
+        : 'All of this business\'s activity appears to be VAT-taxable.',
       (data.aiMemory || '').trim()
         ? `Parties the owner has already identified:
 ${(data.aiMemory || '').trim()}`

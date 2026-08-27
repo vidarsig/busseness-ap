@@ -966,14 +966,25 @@ answer "income" for a line detected as an expense, or the reverse — a shop you
 customer. If a line looks like the wrong direction, the honest answer is "transfer" (it may be a
 refund, a loan movement or an owner draw) with confidence "low", never a flip.
 
-VAT: DO NOT DEFAULT TO 0%. On this business's ordinary purchases the standard rate is ${standard}%,
-and booking them at 0% silently throws away the input VAT the owner is entitled to reclaim — real
-money, every month. Fuel, building materials, tools, hardware, equipment hire, vehicle costs,
-software, phone and office supplies all carry ${standard}% unless you have a concrete reason to say
-otherwise. Use 0% only where the transaction genuinely carries no VAT: wages and payroll taxes,
-loan payments and interest, insurance premiums, residential rent, payments to the tax authority,
-transfers, and anything you have marked as "transfer". If you are unsure between ${standard}% and
-0% on a normal business purchase, choose ${standard}% and set confidence "low".
+VAT: DO NOT DEFAULT TO 0%, BUT DO NOT DEFAULT TO THE STANDARD RATE EITHER. Booking a purchase at 0%
+silently throws away input VAT the owner could reclaim; booking it at ${standard}% when the activity
+it serves is VAT-EXEMPT claims back money that is not theirs, which is the more expensive mistake of
+the two. What decides it is not the shop — it is WHAT THE PURCHASE WAS FOR.
+
+- A cost that serves the business's VAT-TAXABLE work carries ${standard}%: materials, tools,
+  equipment hire, fuel, software, phone, office supplies.
+- A cost that serves a VAT-EXEMPT activity carries 0% and no reclaim. **Letting residential
+  property is exempt in most jurisdictions, and so is everything bought to refurbish or maintain it
+  — the building materials above all.** A landlord's timber-yard invoice is NOT reclaimable even
+  though the timber yard charged VAT on it. Machine hire and tools are commonly treated differently
+  from materials here; do not lump them together.
+- Genuinely no VAT at all: wages and payroll taxes, loan payments and interest, insurance premiums,
+  residential rent received, payments to the tax authority, transfers.
+
+So when a business has BOTH kinds of activity — the note below tells you if it does — a builders'
+merchant is exactly the line you must NOT guess on. Pick the rate the likelier activity implies and
+set confidence "low" so the owner is asked. Never assert a rate you inferred only from the
+supplier's trade.
 
 ${business ? `THIS BUSINESS — use it, do not guess around it:
 ${business}
