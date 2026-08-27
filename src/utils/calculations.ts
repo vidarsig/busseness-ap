@@ -393,6 +393,37 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   };
 }
 
+// THE TWO SIDES MUST AGREE ABOUT DEPRECIATION.
+//
+// The balance sheet writes fixed assets down every year on its own, from cost,
+// land value and rate (assetBookValue). The income statement only ever charged
+// afskriftir the owner had journalled by hand — which nobody does. So the asset
+// fell on one page and the cost never appeared on the other: profit overstated by
+// the write-down every year, and the income tax then computed on that inflated
+// figure. On this company's own books that was 850.000 a year.
+//
+// Charge exactly what the balance sheet took away, less anything already booked by
+// hand so it is never counted twice, and carry it through the totals — a line that
+// shows without moving the profit would be worse than none.
+export function withAssetDepreciation(pl: ProfitLoss, items: BalanceSheetItem[], year: number): ProfitLoss {
+  const fromAssets = items
+    .filter(b => b.section === 'fixed_assets' && b.cost != null && b.acquiredYear != null)
+    .reduce((s, b) => s + Math.max(0, assetBookValue(b, year - 1) - assetBookValue(b, year)), 0);
+  const extra = Math.max(0, fromAssets - pl.afskriftir);
+  if (extra === 0) return pl;
+  const totalOperatingExpenses = pl.totalOperatingExpenses + extra;
+  const operatingProfit = pl.totalRevenue - totalOperatingExpenses;
+  const profitBeforeTax = operatingProfit + pl.fjarmagntekjur - pl.fjarmagnsgjold;
+  const rate = pl.profitBeforeTax > 0 && pl.incomeTax > 0 ? pl.incomeTax / pl.profitBeforeTax : 0;
+  const incomeTax = profitBeforeTax > 0 ? profitBeforeTax * rate : 0;
+  return {
+    ...pl,
+    afskriftir: pl.afskriftir + extra,
+    totalOperatingExpenses, operatingProfit, profitBeforeTax, incomeTax,
+    netResult: profitBeforeTax - incomeTax,
+  };
+}
+
 export function filterByYear(transactions: Transaction[], year: number): Transaction[] {
   return transactions.filter(t => yearOf(t.date) === year);
 }

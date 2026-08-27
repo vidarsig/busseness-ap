@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, withAssetDepreciation, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem, Account } from '../types';
 import { assetBookValue, assetVisible } from '../utils/calculations';
@@ -124,11 +124,17 @@ export default function AnnualAccounts() {
   const [year, setYear] = useState(data.settings.fiscalYear);
   const company = data.settings.company;
   const txs = filterByYear(data.transactions, year);
-  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+  // The balance sheet depreciates the fixed assets on its own; charge the same
+  // amount here so the two pages cannot disagree — see withAssetDepreciation.
+  const pl = withAssetDepreciation(
+    calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT),
+    data.balanceSheetItems, year);
 
   // "Other operating expenses" = every operating line except wages and depreciation,
   // computed once (incl. electricity/heating) so the display and the export agree.
   const otherOp = pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
+
+
 
   // Whether the immediately prior year has any bookings — drives the one-tap
   // "download both years" button (each year stays its own separate PDF).
@@ -140,6 +146,8 @@ export default function AnnualAccounts() {
   const [activeTab, setActiveTab] = useState<'income' | 'balance' | 'notes'>('income');
 
   const bsItems = data.balanceSheetItems;
+
+
 
   const getSection = (section: BalanceSheetItem['section']) =>
     bsItems.filter(b => b.section === section);
@@ -216,7 +224,7 @@ export default function AnnualAccounts() {
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
   const retainedEarnings = useMemo(() => {
     const yrs = [...new Set(data.transactions.map(t => yearOf(t.date)))].filter(y => y <= year);
-    return yrs.reduce((s, y) => s + calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
+    return yrs.reduce((s, y) => s + withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, y).profitBeforeTax, 0);
   }, [data.transactions, year, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT]);
   const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
   const posLiab = balanceKeys.liability.reduce((s, r) => s + r.closing, 0);
@@ -252,7 +260,7 @@ export default function AnnualAccounts() {
   // wants 2025 and 2026 as two independent reports, not one merged sheet). Mirrors
   // the memoised values above for the selected year.
   function computeYear(y: number) {
-    const plY = calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+    const plY = withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, y);
     const otherOpY = plY.husaleiga + plY.rafmagnHiti + plY.simagjold + plY.skrifstofugjold + plY.samgongur + plY.markadsmal + plY.fagthjonusta + plY.vorur + plY.adrir;
     const closingFor = (acc: Account): number => {
       const rows = accountBalanceByYear(acc, data.transactions).filter(r => r.year <= y);
@@ -268,7 +276,7 @@ export default function AnnualAccounts() {
       .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
     const retained = [...new Set(data.transactions.map(t => yearOf(t.date)))]
       .filter(yy => yy <= y)
-      .reduce((s, yy) => s + calcProfitLoss(filterByYear(data.transactions, yy), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT).profitBeforeTax, 0);
+      .reduce((s, yy) => s + withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, yy), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, yy).profitBeforeTax, 0);
     const posAssets = cash + bk.asset.reduce((s, r) => s + r.closing, 0);
     const posLiab = bk.liability.reduce((s, r) => s + r.closing, 0);
     const posEquity = bk.equity.reduce((s, r) => s + r.closing, 0) + retained;
