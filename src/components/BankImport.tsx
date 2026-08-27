@@ -401,10 +401,21 @@ export default function BankImport() {
           return { ...p, selected: true, category: 'sala_thjonustu', vatRate: rate, type: 'income', invoiceId: inv.id, matchedInvoice: inv.number };
         }
       }
-      // 4) Otherwise, recognise the payer from how they were booked before.
+      // 4) Otherwise, recognise the payer from how they were booked before —
+      //    but the BANK still decides which way the money went. Learning what a
+      //    party IS must never overrule the statement's own sign, because one
+      //    mis-booked row then multiplies: three Húsasmiðjan rows that had been
+      //    filed as income taught this that the timber yard is a CUSTOMER, and on
+      //    the next import 81 ordinary card purchases came back as revenue,
+      //    inflating both turnover and the VAT payable on it. A learned
+      //    "transfer" is different and still honoured — it reclassifies a row
+      //    without flipping it.
       const learned = history.get(partyKey(p.description));
       if (learned) {
-        return { ...p, selected: true, category: learned.category, vatRate: learned.vatRate, type: learned.type, learned: true };
+        const flips = learned.type !== 'transfer' && learned.type !== p.type;
+        return flips
+          ? { ...p, selected: true, vatRate: learned.vatRate, needsReview: true }
+          : { ...p, selected: true, category: learned.category, vatRate: learned.vatRate, type: learned.type, learned: true };
       }
       // 5) New payer, no history — fall back to a plain default for the AI to refine.
       return {
