@@ -13,7 +13,11 @@ const ALLOWED_MODELS = new Set([
 const MAX_TOKENS_CEILING = 4096;
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'https://gculnifrbgwdvnfzcrlz.supabase.co';
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
+// The anon key is PUBLIC — it already ships inside the client bundle — and Supabase's auth
+// endpoints REJECT a request that has no apikey header, whatever bearer token it carries.
+// Defaulting it to '' meant every verification failed and the guard 401'd the owner out of
+// his own assistant. Default it the same way the URL is defaulted.
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjdWxuaWZyYmd3ZHZuZnpjcmx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyMjg0OTgsImV4cCI6MjA5NDgwNDQ5OH0.m8iDYKIF3YDQ4cYtOFkbEz0zHXVkFgKb4oZER4JJE64';
 
 async function signedIn(request: Request): Promise<boolean> {
   const raw = request.headers.get('authorization') || '';
@@ -23,7 +27,7 @@ async function signedIn(request: Request): Promise<boolean> {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {}),
+        apikey: SUPABASE_ANON_KEY,
       },
     });
     if (!res.ok) return false;
