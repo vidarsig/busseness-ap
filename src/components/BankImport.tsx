@@ -414,7 +414,7 @@ export default function BankImport() {
       if (learned) {
         const flips = learned.type !== 'transfer' && learned.type !== p.type;
         return flips
-          ? { ...p, selected: true, vatRate: learned.vatRate, needsReview: true }
+          ? { ...p, selected: true, category: p.type === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold', vatRate: learned.vatRate, needsReview: true }
           : { ...p, selected: true, category: learned.category, vatRate: learned.vatRate, type: learned.type, learned: true };
       }
       // 5) New payer, no history — fall back to a plain default for the AI to refine.
