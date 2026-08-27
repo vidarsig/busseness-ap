@@ -147,6 +147,20 @@ export default function AnnualAccounts() {
 
   const bsItems = data.balanceSheetItems;
 
+  // RENT IS NOT SERVICE INCOME, AND ON A MIXED COMPANY THE DIFFERENCE IS THE WHOLE
+  // POINT. Letting residential property is VAT-exempt; contracting carries the
+  // standard rate. Both were booked as sala_thjonustu and printed as one line
+  // "Sala þjónustu", so an annual account for a landlord-contractor hid the split
+  // that decides what is reclaimable — 6.837.471 of rent inside 17.569.915 of
+  // "services" on this company's own 2024. The category cannot tell them apart,
+  // but the KEY can: rent is booked on a revenue account named for it.
+  const rentKeyIds = useMemo(() => new Set((data.accounts ?? [])
+    .filter(a => a.type === 'revenue' && /leig|rent/i.test(`${a.name} ${a.nameEn || ''}`))
+    .map(a => a.id)), [data.accounts]);
+  const leigutekjur = useMemo(() => txs
+    .filter(t => t.type === 'income' && t.accountId && rentKeyIds.has(t.accountId))
+    .reduce((s, t) => s + getTransactionISK(t), 0), [txs, rentKeyIds]);
+
 
 
   const getSection = (section: BalanceSheetItem['section']) =>
@@ -545,7 +559,8 @@ export default function AnnualAccounts() {
             <tbody className="divide-y divide-gray-50 text-sm">
               <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('revenues')}</td></tr>
               {pl.salaTekjur > 0 && <PLRow label={t('sala_vara')} amount={pl.salaTekjur} indent />}
-              {pl.thjonustutekjur > 0 && <PLRow label={t('sala_thjonustu')} amount={pl.thjonustutekjur} indent />}
+              {leigutekjur > 0 && <PLRow label={lang === 'is' ? 'Húsaleigutekjur (án VSK)' : 'Rental income (VAT exempt)'} amount={leigutekjur} indent />}
+              {(pl.thjonustutekjur - leigutekjur) > 0 && <PLRow label={t('sala_thjonustu')} amount={pl.thjonustutekjur - leigutekjur} indent />}
               {pl.adrarTekjur > 0 && <PLRow label={t('adrar_tekjur')} amount={pl.adrarTekjur} indent />}
               <PLRow label={t('revenues')} amount={pl.totalRevenue} bold />
 
