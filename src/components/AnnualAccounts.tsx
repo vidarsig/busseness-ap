@@ -188,7 +188,24 @@ export default function AnnualAccounts() {
       .filter(a => a.isActive && a.type === type &&
         (a.openingBalance != null || data.transactions.some(tx => tx.accountId === a.id)))
       .map(a => ({ acc: a, closing: keyClosing(a) }));
-    return { asset: rowsFor('asset'), liability: rowsFor('liability'), equity: rowsFor('equity') };
+
+    // A NEGATIVE LIABILITY IS NOT A THING — it is a receivable, and it belongs on
+    // the other side of the sheet. This company's owner account stood at
+    // −11.159.549 among the liabilities: the owner owes the COMPANY 11,2 million,
+    // which is an asset, and showing it as a minus in the debt column both misread
+    // the balance sheet and hid the one figure the whole salary calculation turns
+    // on. The same the other way: an asset key that has gone negative is a debt.
+    // Equity is left alone — accumulated losses are legitimately negative.
+    const assets = rowsFor('asset');
+    const liabilities = rowsFor('liability');
+    const side = (rows: typeof assets, keep: (c: number) => boolean) => rows.filter(r => keep(r.closing));
+    const flip = (rows: typeof assets, take: (c: number) => boolean) =>
+      rows.filter(r => take(r.closing)).map(r => ({ ...r, closing: -r.closing, movedSide: true }));
+    return {
+      asset: [...side(assets, c => c >= 0), ...flip(liabilities, c => c < 0)],
+      liability: [...side(liabilities, c => c >= 0), ...flip(assets, c => c < 0)],
+      equity: rowsFor('equity'),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.accounts, data.transactions, year]);
 
