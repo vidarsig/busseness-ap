@@ -94,6 +94,23 @@ html.beta-dark .text-amber-700, html.beta-dark .text-amber-800, html.beta-dark .
 html.beta-dark .text-red-700, html.beta-dark .text-red-800 { color:#ec8a86 !important; }
 html.beta-dark .text-purple-700, html.beta-dark .text-indigo-700 { color:#AFA9EC !important; }
 
+/* The -600/-500 accent text was NEVER remapped, so on the charcoal surface the
+   drill-down links measured 3.37:1 and every negative amount 3.41:1 — both under
+   the 4.5:1 minimum, which is why the report read as faint grey. Same targets as
+   the -700/-800 rules above. @media screen so printed invoices stay dark on paper. */
+@media screen {
+  html.beta-dark .text-blue-600,   html.beta-dark .text-blue-500    { color:#93b4f0 !important; }
+  html.beta-dark .text-green-600,  html.beta-dark .text-green-500,
+  html.beta-dark .text-emerald-600, html.beta-dark .text-emerald-500,
+  html.beta-dark .text-teal-600                                     { color:#5DCAA5 !important; }
+  html.beta-dark .text-red-600,    html.beta-dark .text-red-500,
+  html.beta-dark .text-rose-600                                     { color:#ec8a86 !important; }
+  html.beta-dark .text-amber-600,  html.beta-dark .text-amber-500,
+  html.beta-dark .text-yellow-600, html.beta-dark .text-orange-600  { color:#e0b451 !important; }
+  html.beta-dark .text-purple-600, html.beta-dark .text-purple-500,
+  html.beta-dark .text-indigo-600, html.beta-dark .text-violet-600  { color:#AFA9EC !important; }
+}
+
 /* Premium polish: softer card corners + a faint hairline on white cards */
 html.beta-dark .rounded-lg { border-radius:14px; }
 html.beta-dark .bg-white:not(.print-container):not(.print-only) { border:1px solid #23272f; }

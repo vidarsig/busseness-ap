@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss, yearOf } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, yearOf, getTransactionISK } from '../utils/calculations';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 export default function Reports({ drill }: { drill?: (category: string, year: number) => void } = {}) {
@@ -17,7 +17,8 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
   function getPlRows() {
     return [
       { label: t('sala_vara'),           value: pl.salaTekjur },
-      { label: t('sala_thjonustu'),      value: pl.thjonustutekjur },
+      ...svcByKey.map(r => ({ label: r.label, value: r.amount })),
+      { label: t('sala_thjonustu'),      value: salaThjonustuRest },
       { label: t('adrar_tekjur'),        value: pl.adrarTekjur },
       { label: t('revenues'),            value: pl.totalRevenue },
       { label: t('laun'),                value: -pl.laun },
@@ -54,7 +55,8 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
     const header = [lang === 'is' ? 'Lykill' : 'Item', `${year} ISK`];
     const rows: (string | number)[][] = [
       [t('sala_vara'),             pl.salaTekjur],
-      [t('sala_thjonustu'),        pl.thjonustutekjur],
+      ...svcByKey.map(r => [r.label, r.amount] as (string | number)[]),
+      [t('sala_thjonustu'),        salaThjonustuRest],
       [t('adrar_tekjur'),          pl.adrarTekjur],
       [t('revenues'),              pl.totalRevenue],
       [t('laun'),                  -pl.laun],
@@ -91,6 +93,31 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
 
   const txs = filterByYear(data.transactions, year);
   const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+
+  // "SALA ÞJÓNUSTU" IS NOT ONE THING ON A MIXED COMPANY. Letting residential property
+  // is VAT-exempt and insurance compensation is not turnover at all, yet both are booked
+  // under the sala_thjonustu CATEGORY and were printed as a single line — on this
+  // company's own 2026 that hid 3.840.252 of rent and 24.291.914 of tryggingabætur
+  // inside 28.187.299 of "services", which is precisely the split that decides what
+  // input VAT is reclaimable. The category cannot tell them apart; the KEY can, so any
+  // revenue key the user made of their own gets its own line and comes off the services
+  // total. Same rule AnnualAccounts already applies — Reports was the one still lumping.
+  const STD_REVENUE_KEYS = ['ac3000', 'ac3100', 'ac3200', 'ac3900'];
+  const svcByKey = useMemo(() => {
+    const revAccounts = (data.accounts ?? []).filter(
+      a => a.type === 'revenue' && !STD_REVENUE_KEYS.includes(a.id));
+    const sums = new Map<string, number>();
+    for (const tx of txs) {
+      if (tx.type !== 'income' || tx.category !== 'sala_thjonustu' || !tx.accountId) continue;
+      if (!revAccounts.some(a => a.id === tx.accountId)) continue;
+      sums.set(tx.accountId, (sums.get(tx.accountId) ?? 0) + getTransactionISK(tx));
+    }
+    return revAccounts
+      .filter(a => (sums.get(a.id) ?? 0) !== 0)
+      .map(a => ({ label: (lang === 'is' ? a.name : (a.nameEn || a.name)), amount: sums.get(a.id) as number }));
+  }, [txs, data.accounts, lang]);
+  const svcOnKeys = svcByKey.reduce((s2, r) => s2 + r.amount, 0);
+  const salaThjonustuRest = pl.thjonustutekjur - svcOnKeys;
 
   const Row = ({ label, amount, bold, indent, isNegative, catKey }: {
     label: string; amount: number; bold?: boolean; indent?: boolean; isNegative?: boolean; catKey?: string;
@@ -181,7 +208,8 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
           <tbody className="divide-y divide-gray-50">
             <SectionHeader label={t('revenues')} />
             <Row label={t('sala_vara')} amount={pl.salaTekjur} indent catKey="sala_vara" />
-            <Row label={t('sala_thjonustu')} amount={pl.thjonustutekjur} indent catKey="sala_thjonustu" />
+            {svcByKey.map(r => <Row key={r.label} label={r.label} amount={r.amount} indent />)}
+            <Row label={t('sala_thjonustu')} amount={salaThjonustuRest} indent catKey="sala_thjonustu" />
             <Row label={t('adrar_tekjur')} amount={pl.adrarTekjur} indent catKey="adrar_tekjur" />
             <Row label={t('revenues')} amount={pl.totalRevenue} bold />
 
