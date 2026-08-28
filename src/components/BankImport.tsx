@@ -143,7 +143,8 @@ function dataAfterHeader(rows: string[][]): string[][] {
 // looks positive and the whole file imports as INCOME. So: match on names, and
 // only fall back to fixed positions when no header is recognisable.
 const HEADINGS = {
-  date: ['dagsetning', 'date', 'bókunardagur', 'bokunardagur', 'vinnsludagur', 'transaction date'],
+  date: ['dagsetning', 'date', 'bókunardagur', 'bokunardagur', 'vinnsludagur', 'transaction date',
+         'posting date', 'post date', 'trans date', 'value date', 'booking date', 'settlement date'],
   amount: ['upphæð', 'upphaed', 'amount', 'fjárhæð', 'fjarhaed', 'færsluupphæð'],
   debit: ['debet', 'debit', 'úttekt', 'uttekt', 'útborgun', 'utborgun', 'gjöld', 'gjold', 'út', 'withdrawal', 'money out'],
   credit: ['kredit', 'credit', 'innborgun', 'innlegg', 'inn', 'deposit', 'money in'],
@@ -157,12 +158,30 @@ export function findHeaderMap(rows: string[][]): ImportColumnMap | null {
   // The header is whichever of the first rows names a date column.
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const cells = (rows[i] ?? []).map(norm);
-    // Exact match, or a substring match only for names long enough to be safe —
-    // "inn" as a substring would happily match "Innstæða" (the BALANCE column)
-    // and hand us the running balance as if it were money in.
+    // EXACT match first, then whole-word containment.
+    //
+    // Exact has to win outright: Chase ships BOTH "Details" (which holds
+    // CREDIT/DEBIT) and "Description" (the payee), and a first-past-the-post
+    // scan handed us column 0 as the description.
+    //
+    // Whole-word — rather than the old "only substrings of 6+ characters" —
+    // because that rule silently lost every US bank: their date column is
+    // "Posting Date" or "Transaction Date", and "date" is four letters, so no
+    // header was ever found and the file fell through to fixed column numbers.
+    // The length rule existed to stop "inn" matching "Innstæða" (the running
+    // BALANCE) and being read as money in; a word boundary stops that properly —
+    // "inn" is not a word inside "innstæða" — while still finding "Posting Date".
+    const hasWord = (c: string, n: string) =>
+      new RegExp(`(^|[^\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}\\p{N}]|$)`, 'u').test(c);
+    // Walk the NAMES in order, not the columns: when a file has two headings we
+    // recognise, the better name has to win wherever it sits. Chase puts
+    // "Details" (CREDIT/DEBIT) in column 0 and "Description" (the payee) in
+    // column 2, so scanning columns first hands back the wrong one — the list
+    // below is written best-first for exactly this reason.
     const find = (names: string[]) => {
-      const idx = cells.findIndex(c => c && names.some(n => c === n || (n.length >= 6 && c.includes(n))));
-      return idx >= 0 ? idx : null;
+      for (const n of names) { const i = cells.findIndex(c => c === n); if (i >= 0) return i; }
+      for (const n of names) { const i = cells.findIndex(c => c && hasWord(c, n)); if (i >= 0) return i; }
+      return null;
     };
     const date = find(HEADINGS.date);
     if (date == null) continue;
