@@ -21,7 +21,7 @@ function newEmpId() { return `emp_${Date.now()}_${Math.random().toString(36).sli
 function EmployeeModal({ initial, onSave, onClose }: {
   initial?: Employee; onSave: (e: Employee) => void; onClose: () => void;
 }) {
-  const { t, lang, data } = useApp();
+  const { t, lang, data, cc } = useApp();
   const country = data.settings.country;
   const intl = isIntlPayroll(country); // US / Canada use FICA / CPP-EI, not persónuafsláttur
   const [name, setName] = useState(initial?.name ?? '');
@@ -68,7 +68,8 @@ function EmployeeModal({ initial, onSave, onClose }: {
           </div>
           <div>
             <label className={lbl}>{ktLabel}</label>
-            <input className={inp} value={kennitala} onChange={e => setKennitala(e.target.value)} placeholder="000000-0000" />
+            <input className={inp} value={kennitala} onChange={e => setKennitala(e.target.value)}
+              placeholder={cc.code === 'IS' ? '000000-0000' : ''} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -145,7 +146,7 @@ const thisMonth = () => new Date().toISOString().slice(0, 7);
 function PayrollModal({ initial, onSave, onClose }: {
   initial?: PayrollEntry; onSave: (p: PayrollEntry) => void; onClose: () => void;
 }) {
-  const { t, lang, data, fmt } = useApp();
+  const { t, lang, data, fmt, cc } = useApp();
   const s = data.settings;
   const activeEmployees = (data.employees ?? []).filter(e => e.active || e.id === initial?.employeeId);
   const [employeeId, setEmployeeId] = useState<string>(initial?.employeeId ?? '');
@@ -259,7 +260,8 @@ function PayrollModal({ initial, onSave, onClose }: {
             </div>
             <div>
               <label className={lbl}>{t('kennitala')}</label>
-              <input className={inp} value={kennitala} onChange={e => setKennitala(e.target.value)} placeholder="000000-0000" />
+              <input className={inp} value={kennitala} onChange={e => setKennitala(e.target.value)}
+              placeholder={cc.code === 'IS' ? '000000-0000' : ''} />
             </div>
           </div>
           <div>
@@ -274,7 +276,7 @@ function PayrollModal({ initial, onSave, onClose }: {
             </div>
           )}
           <div>
-            <label className={lbl}>{lang === 'is' ? 'Brúttólaun (ISK)' : 'Gross wage (ISK)'}</label>
+            <label className={lbl}>{lang === 'is' ? `Brúttólaun (${cc.currency})` : `Gross wage (${cc.currency})`}</label>
             <input type="number" className={inp} value={gross || ''} onChange={e => { setGross(parseInt(e.target.value) || 0); }} min={0} step={1000} />
           </div>
 

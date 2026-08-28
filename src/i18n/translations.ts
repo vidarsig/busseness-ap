@@ -580,7 +580,7 @@ const en: Record<keyof typeof is, string> = {
   importResults: 'Import results', rowsImported: 'rows imported', noBankFile: 'No file selected',
   bankImportInfo: 'Select a CSV file from your bank', debitColumn: 'Debit column', creditColumn: 'Credit column',
   companySettings: 'Company Information', companyName: 'Company name',
-  kennitala: 'Kennitala (Company ID)', address: 'Address', postalCode: 'Postal code',
+  kennitala: 'ID number', address: 'Address', postalCode: 'Postal code',
   city: 'City', email: 'Email', phone: 'Phone', bankAccount: 'Bank account number',
   vskNumber: 'VAT registration number', auditor: 'Auditor',
   appSettings: 'Application Settings', language: 'Language',
