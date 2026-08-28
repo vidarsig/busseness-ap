@@ -147,6 +147,15 @@ export interface Account {
   // Non-mortgage debt (family/working-capital loans) stays as a normal liability,
   // offset by the cash/asset it produced. Undefined = not a property mortgage.
   isPropertyMortgage?: boolean;
+  // VERÐTRYGGT (index-linked) debt. An Icelandic mortgage is written at a nominal
+  // principal and a base index (grunnvísitala); what is actually owed is that
+  // nominal figure multiplied by today's index over the base one. The two drift
+  // apart fast — on a 3.100.000 bond issued at 547,1 the nominal stood at
+  // 1.122.416 in April 2026 while the real debt was 1.383.992 — so a balance
+  // sheet carrying the nominal figure understates the debt by the whole of the
+  // indexation. Set both to make the key index-linked; see settings.priceIndex.
+  isIndexed?: boolean;
+  baseIndex?: number;
 }
 
 export interface InvoiceLine {
@@ -305,6 +314,12 @@ export interface AppSettings {
   language: Language;
   defaultCurrency: Currency;
   exchangeRates: ExchangeRates;
+  // Consumer price index by month, "YYYY-MM" → index. Icelandic verðtrygging is
+  // measured against vísitala neysluverðs; a verðtryggt loan's real balance is
+  // its nominal principal × (index now ÷ the loan's base index). Jurisdiction
+  // data, so it lives here and not in the code. Missing months fall back to the
+  // nearest earlier month that is present.
+  priceIndex?: Record<string, number>;
   fiscalYear: number;
   company: CompanyInfo;
   invoicePrefix: string;

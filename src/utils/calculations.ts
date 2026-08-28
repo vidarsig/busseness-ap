@@ -1,4 +1,5 @@
 import { Transaction, Currency, Account, BalanceSheetItem } from '../types';
+import { indexFactor } from '../data/priceIndex';
 
 // Transaction dates are stored as date-only "YYYY-MM-DD". `new Date("2025-01-01")`
 // parses as UTC midnight, so `.getFullYear()` returns the LOCAL year — off by one
@@ -50,7 +51,15 @@ export function invoiceReceivedISK(invoiceId: string, transactions: Transaction[
 // other entry (expense, or a 'transfer' paid out) subtracts. Interest vs
 // principal is not split for money out except via interestAmount (owner books
 // the principal portion onto the key). Returns [] for P&L keys / no-data keys.
-export function accountBalanceByYear(account: Account, transactions: Transaction[]): { year: number; closing: number }[] {
+// A verðtryggt loan is tracked at its NOMINAL principal — that is what the
+// movements reduce — and reported at nominal × (index ÷ base index), which is
+// what is actually owed. Pass the index series to get the indexed figure; leave
+// it out and every key behaves exactly as it did before.
+export function accountBalanceByYear(
+  account: Account,
+  transactions: Transaction[],
+  priceIndex?: Record<string, number>,
+): { year: number; closing: number }[] {
   const movs = transactions.filter(tx => tx.accountId === account.id);
   if (!movs.length && account.openingBalance == null) return [];
   const movYears = movs.map(tx => yearOf(tx.date));
@@ -75,7 +84,12 @@ export function accountBalanceByYear(account: Account, transactions: Transaction
         return s + (moneyIn ? gross : -(gross - interest));
       }, 0);
     bal += net;
-    rows.push({ year: y, closing: bal });
+    // Index at the YEAR END the row reports, not today: a 2024 balance sheet has
+    // to show what was owed on 31.12.2024.
+    const factor = account.isIndexed && priceIndex
+      ? indexFactor(account.baseIndex, `${y}-12-31`, priceIndex)
+      : 1;
+    rows.push({ year: y, closing: bal * factor });
   }
   return rows;
 }

@@ -5,6 +5,7 @@ import { filterByYear, calcProfitLoss, withAssetDepreciation, accountBalanceByYe
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem, Account } from '../types';
 import { assetBookValue, assetVisible } from '../utils/calculations';
+import { IS_PRICE_INDEX } from '../data/priceIndex';
 
 function newId() {
   return `bs_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -163,6 +164,12 @@ export default function AnnualAccounts() {
 
 
 
+  // The consumer price index a verðtryggt key is revalued against. Iceland ships
+  // with a table; anything the owner has entered in Settings wins per month.
+  const priceIndex = useMemo(
+    () => (cc.code === 'IS' ? { ...IS_PRICE_INDEX, ...(data.settings.priceIndex ?? {}) } : (data.settings.priceIndex ?? {})),
+    [cc.code, data.settings.priceIndex]);
+
   const getSection = (section: BalanceSheetItem['section']) =>
     bsItems.filter(b => b.section === section);
 
@@ -192,7 +199,7 @@ export default function AnnualAccounts() {
   // balance-sheet totals above so a partly-keyed setup can't show a false
   // "doesn't balance" — full integration needs cash tracking (in progress).
   const keyClosing = (acc: Account): number => {
-    const rows = accountBalanceByYear(acc, data.transactions);
+    const rows = accountBalanceByYear(acc, data.transactions, priceIndex);
     const upto = rows.filter(r => r.year <= year);
     if (upto.length) return upto[upto.length - 1].closing;
     return acc.openingYear != null && year >= acc.openingYear ? (acc.openingBalance ?? 0) : 0;
@@ -294,7 +301,7 @@ export default function AnnualAccounts() {
     const plY = withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, y);
     const otherOpY = plY.husaleiga + plY.rafmagnHiti + plY.simagjold + plY.skrifstofugjold + plY.samgongur + plY.markadsmal + plY.fagthjonusta + plY.vorur + plY.adrir;
     const closingFor = (acc: Account): number => {
-      const rows = accountBalanceByYear(acc, data.transactions).filter(r => r.year <= y);
+      const rows = accountBalanceByYear(acc, data.transactions, priceIndex).filter(r => r.year <= y);
       if (rows.length) return rows[rows.length - 1].closing;
       return acc.openingYear != null && y >= acc.openingYear ? (acc.openingBalance ?? 0) : 0;
     };

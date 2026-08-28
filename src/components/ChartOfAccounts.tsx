@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, X, Lock } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Account } from '../types';
 import { accountBalanceByYear } from '../utils/calculations';
+import { IS_PRICE_INDEX } from '../data/priceIndex';
 
 function newId() { return `ac_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
@@ -95,6 +96,32 @@ function AccountModal({ initial, onSave, onClose }: {
                   </span>
                 </label>
               )}
+              {form.type === 'liability' && (
+                <>
+                  <label className="flex items-start gap-2 mt-3 cursor-pointer">
+                    <input type="checkbox" className="mt-0.5"
+                      checked={!!form.isIndexed}
+                      onChange={e => set('isIndexed', e.target.checked || undefined)} />
+                    <span className="text-sm text-gray-700">
+                      {lang === 'is' ? 'Verðtryggt lán' : 'Index-linked loan'}
+                      <span className="block text-[11px] text-gray-400">
+                        {lang === 'is'
+                          ? 'Skuldin er nafnverðið margfaldað með vísitölu dagsins deilt með grunnvísitölu bréfsins. Án þessa sýnir efnahagsreikningurinn nafnverðið og vanmetur skuldina sem verðbótunum nemur.'
+                          : 'What is owed is the nominal principal × today’s index ÷ the bond’s base index. Without this the balance sheet carries the nominal figure and understates the debt by the whole of the indexation.'}
+                      </span>
+                    </span>
+                  </label>
+                  {form.isIndexed && (
+                    <div className="mt-2 pl-6">
+                      <label className={lbl}>{lang === 'is' ? 'Grunnvísitala' : 'Base index'}</label>
+                      <input type="number" step="0.1" className={inp}
+                        value={form.baseIndex ?? ''}
+                        placeholder={lang === 'is' ? 'stendur á skuldabréfinu' : 'printed on the bond'}
+                        onChange={e => set('baseIndex', e.target.value === '' ? undefined : Number(e.target.value))} />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
           {form.isSystem && (
@@ -153,7 +180,8 @@ export default function ChartOfAccounts() {
     setModal({ open: false });
   }
 
-  const runningByYear = (acc: Account) => accountBalanceByYear(acc, data.transactions);
+  const priceIndex = { ...IS_PRICE_INDEX, ...(data.settings.priceIndex ?? {}) };
+  const runningByYear = (acc: Account) => accountBalanceByYear(acc, data.transactions, priceIndex);
 
   const types: Array<{ v: Account['type'] | 'all'; label: string }> = [
     { v: 'all', label: t('all') },
