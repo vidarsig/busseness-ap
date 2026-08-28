@@ -9,7 +9,7 @@ import {
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
 import { COUNTRY_CONFIGS } from '../data/countries';
-import { formatCurrency, formatISK } from '../utils/formatters';
+import { formatCurrency, formatISK , setUiLanguage } from '../utils/formatters';
 import { generateDemoData } from '../utils/demoData';
 
 const STORAGE_KEY = 'bokhalds_app_v2';
@@ -666,6 +666,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     companyIdLabel: data.settings.companyIdLabel || baseCC.companyIdLabel,
     vatNumberLabel: data.settings.vatNumberLabel || baseCC.vatNumberLabel,
   };
+  // Formatters called without an explicit language fall back to this — see
+  // setUiLanguage. Set during render so the very first figure is right.
+  setUiLanguage(lang);
   const fmt = useCallback((amount: number) => formatCurrency(amount, cc.currency, lang), [cc.currency, lang]);
 
   // Converts an ISK-base amount (from getTransactionISK) → display currency → formatted string

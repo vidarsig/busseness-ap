@@ -39,7 +39,13 @@ export default function CountryOnboarding() {
     const cc = COUNTRY_CONFIGS[selectedCode];
     // Apply the picked state/province rate up front (mirrors Settings' applyUsRate /
     // applyCaRate), so new invoices carry the right tax without a Settings detour.
-    const taxOverride: Record<string, unknown> = {};
+    // salesTaxRate defaults to 8 in DEFAULT_SETTINGS — an Icelandic-era placeholder
+    // that survived picking a country. A US customer who skips the state picker
+    // (which the screen explicitly allows: "you can set your rate in Settings")
+    // then saw "Taxable sales 8%" on the sales tax return and 8% offered on every
+    // imported row — a rate that matches no state, sitting there looking configured.
+    // Start from the country's own rate and let the state, or Settings, raise it.
+    const taxOverride: Record<string, unknown> = { salesTaxRate: cc.standardRate };
     if (selectedCode === 'US' && usState) {
       const st = US_STATES.find(s => s.name === usState);
       if (st) { taxOverride.usState = usState; taxOverride.salesTaxRate = st.rate; taxOverride.standardRate = st.rate; taxOverride.vatRates = st.rate > 0 ? [st.rate, 0] : [0]; }

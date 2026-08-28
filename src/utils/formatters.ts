@@ -18,7 +18,16 @@ const localeFor = (lang: Language): string => {
 };
 let icelandicLocale: string | undefined;
 
-export function formatISK(amount: number, lang: Language = 'is'): string {
+// The language every formatter falls back to when the caller does not pass one.
+// It used to be a hardcoded 'is'. Twenty call sites omit the argument — among
+// them every figure on an invoice — so a US contractor's invoice, the document
+// he sends his own customer, printed "0,00 $" instead of "$0.00". The annual
+// accounts escaped it only because they format through the context helpers,
+// which do thread the language. AppContext sets this whenever the language does.
+let uiLang: Language = 'is';
+export function setUiLanguage(lang: Language) { uiLang = lang || 'is'; }
+
+export function formatISK(amount: number, lang: Language = uiLang): string {
   const abs = Math.abs(amount);
   const formatted = new Intl.NumberFormat(localeFor(lang), {
     minimumFractionDigits: 0,
@@ -28,7 +37,7 @@ export function formatISK(amount: number, lang: Language = 'is'): string {
   return `${sign}${formatted} kr.`;
 }
 
-export function formatEUR(amount: number, lang: Language = 'is'): string {
+export function formatEUR(amount: number, lang: Language = uiLang): string {
   return new Intl.NumberFormat(localeFor(lang), {
     style: 'currency',
     currency: 'EUR',
@@ -40,7 +49,7 @@ export function formatEUR(amount: number, lang: Language = 'is'): string {
 export function formatCurrency(
   amount: number,
   currency: Currency,
-  lang: Language = 'is'
+  lang: Language = uiLang
 ): string {
   if (currency === 'ISK') return formatISK(amount, lang);
   const noDecimals = ['DKK', 'NOK', 'SEK'].includes(currency);
@@ -52,7 +61,7 @@ export function formatCurrency(
   }).format(amount);
 }
 
-export function formatDate(dateStr: string, lang: Language = 'is'): string {
+export function formatDate(dateStr: string, lang: Language = uiLang): string {
   const date = new Date(dateStr + 'T00:00:00');
   return new Intl.DateTimeFormat(localeFor(lang), {
     day: '2-digit',
