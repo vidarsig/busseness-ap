@@ -156,6 +156,15 @@ export interface Account {
   // indexation. Set both to make the key index-linked; see settings.priceIndex.
   isIndexed?: boolean;
   baseIndex?: number;
+  // KNOWN closing balance per year, "YYYY" → amount, straight off the lender's own
+  // statement. A loan balance derived from booked payments is only as good as the
+  // payments: one instalment on the wrong bond, or an interest split taken from
+  // the wrong version of an arrears table, and the balance is wrong for every year
+  // after it. Where the lender states the figure, that figure wins — and later
+  // years roll forward from it, so one correct year repairs the rest. For a
+  // verðtryggt loan enter what is actually owed (the indexed figure); the app
+  // converts it back to nominal itself.
+  balanceByYear?: Record<string, number>;
 }
 
 export interface InvoiceLine {

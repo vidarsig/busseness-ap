@@ -14,11 +14,23 @@ const EMPTY: Omit<Account,'id'> = {
 function AccountModal({ initial, onSave, onClose }: {
   initial?: Account; onSave: (a: Account) => void; onClose: () => void;
 }) {
-  const { t, lang } = useApp();
+  const { t, lang, data } = useApp();
   const [form, setForm] = useState<Account>(initial ?? { id: newId(), ...EMPTY });
   const set = <K extends keyof Account>(k: K, v: Account[K]) => setForm(f => ({ ...f, [k]: v }));
   const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const lbl = 'block text-xs font-medium text-gray-600 mb-1';
+  // Years the owner can state a balance for: from the key's opening year (or the
+  // fiscal year, whichever is earlier) up to the fiscal year.
+  const thisYear = data.settings.fiscalYear;
+  const firstYear = Math.min(form.openingYear ?? thisYear, thisYear);
+  const years: number[] = [];
+  for (let y = firstYear; y <= thisYear; y++) years.push(y);
+  const setYearBalance = (y: number, v: string) => {
+    const next = { ...(form.balanceByYear ?? {}) };
+    if (v === '') delete next[String(y)]; else next[String(y)] = Number(v) || 0;
+    set('balanceByYear', Object.keys(next).length ? next : undefined);
+  };
+
   const types: Array<{ v: Account['type']; label: string }> = [
     { v: 'asset', label: t('accountTypeAsset') },
     { v: 'liability', label: t('accountTypeLiability') },
@@ -121,6 +133,33 @@ function AccountModal({ initial, onSave, onClose }: {
                     </div>
                   )}
                 </>
+              )}
+              {(['asset', 'liability', 'equity'] as Account['type'][]).includes(form.type) && (
+                <div className="mt-4 border-t border-gray-100 pt-3">
+                  <label className={lbl}>
+                    {lang === 'is' ? 'Staða í árslok skv. lánveitanda / yfirliti' : 'Year-end balance per the lender / statement'}
+                  </label>
+                  <p className="text-[11px] text-gray-400 mb-2">
+                    {lang === 'is'
+                      ? 'Valfrjálst. Sláðu inn þau ár sem þú hefur staðfesta tölu fyrir — hún gengur framar þeirri sem reiknast út frá færslum, og árin á eftir reiknast áfram frá henni. Skildu eftir autt þar sem þú hefur ekki tölu.'
+                      : 'Optional. Fill in the years you have a confirmed figure for — it beats the one derived from the entries, and later years carry forward from it. Leave blank where you have none.'}
+                    {form.isIndexed && (lang === 'is'
+                      ? ' Verðtryggt lán: sláðu inn það sem raunverulega var skuldað (verðbætta stöðu).'
+                      : ' Index-linked: enter what was actually owed (the indexed figure).')}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {years.map(y => (
+                      <div key={y} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 w-10 flex-shrink-0">{y}</span>
+                        <input type="number" inputMode="decimal"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="—"
+                          value={form.balanceByYear?.[String(y)] ?? ''}
+                          onChange={e => setYearBalance(y, e.target.value)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}

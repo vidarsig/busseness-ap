@@ -104,7 +104,16 @@ export function accountBalanceByYear(
     const factor = account.isIndexed && priceIndex
       ? indexFactor(account.baseIndex, `${y}-12-31`, priceIndex)
       : 1;
-    rows.push({ year: y, closing: bal * factor });
+    // A figure the lender has stated for this year beats one derived from booked
+    // payments. Roll the running balance to it as well, so a single corrected year
+    // repairs every year after it instead of the error compounding.
+    const stated = account.balanceByYear?.[String(y)];
+    if (stated != null) {
+      bal = stated / (factor || 1);
+      rows.push({ year: y, closing: stated });
+    } else {
+      rows.push({ year: y, closing: bal * factor });
+    }
   }
   return rows;
 }
