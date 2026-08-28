@@ -81,7 +81,16 @@ export function accountBalanceByYear(
         // subtracted like a payment (the bug that made the owner-account debt too high).
         const interest = tx.interestAmount ? toISK(tx.interestAmount, tx.currency, tx.eurToIskRate) : 0;
         const moneyIn = tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag';
-        return s + (moneyIn ? gross : -(gross - interest));
+        // A payment on a verðtryggt loan is made in TODAY'S krónur, but the balance
+        // it reduces is the loan's NOMINAL principal. Subtracting the paid figure
+        // straight off the nominal takes too much off — an afborgun of 62.471 in
+        // 2023 money repaid 56.840 of nominal, not 62.471 — and over a few dozen
+        // instalments the two drift far enough apart that a bond can be settled in
+        // full and still show a balance. Deflate by the index at the PAYMENT date.
+        const at = account.isIndexed && priceIndex
+          ? indexFactor(account.baseIndex, tx.date, priceIndex)
+          : 1;
+        return s + (moneyIn ? gross / at : -((gross - interest) / at));
       }, 0);
     bal += net;
     // Index at the YEAR END the row reports, not today: a 2024 balance sheet has
