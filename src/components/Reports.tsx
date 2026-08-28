@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Printer, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { filterByYear, calcProfitLoss, yearOf, getTransactionISK } from '../utils/calculations';
+import { filterByYear, calcProfitLoss, withAssetDepreciation, yearOf, getTransactionISK } from '../utils/calculations';
 import { exportPDF, exportExcel } from '../utils/exports';
 
 export default function Reports({ drill }: { drill?: (category: string, year: number) => void } = {}) {
@@ -79,7 +79,13 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
   if (!years.includes(currentYear)) years.unshift(currentYear);
 
   const txs = filterByYear(data.transactions, year);
-  const pl = calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
+  // The annual accounts charge the depreciation the balance sheet writes off, this
+  // report did not, so the same year closed at two different profits — 2024 was
+  // 3.089.804 here and 2.159.804 there, the 930.000 of afskriftir being the whole
+  // difference. One statement cannot contradict the other.
+  const pl = withAssetDepreciation(
+    calcProfitLoss(txs, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT),
+    data.balanceSheetItems, year);
 
   // "SALA ÞJÓNUSTU" IS NOT ONE THING ON A MIXED COMPANY. Letting residential property
   // is VAT-exempt and insurance compensation is not turnover at all, yet both are booked

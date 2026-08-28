@@ -452,6 +452,14 @@ export function withAssetDepreciation(pl: ProfitLoss, items: BalanceSheetItem[],
   const fromAssets = items
     .filter(b => b.section === 'fixed_assets' && b.cost != null && b.acquiredYear != null)
     .reduce((s, b) => {
+      // An asset cannot be depreciated before it was bought. Without this guard the
+      // "fall from COST" branch below fired for EVERY earlier year too — prev = cost
+      // while assetBookValue is 0 — charging the asset's whole cost as that year's
+      // depreciation, again and again. On this company's books that invented
+      // 50.400.000 of expense in 2020, 41.400.000 in 2021 and 400.000 in 2022:
+      // 92.200.000, which is exactly why accumulated profit read -103.626.556
+      // instead of -11.426.556 and the balance sheet was out by ~107 M.
+      if (year < (b.acquiredYear as number)) return s;
       // In the year of acquisition there is no prior-year book value to fall from —
       // assetBookValue returns 0 for any year before acquiredYear — so the first
       // year's depreciation would be charged to the balance sheet but never to the
