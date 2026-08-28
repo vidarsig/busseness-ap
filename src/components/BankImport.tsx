@@ -8,7 +8,7 @@ import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { matchRule } from './AutoRules';
 import { reviewImport, ImportFinding } from '../utils/calculations';
-import { todayISO, formatCurrency } from '../utils/formatters';
+import { todayISO } from '../utils/formatters';
 
 function newId() { return `tx_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
 
@@ -371,7 +371,7 @@ function buildPartyHistory(txns: Transaction[]): Map<string, { type: Transaction
 }
 
 export default function BankImport() {
-  const { data, dispatch, t, lang, cc } = useApp();
+  const { data, dispatch, t, lang, cc, fmtISK } = useApp();
   const fileRef = useRef<HTMLInputElement>(null);
   // The Arion/Íslandsbanki/Landsbankinn presets are Iceland-only; elsewhere the
   // Generic + AI options cover any bank, so default a non-IS company to Generic.
@@ -387,7 +387,13 @@ export default function BankImport() {
   const [keyed, setKeyed] = useState<Record<string, string>>({});
   // What each party was taught, and whether teaching it had to CREATE the key.
   const [taught, setTaught] = useState<Record<string, { role: string; keyNumber?: string; keyName?: string; created: boolean }>>({});
-  const fmt = (n: number) => formatCurrency(Math.abs(n), (data.settings.defaultCurrency || 'ISK') as never, lang as never);
+  // Every figure shown below comes from reviewImport, which sums with
+  // getTransactionISK — i.e. ISK-base, whatever the company trades in. Printing
+  // that straight into the company's currency showed a US customer his own
+  // deposits multiplied by the dollar rate: an $8,500 roof job read back as
+  // "$1,164,500.00". fmtISK converts back before formatting; for an ISK company
+  // it is the same number it always was.
+  const fmt = (n: number) => fmtISK(Math.abs(n));
   const [error, setError] = useState('');
   const [learnPattern, setLearnPattern] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
