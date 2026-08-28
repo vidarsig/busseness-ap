@@ -22,6 +22,9 @@
 //   --token <jwt>     Supabase access token (or set JOBBOKS_TOKEN) — the AI
 //                     endpoints are signed-in only
 //
+//   Easier: set ANTHROPIC_API_KEY in the environment and the bench calls
+//   Anthropic directly, no session needed. See DIRECT MODE below.
+//
 // With no --say and no --script it drops into a prompt where you just type.
 // ---------------------------------------------------------------------------
 import { execFileSync } from 'node:child_process';
@@ -53,6 +56,7 @@ const opt = {
   script: flag('script'),
   host: flag('host', 'https://jobboks.app'),
   token: flag('token', process.env.JOBBOKS_TOKEN || ''),
+  apiKey: process.env.ANTHROPIC_API_KEY || '',
 };
 
 // ---- the app's own modules, bundled on demand ------------------------------
@@ -88,14 +92,43 @@ function buildApp() {
 // The app calls "/api/claude" because in the browser that is same-origin. In Node
 // there is no origin, so point relative /api calls at a real host — and attach a
 // session, because those endpoints are signed-in only now (netlify/functions/_guard.js).
-// Set JOBBOKS_TOKEN to a Supabase access token: in the running app, devtools ->
-// Application -> Local Storage -> the sb-*-auth-token entry -> access_token.
-function patchFetch(host, token) {
+// A session comes from JOBBOKS_TOKEN (in the running app: devtools -> Application
+// -> Local Storage -> the sb-*-auth-token entry -> access_token).
+//
+// DIRECT MODE — set ANTHROPIC_API_KEY in the environment and the bench talks to
+// Anthropic itself instead of going through jobboks.app.
+//
+// Why: the /api endpoints are signed-in only since e11fa72 (they used to be an
+// open proxy anyone could spend the budget on), so the bench needs a Supabase
+// session to reach them — and the whole point of the bench is that it runs
+// unattended. netlify/functions/claude.js is a pass-through: it checks the
+// session, then forwards the SAME body to https://api.anthropic.com/v1/messages
+// with the server's key. So sending that body straight there tests exactly what
+// production sends — the real buildChatSystem and categorizeBatch prompts —
+// without a session and without weakening the guard by one line.
+//
+// The key is only ever read from the environment. Never pass it on the command
+// line and never paste it into a file: `setx ANTHROPIC_API_KEY ...` on Windows,
+// `export ANTHROPIC_API_KEY=...` elsewhere.
+const DIRECT_URL = 'https://api.anthropic.com/v1/messages';
+
+function patchFetch(host, token, apiKey) {
   const real = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = (url, init) => {
     if (typeof url === 'string' && url.startsWith('/api/')) {
       calls++;
+      if (apiKey && !token) {
+        // Streaming goes to the edge function in the app; the bench only uses the
+        // plain endpoint, and both carry an Anthropic Messages body.
+        const headers = { ...(init && init.headers) };
+        delete headers.authorization;
+        delete headers.Authorization;
+        return real(DIRECT_URL, {
+          ...init,
+          headers: { ...headers, 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        });
+      }
       url = host + url;
       if (token) init = { ...init, headers: { ...(init && init.headers), authorization: `Bearer ${token}` } };
     }
@@ -139,13 +172,17 @@ const rule = (s = '') => console.log('\n' + '─'.repeat(76) + (s ? '\n' + s : '
 
 // ---- main ------------------------------------------------------------------
 const app = await import(pathToFileURL(buildApp()).href);
-const apiCalls = patchFetch(opt.host, opt.token);
+const apiCalls = patchFetch(opt.host, opt.token, opt.apiKey);
 
 console.log('\n╔' + '═'.repeat(74) + '╗');
 console.log('║  JOBBOKS TEST BENCH — nýr viðskiptavinur, tómt bókhald' + ' '.repeat(19) + '║');
 console.log('╚' + '═'.repeat(74) + '╝');
 console.log(`  fyrirtæki : ${opt.company}   land: ${opt.country}   tungumál: ${opt.lang}`);
-console.log(`  API       : ${opt.host}/api/claude` + (opt.token ? '  (með aðgangslykli)' : '  ⚠ enginn aðgangslykill — AI-köll verða 401'));
+console.log('  API       : ' + (opt.apiKey && !opt.token
+  ? 'api.anthropic.com  (beint — ANTHROPIC_API_KEY úr umhverfinu)'
+  : `${opt.host}/api/claude` + (opt.token
+      ? '  (með aðgangslykli)'
+      : '  ⚠ hvorki ANTHROPIC_API_KEY né aðgangslykill — AI-köll verða 401')));
 
 const data = freshBooks(app, opt);
 
