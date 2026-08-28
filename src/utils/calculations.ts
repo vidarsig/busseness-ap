@@ -87,10 +87,16 @@ export function accountBalanceByYear(
         // 2023 money repaid 56.840 of nominal, not 62.471 — and over a few dozen
         // instalments the two drift far enough apart that a bond can be settled in
         // full and still show a balance. Deflate by the index at the PAYMENT date.
-        const at = account.isIndexed && priceIndex
+        // Only a PAYMENT is deflated. Money in is the loan itself, and a loan's
+        // face value is its nominal principal by definition — the base index is
+        // the index on the day it was drawn. Deflating it too put an 11.500.000
+        // bond on the books at 11.633.230, purely because its base index (523,9,
+        // June 2022) and its booked drawdown date (April 2022) sit a month or two
+        // apart in the table.
+        const at = !moneyIn && account.isIndexed && priceIndex
           ? indexFactor(account.baseIndex, tx.date, priceIndex)
           : 1;
-        return s + (moneyIn ? gross / at : -((gross - interest) / at));
+        return s + (moneyIn ? gross : -((gross - interest) / at));
       }, 0);
     bal += net;
     // Index at the YEAR END the row reports, not today: a 2024 balance sheet has
