@@ -183,7 +183,12 @@ export function assetBookValue(item: BalanceSheetItem, y: number): number {
   const land = item.landValue ?? 0;
   const building = Math.max(item.cost - land, 0);
   const rate = (item.depreciationRate ?? 0) / 100;
-  const yearsHeld = Math.max(y - item.acquiredYear, 0);
+  // Icelandic depreciation runs a FULL year from the year the asset is taken into
+  // use — not pro rata, and not from the year after (reglugerð nr. 1300/2021, 12. gr.;
+  // the same article bars depreciation in the year use ends). Counting from
+  // `acquiredYear` with no +1 left every asset a year under-depreciated: 930.000 kr
+  // missing across one owner's three flats and a car in 2024 alone.
+  const yearsHeld = Math.max(y - item.acquiredYear + 1, 0);
   const depreciated = Math.min(building * rate * yearsHeld, building);
   return land + (building - depreciated);
 }
@@ -408,7 +413,14 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
 export function withAssetDepreciation(pl: ProfitLoss, items: BalanceSheetItem[], year: number): ProfitLoss {
   const fromAssets = items
     .filter(b => b.section === 'fixed_assets' && b.cost != null && b.acquiredYear != null)
-    .reduce((s, b) => s + Math.max(0, assetBookValue(b, year - 1) - assetBookValue(b, year)), 0);
+    .reduce((s, b) => {
+      // In the year of acquisition there is no prior-year book value to fall from —
+      // assetBookValue returns 0 for any year before acquiredYear — so the first
+      // year's depreciation would be charged to the balance sheet but never to the
+      // P&L. Fall from COST in that year instead.
+      const prev = year - 1 < (b.acquiredYear as number) ? (b.cost as number) : assetBookValue(b, year - 1);
+      return s + Math.max(0, prev - assetBookValue(b, year));
+    }, 0);
   const extra = Math.max(0, fromAssets - pl.afskriftir);
   if (extra === 0) return pl;
   const totalOperatingExpenses = pl.totalOperatingExpenses + extra;
