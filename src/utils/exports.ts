@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { formatNumber } from './formatters';
 
 export interface ExportColumn { header: string; key: string; width?: number; }
 export type ExportRow = Record<string, string | number>;
@@ -9,6 +10,20 @@ export type ExportRow = Record<string, string | number>;
 
 // Build the PDF document (header + table + footer) without saving it, so it can
 // be either downloaded (exportPDF) or attached to a share/email (sharePDF).
+// jsPDF's built-in fonts encode WinAnsi. A character outside it — U+2212, the real
+// MINUS SIGN, used in labels like "bókf. verð − áhvílandi lán" — makes jsPDF fall back
+// to UTF-16 for that whole string, and the label came out of the annual accounts as
+// nul-separated gibberish. Icelandic letters are all inside WinAnsi and were never the
+// problem; these typographic lookalikes are. Fold them to their ASCII twins.
+const PDF_SAFE: Array<[RegExp, string]> = [
+  [/[−–—‒]/g, '-'],   // minus, en/em/figure dash
+  [/[‘’‛]/g, "'"],
+  [/[“”„]/g, '"'],
+  [/…/g, '...'],
+  [/ /g, ' '],
+];
+const pdfSafe = (v: string): string => PDF_SAFE.reduce((acc, [re, to]) => acc.replace(re, to), v);
+
 function buildPDFDoc(
   title: string,
   subtitle: string,
@@ -20,17 +35,29 @@ function buildPDFDoc(
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(title, 14, 18);
+  doc.text(pdfSafe(title), 14, 18);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
-  doc.text(subtitle, 14, 25);
+  doc.text(pdfSafe(subtitle), 14, 25);
   doc.setTextColor(0);
 
   autoTable(doc, {
     startY: 30,
-    head: [columns.map(c => c.header)],
-    body: rows.map(r => columns.map(c => r[c.key] ?? '')),
+    head: [columns.map(c => pdfSafe(c.header))],
+    // A raw number handed to autoTable is stringified by JS, so 10445479.83870968
+    // printed exactly like that — and then wrapped onto a second line because it no
+    // longer fitted the column. Every money figure in every exported PDF was doing
+    // it; the screen was fine because the screen formats. Format here, once, for all
+    // callers, through the app's own formatter so the Icelandic separators survive
+    // the trimmed-ICU fallback that formatters.ts already documents.
+    body: rows.map(r => columns.map(c => {
+      const v = r[c.key];
+      if (v === undefined || v === null) return '';
+      return typeof v === 'number' && Number.isFinite(v)
+        ? formatNumber(v)
+        : pdfSafe(String(v));
+    })),
     styles: { fontSize: 8, cellPadding: 2 },
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 250, 252] },

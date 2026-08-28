@@ -11,36 +11,48 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
 
   const plCols = [
     { header: lang === 'is' ? 'Lykill' : 'Item', key: 'label', width: 40 },
-    { header: `${year} ISK`,                       key: 'value', width: 18 },
+    // 18mm could not hold a grouped million-króna figure at 8pt, so it wrapped.
+    { header: `${year} ISK`,                       key: 'value', width: 32 },
   ];
 
+  // The exported rows must be the rows the screen shows. They were not: every
+  // expense line printed even when it was empty, and printed as "-0" — the screen
+  // hides those. And the raw values carry decimals the screen rounds away, so the
+  // PDF said 10.445.479,84 where the screen said 10.445.480. Round once, drop the
+  // empty detail lines, and the paper matches the app.
   function getPlRows() {
-    return [
-      { label: t('sala_vara'),           value: pl.salaTekjur },
-      ...svcByKey.map(r => ({ label: r.label, value: r.amount })),
-      { label: t('sala_thjonustu'),      value: salaThjonustuRest },
-      { label: t('adrar_tekjur'),        value: pl.adrarTekjur },
-      { label: t('revenues'),            value: pl.totalRevenue },
-      { label: t('laun'),                value: -pl.laun },
-      { label: t('launatengd_gjold'),    value: -pl.launatengd },
-      { label: t('husaleiga'),           value: -pl.husaleiga },
-      { label: t('rafmagn_hiti'),        value: -pl.rafmagnHiti },
-      { label: t('simagjold'),           value: -pl.simagjold },
-      { label: t('skrifstofugjold'),     value: -pl.skrifstofugjold },
-      { label: t('samgongur'),           value: -pl.samgongur },
-      { label: t('markadsmal'),          value: -pl.markadsmal },
-      { label: t('fagthjonusta'),        value: -pl.fagthjonusta },
-      { label: t('vorur'),               value: -pl.vorur },
-      { label: t('afskriftir'),          value: -pl.afskriftir },
-      { label: t('adrir_rekstrargjold'), value: -pl.adrir },
-      { label: t('operatingExpenses'),   value: -pl.totalOperatingExpenses },
-      { label: t('operatingProfit'),     value: pl.operatingProfit },
-      { label: t('fjarmagns_tekjur'),    value: pl.fjarmagntekjur },
-      { label: t('fjarmagnsgjold'),      value: -pl.fjarmagnsgjold },
-      { label: t('profitBeforeTax'),     value: pl.profitBeforeTax },
-      { label: t('incomeTax'),           value: -pl.incomeTax },
-      { label: t('netResult'),           value: pl.netResult },
-    ];
+    const k = (n: number) => Math.round(n);
+    const rows: { label: string; value: number }[] = [];
+    const push = (label: string, value: number) => rows.push({ label, value: k(value) });
+    const pushIf = (cond: boolean, label: string, value: number) => { if (cond) push(label, value); };
+
+    pushIf(pl.salaTekjur !== 0, t('sala_vara'), pl.salaTekjur);
+    svcByKey.forEach(r => push(r.label, r.amount));
+    pushIf(salaThjonustuRest !== 0, t('sala_thjonustu'), salaThjonustuRest);
+    pushIf(pl.adrarTekjur !== 0, t('adrar_tekjur'), pl.adrarTekjur);
+    push(t('revenues'), pl.totalRevenue);
+
+    pushIf(pl.laun > 0,            t('laun'),              -pl.laun);
+    pushIf(pl.launatengd > 0,      t('launatengd_gjold'),  -pl.launatengd);
+    pushIf(pl.husaleiga > 0,       t('husaleiga'),         -pl.husaleiga);
+    pushIf(pl.rafmagnHiti > 0,     t('rafmagn_hiti'),      -pl.rafmagnHiti);
+    pushIf(pl.simagjold > 0,       t('simagjold'),         -pl.simagjold);
+    pushIf(pl.skrifstofugjold > 0, t('skrifstofugjold'),   -pl.skrifstofugjold);
+    pushIf(pl.samgongur > 0,       t('samgongur'),         -pl.samgongur);
+    pushIf(pl.markadsmal > 0,      t('markadsmal'),        -pl.markadsmal);
+    pushIf(pl.fagthjonusta > 0,    t('fagthjonusta'),      -pl.fagthjonusta);
+    pushIf(pl.vorur !== 0,         t('vorur'),             -pl.vorur);
+    pushIf(pl.afskriftir > 0,      t('afskriftir'),        -pl.afskriftir);
+    pushIf(pl.adrir > 0,           t('adrir_rekstrargjold'), -pl.adrir);
+    push(t('operatingExpenses'), -pl.totalOperatingExpenses);
+    push(t('operatingProfit'),   pl.operatingProfit);
+
+    pushIf(pl.fjarmagntekjur > 0,  t('fjarmagns_tekjur'),  pl.fjarmagntekjur);
+    pushIf(pl.fjarmagnsgjold > 0,  t('fjarmagnsgjold'),    -pl.fjarmagnsgjold);
+    push(t('profitBeforeTax'), pl.profitBeforeTax);
+    pushIf(pl.incomeTax > 0, t('incomeTax'), -pl.incomeTax);
+    push(t('netResult'), pl.netResult);
+    return rows;
   }
 
   function exportToPDF() {
@@ -53,32 +65,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
 
   function exportCSV() {
     const header = [lang === 'is' ? 'Lykill' : 'Item', `${year} ISK`];
-    const rows: (string | number)[][] = [
-      [t('sala_vara'),             pl.salaTekjur],
-      ...svcByKey.map(r => [r.label, r.amount] as (string | number)[]),
-      [t('sala_thjonustu'),        salaThjonustuRest],
-      [t('adrar_tekjur'),          pl.adrarTekjur],
-      [t('revenues'),              pl.totalRevenue],
-      [t('laun'),                  -pl.laun],
-      [t('launatengd_gjold'),      -pl.launatengd],
-      [t('husaleiga'),             -pl.husaleiga],
-      [t('rafmagn_hiti'),          -pl.rafmagnHiti],
-      [t('simagjold'),             -pl.simagjold],
-      [t('skrifstofugjold'),       -pl.skrifstofugjold],
-      [t('samgongur'),             -pl.samgongur],
-      [t('markadsmal'),            -pl.markadsmal],
-      [t('fagthjonusta'),          -pl.fagthjonusta],
-      [t('vorur'),                 -pl.vorur],
-      [t('afskriftir'),            -pl.afskriftir],
-      [t('adrir_rekstrargjold'),   -pl.adrir],
-      [t('operatingExpenses'),     -pl.totalOperatingExpenses],
-      [t('operatingProfit'),       pl.operatingProfit],
-      [t('fjarmagns_tekjur'),      pl.fjarmagntekjur],
-      [t('fjarmagnsgjold'),        -pl.fjarmagnsgjold],
-      [t('profitBeforeTax'),       pl.profitBeforeTax],
-      [t('incomeTax'),             -pl.incomeTax],
-      [t('netResult'),             pl.netResult],
-    ];
+    const rows: (string | number)[][] = getPlRows().map(r => [r.label, r.value]);
     const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);

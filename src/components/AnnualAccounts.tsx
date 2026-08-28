@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Printer, Plus, Pencil, Trash2, X, Download, Send } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss, withAssetDepreciation, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
@@ -161,6 +161,13 @@ export default function AnnualAccounts() {
   const leigutekjur = useMemo(() => txs
     .filter(t => t.type === 'income' && t.accountId && rentKeyIds.has(t.accountId))
     .reduce((s, t) => s + getTransactionISK(t), 0), [txs, rentKeyIds]);
+  // The same split for ANY year — the downloaded PDF builds each year on its own and
+  // was printing the unsplit "Sala þjónustu", so the paper contradicted the screen it
+  // claims to copy. 2024 read "Sala þjónustu 17.632.951" with the 7.187.471 of rent
+  // silently inside it.
+  const leigutekjurFor = useCallback((y: number) => data.transactions
+    .filter(t => yearOf(t.date) === y && t.type === 'income' && t.accountId && rentKeyIds.has(t.accountId))
+    .reduce((s, t) => s + getTransactionISK(t), 0), [data.transactions, rentKeyIds]);
 
 
 
@@ -369,7 +376,9 @@ export default function AnnualAccounts() {
     rows.push(SEC(t('incomeStatement')));
     rows.push(SEC(t('revenues')));
     if (plY.salaTekjur > 0) rows.push(R(t('sala_vara'), plY.salaTekjur));
-    if (plY.thjonustutekjur > 0) rows.push(R(t('sala_thjonustu'), plY.thjonustutekjur));
+    const rentY = leigutekjurFor(y);
+    if (rentY > 0) rows.push(R(lang === 'is' ? 'Húsaleigutekjur (án VSK)' : 'Rental income (VAT exempt)', rentY));
+    if (plY.thjonustutekjur - rentY > 0) rows.push(R(t('sala_thjonustu'), plY.thjonustutekjur - rentY));
     if (plY.adrarTekjur > 0) rows.push(R(t('adrar_tekjur'), plY.adrarTekjur));
     rows.push(R(t('revenues'), plY.totalRevenue));
     if (plY.laun + plY.launatengd > 0) rows.push(R(t('wagesExpenses'), -(plY.laun + plY.launatengd)));

@@ -37,6 +37,16 @@ export function formatISK(amount: number, lang: Language = uiLang): string {
   return `${sign}${formatted} kr.`;
 }
 
+// A bare grouped number, no currency suffix — for table cells whose column header
+// already names the unit (an exported "2024 ISK" column). Goes through localeFor so
+// it cannot fall into the silent en-GB resolution described above.
+export function formatNumber(amount: number, lang: Language = uiLang): string {
+  return new Intl.NumberFormat(localeFor(lang), {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatEUR(amount: number, lang: Language = uiLang): string {
   return new Intl.NumberFormat(localeFor(lang), {
     style: 'currency',
