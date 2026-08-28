@@ -51,6 +51,7 @@ export default function CountryOnboarding() {
       country: selectedCode,
       language: lang,
       defaultCurrency: cc.currency,
+      corporateTaxRate: cc.corporateTaxRate,
       taxWithholdingRate: cc.taxWithholdingRate,
       employeePensionRate: cc.employeePensionRate,
       employerPensionRate: cc.employerPensionRate,

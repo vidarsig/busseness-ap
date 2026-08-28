@@ -274,6 +274,13 @@ export interface CountryConfig {
   companyIdLabel: string;
   vatNumberLabel: string;
   isUSA: boolean;
+  // Headline NATIONAL corporate income tax. Local tax on top is not in here and
+  // must not be guessed: Germany adds municipal Gewerbesteuer, Canada and the US
+  // add state/provincial rates, and a US pass-through (many small LLCs) owes
+  // nothing at entity level at all. This is the starting figure the owner can
+  // change in Settings — it exists so a US or French company does not silently
+  // file at Iceland's 20%.
+  corporateTaxRate: number;
   taxWithholdingRate: number;
   employeePensionRate: number;
   employerPensionRate: number;
