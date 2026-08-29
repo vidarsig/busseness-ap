@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node tools/testbench/regress.mjs",
+    "check": "tsc && node tools/testbench/regress.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",

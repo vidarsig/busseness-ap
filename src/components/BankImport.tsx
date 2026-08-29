@@ -283,6 +283,17 @@ interface ImportRow extends ParsedRow {
   matchedInvoice?: string; // that invoice's number, for the row badge
 }
 
+// Stamp the bank's own direction on a freshly parsed row, before any rule, any
+// learned history or the AI can write to `type`. Nothing downstream may change
+// it. Exported so the regression suite can assert the one thing that matters:
+// a line the bank shows as money out must reach the categoriser as an expense.
+// Reading the direction back off the amount does NOT work — every parser stores
+// Math.abs(), so the sign is gone by then, and a fix that tried it labelled the
+// whole statement as income.
+export function stampBankDirection<T extends { type: TransactionType }>(row: T): T & { bankType: 'income' | 'expense' } {
+  return { ...row, bankType: row.type === 'income' ? 'income' : 'expense' };
+}
+
 // Fold case + Icelandic accents so "Fylkir" in a bank line matches a "Fylkir ehf."
 // customer name (same idea as the AI match helper / the Færslur name filter).
 const foldName = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -418,9 +429,7 @@ export default function BankImport() {
         received.set(tx.invoiceId, (received.get(tx.invoiceId) ?? 0) + (tx.currency === 'ISK' ? tx.amount : tx.amount * tx.eurToIskRate));
       }
     }
-    // Stamp the bank's own direction on every row before any rule, any learned
-    // history or the AI gets to write to `type`. Nothing downstream may change it.
-    return parsed.map(raw => ({ ...raw, bankType: (raw.type === 'income' ? 'income' : 'expense') as 'income' | 'expense' })).map(p => {
+    return parsed.map(stampBankDirection).map(p => {
       // 1) An explicit rule the owner saved always wins.
       const matched = matchRule(p.description, rules);
       if (matched) {
