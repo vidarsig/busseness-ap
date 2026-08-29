@@ -54,8 +54,11 @@ export const IS_PRICE_INDEX: Record<string, number> = {
   '2026-04': 674.6,
   '2026-05': 678.5,
   '2026-06': 682.0,
-  '2026-07': 547.1,
-  '2026-08': 547.1,
+  // 2026-07 and 2026-08 held 547,1 — the BASE INDEX printed on the M2595 bond,
+  // copied in by mistake. The index does not fall from 682,0 to 547,1: that
+  // understated every verðtryggð balance by a fifth for those two months.
+  // Removed rather than guessed, which is this file's own rule — a lookup
+  // takes the nearest EARLIER month, so the gap understates instead.
 };
 
 // The index for a date: the nearest month at or before it. Returns undefined
