@@ -94,7 +94,10 @@ function extractStripe(content: string): { text: string; connect: boolean } {
 interface SetupProposal {
   country?: string;      // 2-letter code the app supports (US, IS, CA, GB, …)
   state?: string;        // US state code, e.g. "CO"
-  salesTaxRate?: number; // US only
+  city?: string;         // US city — shown in the preview so the owner can check the
+                         // rate against the PLACE. Denver is 9.15%, not Colorado's 2.9%
+                         // base, and only the city name makes that checkable.
+  salesTaxRate?: number; // US only — the COMBINED rate charged at that location
   province?: string;     // Canada province/territory name or code, e.g. "Ontario" / "ON"
   companyName?: string;
 }
@@ -1477,7 +1480,7 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
                             const cc = COUNTRY_CONFIGS[String(setup.country || '').toUpperCase()];
                             const chips = [
                               cc ? cc.nameEn : setup.country,
-                              setup.state ? `${setup.state}${setup.salesTaxRate != null ? ` ${setup.salesTaxRate}%` : ''}` : null,
+                              setup.state ? `${setup.city ? `${setup.city}, ` : ''}${setup.state}${setup.salesTaxRate != null ? ` — ${setup.salesTaxRate}%` : ''}` : null,
                               setup.companyName,
                             ].filter(Boolean) as string[];
                             return (
