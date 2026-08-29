@@ -667,7 +667,9 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
       ...(usRate != null ? { salesTaxRate: usRate } : {}),
       ...(setup.companyName ? { company: { ...data.settings.company, name: String(setup.companyName) } } : {}),
     }});
-    const done = lang === 'is'
+    // The language the app is in AFTER this setup, not before it — the confirmation
+    // used the old one and left "✅ Uppsett" sitting in an otherwise English app.
+    const done = languageForCountry(code) === 'is'
       ? `✅ Uppsett: ${cc.nameEn}${setup.companyName ? ` · ${setup.companyName}` : ''}`
       : `✅ Set up: ${cc.nameEn}${setup.companyName ? ` · ${setup.companyName}` : ''}`;
     setMessages(prev => prev.map((m, idx) => idx === msgIndex ? { ...m, content: m.content.replace(/```jobboks-setup\s*[\s\S]*?```/, `\n${done}`) } : m));
