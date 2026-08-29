@@ -29,6 +29,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
     pushIf(pl.salaTekjur !== 0, t('sala_vara'), pl.salaTekjur);
     svcByKey.forEach(r => push(r.label, r.amount));
     pushIf(salaThjonustuRest !== 0, t('sala_thjonustu'), salaThjonustuRest);
+    pushIf(pl.leigutekjur !== 0, t('leigutekjur'), pl.leigutekjur);
     pushIf(pl.adrarTekjur !== 0, t('adrar_tekjur'), pl.adrarTekjur);
     push(t('revenues'), pl.totalRevenue);
 
@@ -203,6 +204,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
             <Row label={t('sala_vara')} amount={pl.salaTekjur} indent catKey="sala_vara" />
             {svcByKey.map(r => <Row key={r.label} label={r.label} amount={r.amount} indent />)}
             <Row label={t('sala_thjonustu')} amount={salaThjonustuRest} indent catKey="sala_thjonustu" />
+            {pl.leigutekjur !== 0 && <Row label={t('leigutekjur')} amount={pl.leigutekjur} indent catKey="leigutekjur" />}
             <Row label={t('adrar_tekjur')} amount={pl.adrarTekjur} indent catKey="adrar_tekjur" />
             <Row label={t('revenues')} amount={pl.totalRevenue} bold />
 

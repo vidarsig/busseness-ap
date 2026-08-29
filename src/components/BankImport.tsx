@@ -267,6 +267,11 @@ function parseWithMap(rows: string[][], map: ImportColumnMap, preferMonthFirst =
 }
 
 interface ImportRow extends ParsedRow {
+  // THE DIRECTION AS THE BANK STATED IT, kept apart from `type` because `type` is
+  // what the rules, the history and the AI all write to. Every parser stores the
+  // amount as Math.abs(), so the sign is gone by the time anyone could read it —
+  // the direction survives only here.
+  bankType: 'income' | 'expense';
   selected: boolean;
   category: string;
   vatRate: number;
@@ -413,7 +418,9 @@ export default function BankImport() {
         received.set(tx.invoiceId, (received.get(tx.invoiceId) ?? 0) + (tx.currency === 'ISK' ? tx.amount : tx.amount * tx.eurToIskRate));
       }
     }
-    return parsed.map(p => {
+    // Stamp the bank's own direction on every row before any rule, any learned
+    // history or the AI gets to write to `type`. Nothing downstream may change it.
+    return parsed.map(raw => ({ ...raw, bankType: (raw.type === 'income' ? 'income' : 'expense') as 'income' | 'expense' })).map(p => {
       // 1) An explicit rule the owner saved always wins.
       const matched = matchRule(p.description, rules);
       if (matched) {
@@ -569,8 +576,8 @@ ${(data.aiMemory || '').trim()}`
               // feeding it the previous answer instead turned that instruction into a
               // lock on the model's own earlier mistake. Fuel bought at N1 came back as
               // an owner's draw, and every re-run then cited that draw as the bank's
-              // word for it. The sign on the statement cannot be argued with.
-              detectedType: (g.rows[0].r.amount < 0 ? 'expense' : 'income') as TransactionType,
+              // word for it.
+              detectedType: g.rows[0].r.bankType as TransactionType,
               rowCount: g.rows.length,
             })),
             allCategories,

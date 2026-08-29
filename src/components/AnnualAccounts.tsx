@@ -388,9 +388,12 @@ export default function AnnualAccounts() {
     rows.push(SEC(t('incomeStatement')));
     rows.push(SEC(t('revenues')));
     if (plY.salaTekjur > 0) rows.push(R(t('sala_vara'), plY.salaTekjur));
-    const rentY = leigutekjurFor(y);
+    // Rent reaches the accounts two ways: booked on a rent-named revenue KEY (the
+    // older route) or on the leigutekjur CATEGORY. They cannot overlap — the key
+    // route only looks at sala_thjonustu rows — so the line is their sum.
+    const rentY = leigutekjurFor(y) + plY.leigutekjur;
     if (rentY > 0) rows.push(R(lang === 'is' ? 'Húsaleigutekjur (án VSK)' : 'Rental income (VAT exempt)', rentY));
-    if (plY.thjonustutekjur - rentY > 0) rows.push(R(t('sala_thjonustu'), plY.thjonustutekjur - rentY));
+    if (plY.thjonustutekjur - leigutekjurFor(y) > 0) rows.push(R(t('sala_thjonustu'), plY.thjonustutekjur - leigutekjurFor(y)));
     if (plY.adrarTekjur > 0) rows.push(R(t('adrar_tekjur'), plY.adrarTekjur));
     rows.push(R(t('revenues'), plY.totalRevenue));
     if (plY.laun + plY.launatengd > 0) rows.push(R(t('wagesExpenses'), -(plY.laun + plY.launatengd)));
@@ -587,7 +590,7 @@ export default function AnnualAccounts() {
             <tbody className="divide-y divide-gray-50 text-sm">
               <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('revenues')}</td></tr>
               {pl.salaTekjur > 0 && <PLRow label={t('sala_vara')} amount={pl.salaTekjur} indent />}
-              {leigutekjur > 0 && <PLRow label={lang === 'is' ? 'Húsaleigutekjur (án VSK)' : 'Rental income (VAT exempt)'} amount={leigutekjur} indent />}
+              {(leigutekjur + pl.leigutekjur) > 0 && <PLRow label={lang === 'is' ? 'Húsaleigutekjur (án VSK)' : 'Rental income (VAT exempt)'} amount={leigutekjur + pl.leigutekjur} indent />}
               {(pl.thjonustutekjur - leigutekjur) > 0 && <PLRow label={t('sala_thjonustu')} amount={pl.thjonustutekjur - leigutekjur} indent />}
               {pl.adrarTekjur > 0 && <PLRow label={t('adrar_tekjur')} amount={pl.adrarTekjur} indent />}
               <PLRow label={t('revenues')} amount={pl.totalRevenue} bold />

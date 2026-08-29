@@ -379,6 +379,7 @@ export function calcVATSummary(transactions: Transaction[], rates: number[] = [2
 export interface ProfitLoss {
   salaTekjur: number;
   thjonustutekjur: number;
+  leigutekjur: number;
   adrarTekjur: number;
   fjarmagntekjur: number;
   totalRevenue: number;
@@ -415,11 +416,18 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
 
   const salaTekjur = sumCat('income', 'sala_vara');
   const thjonustutekjur = sumCat('income', 'sala_thjonustu');
+  // Rent received. It has its own category because letting is taxed differently
+  // from the work a contractor sells, and it MUST be summed here: revenue is built
+  // from a named list, so a category missing from this list is money that simply
+  // does not appear — not in the profit and loss, not in the annual accounts, not
+  // in any report. Adding the category without adding this line would have made
+  // every krona of rent silently vanish.
+  const leigutekjur = sumCat('income', 'leigutekjur');
   const adrarTekjur = sumCat('income', 'adrar_tekjur');
   const fjarmagntekjur = sumCat('income', 'fjarmagns_tekjur');
   // Operating revenue only — financial income (fjarmagntekjur) belongs BELOW operating
   // profit, so it must not inflate totalRevenue/operatingProfit (added back in profitBeforeTax).
-  const totalRevenue = salaTekjur + thjonustutekjur + adrarTekjur;
+  const totalRevenue = salaTekjur + thjonustutekjur + leigutekjur + adrarTekjur;
 
   const laun = sumCat('expense', 'laun');
   const launatengd = sumCat('expense', 'launatengd_gjold');
@@ -449,7 +457,7 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const netResult = profitBeforeTax - incomeTax;
 
   return {
-    salaTekjur, thjonustutekjur, adrarTekjur, fjarmagntekjur, totalRevenue,
+    salaTekjur, thjonustutekjur, leigutekjur, adrarTekjur, fjarmagntekjur, totalRevenue,
     laun, launatengd, husaleiga, simagjold, skrifstofugjold, samgongur,
     markadsmal, fagthjonusta, vorur, afskriftir, rafmagnHiti, adrir, totalOperatingExpenses,
     operatingProfit, fjarmagnsgjold, profitBeforeTax, incomeTax, netResult,
