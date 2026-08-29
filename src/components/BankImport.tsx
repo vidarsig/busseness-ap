@@ -1177,8 +1177,12 @@ ${(data.aiMemory || '').trim()}`
                               ? { ...r, category, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true, invoiceId: undefined, matchedInvoice: undefined }
                               : { ...r, learnOpen: false }));
                           }}>
+                          // INCOME_CATEGORIES, never a copy of it. A hand-written list here silently
+                          // dropped 'leigutekjur': the categoriser answered "leigutekjur" correctly and the
+                          // dropdown, having no such option, displayed the FIRST one instead. The screen said
+                          // "Sala vara" while the row said rent — the app lying about its own data.
                           {(row.type === 'income'
-                            ? ['sala_vara','sala_thjonustu','fjarmagns_tekjur','adrar_tekjur']
+                            ? INCOME_CATEGORIES
                             : row.type === 'transfer'
                             ? TRANSFER_CATEGORIES
                             : EXPENSE_CATEGORIES

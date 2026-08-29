@@ -17,7 +17,7 @@
 // without being wired in. Offline — no API key, no network.
 // ---------------------------------------------------------------------------
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -144,6 +144,43 @@ for (const lang of Object.keys(app.translations)) {
     return missing.length ? 'no ' + lang + ' label for: ' + missing.join(', ') : null;
   });
 }
+
+// ── 5b. No screen may hand-write its own copy of a category list ────────────
+// Catches: the Bank Import dropdown listed the four income categories as a
+// literal array. When leigutekjur was added the categoriser answered it
+// correctly and the dropdown, having no such option, showed the FIRST one
+// instead — the screen said "Sala vara" while the row said rent. The app lying
+// about its own data is worse than a wrong answer, because nothing looks wrong.
+//
+// A SUBSET is fine and common (e.g. "the expense categories that carry no VAT").
+// What is not fine is an array that reproduces most of a list, because that is a
+// copy of the options and it goes stale the moment the real list grows.
+check('no screen hand-writes its own copy of a category list', () => {
+  const src = join(REPO, 'src');
+  const walk = (dir) => readdirSync(dir).flatMap(n => {
+    const p = join(dir, n);
+    return statSync(p).isDirectory() ? walk(p) : [p];
+  });
+  const files = walk(src)
+    .filter(p => /\.tsx?$/.test(p))
+    .filter(p => !p.endsWith(join('types', 'index.ts')));
+  const INC = app.INCOME_CATEGORIES;
+  const EXP = app.EXPENSE_CATEGORIES;
+  const offenders = [];
+  for (const f of files) {
+    const text = readFileSync(f, 'utf8');
+    for (const lit of text.match(/\[[^\[\]]{0,600}\]/g) || []) {
+      const quoted = (lit.match(/'[a-z_]+'|"[a-z_]+"/g) || []).map(q => q.slice(1, -1));
+      const inc = INC.filter(c => quoted.includes(c)).length;
+      const exp = EXP.filter(c => quoted.includes(c)).length;
+      if (inc >= INC.length - 1 && inc >= 3) offenders.push(f.replace(REPO, '').slice(1) + ' — copies the income list');
+      else if (exp >= EXP.length - 1 && exp >= 6) offenders.push(f.replace(REPO, '').slice(1) + ' — copies the expense list');
+    }
+  }
+  return offenders.length
+    ? [...new Set(offenders)].join('; ') + ' — import the list instead'
+    : null;
+});
 
 // ── 6. Setting up a country picks a language ────────────────────────────────
 check('every supported country resolves to a language', () => {

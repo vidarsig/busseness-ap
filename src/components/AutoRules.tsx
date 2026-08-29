@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, Zap, TrendingUp } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { CategoryRule, TransactionType, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES } from '../types';
+import { CategoryRule, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../types';
 import { formatDate } from '../utils/formatters';
 
 function newId() { return `rule_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; }
@@ -29,7 +29,7 @@ function RuleModal({ initial, onSave, onClose }: {
   const inp = 'w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
   const lbl = 'block text-xs font-medium text-gray-600 mb-1';
   const cats = type === 'income'
-    ? ['sala_vara', 'sala_thjonustu', 'fjarmagns_tekjur', 'adrar_tekjur']
+    ? INCOME_CATEGORIES   // never a copy — see BankImport: a stale copy hid rent
     : type === 'transfer'
     ? TRANSFER_CATEGORIES
     : EXPENSE_CATEGORIES;
