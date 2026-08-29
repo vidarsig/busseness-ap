@@ -167,8 +167,8 @@ Rules (all column values are 0-based indices into a row):
 // dropped connection, a rate limit. Nothing was streamed, so the caller can put
 // the question back in the box and let the owner send it again.
 export class TransientAIError extends Error {
-  constructor(public status: number) {
-    super(`transient ${status}`);
+  constructor(public status: number, detail?: string) {
+    super(detail ?? `transient ${status}`);
     this.name = 'TransientAIError';
   }
 }
@@ -1037,6 +1037,7 @@ CONFIDENCE: set "confidence":"high" only when the description clearly tells you 
 
 Respond with ONLY a valid JSON array, one object per transaction (same order as input):
 [{"type":"income"|"expense"|"transfer","category":"category_key","vatRate":number,"confidence":"high"|"low"}]
+⚠️ EXACTLY ONE OBJECT PER NUMBERED LINE, in the same order. ${rows.length} lines in, ${rows.length} objects out — no more, no fewer. A line marked "×3 rows" still gets ONE object: that count tells you how many bank lines share the merchant, it is NOT a request for three answers. The app pairs your answers to the lines by position, so one extra object silently shifts every answer after it onto the wrong merchant.
 No explanation, just the JSON array.`;
 
   const userMsg = rows.map((r, i) =>
@@ -1044,10 +1045,33 @@ No explanation, just the JSON array.`;
     + (r.rowCount && r.rowCount > 1 ? ` ×${r.rowCount} rows` : '')
   ).join('\n');
 
-  const text = await callClaude(system, [{ role: 'user', content: userMsg }], 'claude-haiku-4-5-20251001', 2048);
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('AI returned unexpected format');
-  return JSON.parse(match[0]) as Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number; confidence: 'high' | 'low' }>;
+  // COUNT THE ANSWERS BEFORE TRUSTING THEIR ORDER.
+  //
+  // The caller pairs answer k with merchant k. Measured on a 20-row import: 18
+  // merchants went out and 19 answers came back — the model had given a merchant
+  // marked "×2 rows" one answer per row — and every merchant after it silently
+  // took the answer meant for the one before. Wages were booked as materials,
+  // rent as a sale of goods, the VAT payment as electricity. Nothing looked
+  // broken; the categories were all real, just attached to the wrong lines, and
+  // no screen in the app could have shown the owner that.
+  //
+  // A wrong count makes the whole batch unalignable — there is no way to tell
+  // from the outside which answer slid where. Ask once more, and if the second
+  // reading is also miscounted, fail the batch. An import that stops and says so
+  // is recoverable; a scrambled one is not.
+  const ask = async () => {
+    const text = await callClaude(system, [{ role: 'user', content: userMsg }], 'claude-haiku-4-5-20251001', 2048);
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('AI returned unexpected format');
+    return JSON.parse(match[0]) as Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number; confidence: 'high' | 'low' }>;
+  };
+
+  let parsed = await ask();
+  if (parsed.length !== rows.length) parsed = await ask();
+  if (parsed.length !== rows.length) {
+    throw new Error(`AI returned ${parsed.length} answers for ${rows.length} lines — not booked, so nothing was mis-keyed. Try again.`);
+  }
+  return parsed;
 }
 
 export interface ScannedReceipt {
