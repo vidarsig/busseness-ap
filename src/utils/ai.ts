@@ -945,6 +945,7 @@ export async function categorizeBatch(
   categories: string[],
   vatRates: number[],
   business?: string,
+  salesTaxCountry = false,
 ): Promise<Array<{ type: 'income' | 'expense' | 'transfer'; category: string; vatRate: number; confidence: 'high' | 'low' }>> {
   const standard = Math.max(...vatRates);
   const system = `You are a bookkeeping categorization engine. Analyze bank transaction descriptions and categorize them.
@@ -966,7 +967,20 @@ answer "income" for a line detected as an expense, or the reverse — a shop you
 customer. If a line looks like the wrong direction, the honest answer is "transfer" (it may be a
 refund, a loan movement or an owner draw) with confidence "low", never a flip.
 
-VAT: DO NOT DEFAULT TO 0%, BUT DO NOT DEFAULT TO THE STANDARD RATE EITHER. Booking a purchase at 0%
+${salesTaxCountry ? `SALES TAX IS NOT VAT — DO NOT PUT A RATE ON A PURCHASE.
+This business is in a SALES TAX jurisdiction, not a VAT one, and the two work in opposite
+directions. Sales tax is collected on what the business SELLS and remitted to the state. Sales tax
+the business PAYS at the till — at the lumber yard, the gas station, on insurance — is NOT
+recoverable. It is simply part of what the thing cost, and it is never separated out.
+- A PURCHASE therefore takes **0**, always. Splitting a rate out of a cost invents a refund that
+  does not exist and understates the expense.
+- Only a SALE carries the rate, and only when the work is taxable in that state — services are
+  exempt in many of them. If you are not sure whether this business's work is taxable, use ${standard}%
+  and set confidence "low" so the owner is asked.
+This is the reverse of the VAT rule, and applying the VAT rule here is a real error: it was measured
+on a Denver contractor's first import — 21 of 23 purchases carried a rate and none of the sales did.
+
+` : ''}VAT: DO NOT DEFAULT TO 0%, BUT DO NOT DEFAULT TO THE STANDARD RATE EITHER. Booking a purchase at 0%
 silently throws away input VAT the owner could reclaim; booking it at ${standard}% when the activity
 it serves is VAT-EXEMPT claims back money that is not theirs, which is the more expensive mistake of
 the two. What decides it is not the shop — it is WHAT THE PURCHASE WAS FOR.

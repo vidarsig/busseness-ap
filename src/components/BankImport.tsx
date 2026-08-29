@@ -569,6 +569,7 @@ ${(data.aiMemory || '').trim()}`
             allCategories,
             validVats,
             businessContext,
+            cc.isUSA,
           );
           setRows(prev => {
             const next = [...prev];
