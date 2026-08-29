@@ -561,8 +561,13 @@ export interface AppData {
 
 // ── Defaults ────────────────────────────────────────────────
 
+// 'leigutekjur' = RENT RECEIVED. It is neither a sale of goods nor a sale of
+// services, and in most places letting property is VAT-exempt while contracting
+// is not — so a business that does both cannot file correctly if the two land on
+// one line. Without this category the categoriser had no right answer available
+// and booked rent as a sale of goods.
 export const INCOME_CATEGORIES = [
-  'sala_vara', 'sala_thjonustu', 'fjarmagns_tekjur', 'adrar_tekjur',
+  'sala_vara', 'sala_thjonustu', 'leigutekjur', 'fjarmagns_tekjur', 'adrar_tekjur',
 ] as const;
 
 export const EXPENSE_CATEGORIES = [

@@ -1025,6 +1025,23 @@ If a transaction is NOT real business income or expense, set "type":"transfer". 
 For a "transfer" set vatRate to 0.
 Only use "income" for genuine revenue and "expense" for genuine running costs.
 
+RENT RECEIVED IS ITS OWN LINE — "leigutekjur". Money in from a tenant (a lease, a flat, a
+unit, a monthly standing payment from the same person for the same property) is RENT. It is
+not a sale of goods and not a sale of services. In most places letting property is TAX-EXEMPT
+while contracting is not, so rent takes rate 0 unless the owner has registered the letting for
+tax. A business that does both lets and builds — many small contractors do — cannot file
+correctly if the two land on the same line.
+
+WAGES ARE AN EXPENSE, NEVER A TRANSFER. A payment to a named employee, a payroll run, or
+anything described as wages/salary/laun is "laun" with rate 0. It is a real cost of the
+business and belongs in the profit and loss. Calling it a transfer takes it out of the
+accounts entirely and overstates the profit by the whole payroll.
+
+SOME PURCHASES CARRY NO RECOVERABLE TAX EVEN WHERE THE STANDARD RATE IS THE NORM. Insurance,
+bank and interest charges, public fees and levies, wages, rent of exempt property, and
+payments to the tax authority itself are exempt or outside the system: rate 0. Putting the
+standard rate on an insurance premium invents a refund that does not exist.
+
 WHAT A TRADESMAN SELLS IS WORK, NOT GOODS. A contractor's customer payments are SERVICE
 revenue ("sala_thjonustu" or whichever service category the list carries), even when the
 job swallowed a lorryload of materials — the customer bought a finished wall, not sheets of
