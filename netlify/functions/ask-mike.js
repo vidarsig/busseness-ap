@@ -32,7 +32,11 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // A key pasted into the Netlify dashboard often arrives wrapped in the quotation
+  // marks it was copied with, or with a stray newline. Anthropic then answers
+  // "invalid x-api-key" and the whole assistant is dark for a reason no screen
+  // explains. Strip them — the owner should never have to know this.
+  const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim().replace(/^["']|["']$/g, '');
   if (!apiKey) {
     return {
       statusCode: 500,

@@ -48,7 +48,11 @@ export default async (request: Request) => {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  // A key pasted into the Netlify dashboard often arrives wrapped in the quotation
+  // marks it was copied with, or with a stray newline. Anthropic then answers
+  // "invalid x-api-key" and the whole assistant is dark for a reason no screen
+  // explains. Strip them — the owner should never have to know this.
+  const apiKey = (Deno.env.get('ANTHROPIC_API_KEY') || '').trim().replace(/^["']|["']$/g, '');
   if (!apiKey) return fail(500, 'Anthropic API key not configured on server');
 
   if (!(await signedIn(request))) return fail(401, 'Sign in to use the assistant');
