@@ -563,7 +563,14 @@ ${(data.aiMemory || '').trim()}`
             slice.map(g => ({
               description: g.sample,
               amount: Math.round(g.total / g.rows.length),   // the typical amount
-              detectedType: g.rows[0].r.type,
+              // THE BANK'S DIRECTION, TAKEN FROM THE BANK — not from the row, whose
+              // type the last run may already have changed. The prompt tells the model
+              // "detected IS THE BANK'S OWN DIRECTION AND IT IS NOT YOURS TO OVERRULE";
+              // feeding it the previous answer instead turned that instruction into a
+              // lock on the model's own earlier mistake. Fuel bought at N1 came back as
+              // an owner's draw, and every re-run then cited that draw as the bank's
+              // word for it. The sign on the statement cannot be argued with.
+              detectedType: (g.rows[0].r.amount < 0 ? 'expense' : 'income') as TransactionType,
               rowCount: g.rows.length,
             })),
             allCategories,
