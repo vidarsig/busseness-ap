@@ -1,4 +1,4 @@
-import { CountryConfig } from '../types';
+import { CountryConfig, Language } from '../types';
 
 export const COUNTRY_CONFIGS: Record<string, CountryConfig> = {
   IS: {
@@ -139,6 +139,16 @@ export const CA_PROVINCES: CaProvince[] = [
 // add on top — the contractor can override in Settings. NB: AK/DE/MT/NH/OR have NO
 // state sales tax (0). Single source of truth: Settings picker + onboarding + AI setup.
 export interface UsState { name: string; rate: number; }
+// The language a country is set up in. Anything not listed speaks English — which
+// is what a US, British, Canadian, Australian or New Zealand contractor expects.
+// Both setup paths read this: the country picker AND the assistant. When only the
+// picker knew it, a US company set up by chat got an Icelandic app.
+export const COUNTRY_LANGUAGE: Record<string, Language> = {
+  IS: 'is', DE: 'de', FR: 'fr', NL: 'nl', NO: 'no', DK: 'da', SE: 'sv',
+};
+export const languageForCountry = (code: string): Language =>
+  COUNTRY_LANGUAGE[String(code || '').toUpperCase()] ?? 'en';
+
 export const US_STATES: UsState[] = [
   { name: 'Alabama', rate: 4 }, { name: 'Alaska', rate: 0 }, { name: 'Arizona', rate: 5.6 },
   { name: 'Arkansas', rate: 6.5 }, { name: 'California', rate: 7.25 }, { name: 'Colorado', rate: 2.9 },

@@ -8,7 +8,7 @@ import { exportExcelTable } from '../utils/exports';
 import { yearOf } from '../utils/calculations';
 import { Transaction, TransactionType, Currency, Invoice, Job, JobStatus, CategoryRule, View, TimeEntry, JobMaterial } from '../types';
 import { getAttention } from '../utils/attention';
-import { COUNTRY_CONFIGS, findCaProvince } from '../data/countries';
+import { COUNTRY_CONFIGS, findCaProvince, languageForCountry } from '../data/countries';
 
 interface ExcelReport { filename: string; sheet: string; columns: string[]; rows: (string | number)[][]; }
 
@@ -647,6 +647,9 @@ export default function AIAssistant({ setView }: { setView?: (v: View) => void }
     const rate = usRate != null ? usRate : caProv ? caProv.rate : null;
     dispatch({ type: 'UPDATE_SETTINGS', payload: {
       country: code,
+      // Set up by chat, the app used to stay in Icelandic for a Denver contractor —
+      // the picker changed the language, this path never did.
+      language: languageForCountry(code),
       defaultCurrency: cc.currency,
       taxWithholdingRate: cc.taxWithholdingRate,
       employeePensionRate: cc.employeePensionRate,

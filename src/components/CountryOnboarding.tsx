@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BookOpen } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { COUNTRY_LIST, COUNTRY_CONFIGS, US_STATES, CA_PROVINCES } from '../data/countries';
+import { COUNTRY_LIST, COUNTRY_CONFIGS, US_STATES, CA_PROVINCES, languageForCountry } from '../data/countries';
 import { Language } from '../types';
 
 export default function CountryOnboarding() {
@@ -13,13 +13,9 @@ export default function CountryOnboarding() {
   const [usState, setUsState] = useState('');
   const [caProvince, setCaProvince] = useState('');
 
-  const COUNTRY_LANG: Record<string, Language> = {
-    IS: 'is', DE: 'de', FR: 'fr', NL: 'nl', NO: 'no', DK: 'da', SE: 'sv',
-  };
-
   function handleCountrySelect(code: string) {
     setSelectedCode(code);
-    if (COUNTRY_LANG[code]) setLang(COUNTRY_LANG[code]);
+    setLang(languageForCountry(code));
   }
 
   const ONBOARDING_STRINGS: Record<Language, { title: string; subtitle: string; usNote: string; caNote: string; start: string }> = {
