@@ -250,7 +250,19 @@ export default function AnnualAccounts() {
   const isAssetKey = (id?: string) => !!id && data.accounts.find(a => a.id === id)?.type === 'asset';
   const trackedCash = useMemo(() =>
     data.transactions
-      .filter(tx => yearOf(tx.date) <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
+      // A LOAN THAT PAID THE SELLER DIRECTLY NEVER REACHED THE BANK.
+      // Booking the purchase contracts put every drawdown in as money IN, but the
+      // property they bought is a balanceSheetItem, not a transaction — so the
+      // money came in and never went out, and the calculated cash ran 54 M above
+      // the real account. The bank settles which is which: 22.000.000 (Arion
+      // 186400), 11.500.000 (A00750), 9.000.000 (A00346) and 6.750.000 (Arion
+      // 155791) appear NOWHERE in the statement, while 5.900.005 (Arion 175957,
+      // texti "Skuldabréf") and 3.000.000 (A01536) do. The four that never landed
+      // are exactly the keys flagged isPropertyMortgage. Dr asset, Cr loan, no
+      // cash — so leave those drawdowns out of the cash line.
+      .filter(tx => yearOf(tx.date) <= year && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir'
+        && !(tx.category === 'lan_mottekid'
+             && data.accounts.find(a => a.id === tx.accountId)?.isPropertyMortgage))
       // Money IN = income, a loan received (lan_mottekid), OR an owner contribution
       // (framlag) — mirror accountBalanceByYear, so money paid IN isn't wrongly
       // counted as cash going out.
