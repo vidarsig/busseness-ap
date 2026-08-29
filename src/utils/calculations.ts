@@ -96,7 +96,27 @@ export function accountBalanceByYear(
         const at = !moneyIn && account.isIndexed && priceIndex
           ? indexFactor(account.baseIndex, tx.date, priceIndex)
           : 1;
-        return s + (moneyIn ? gross : -((gross - interest) / at));
+        // WHICH WAY A MOVEMENT PUSHES DEPENDS ON WHAT KIND OF KEY IT IS.
+        // The rule above is written for a LIABILITY: money in raises what is owed,
+        // a payment lowers it. On an ASSET key it is the other way round — money
+        // spent on the thing BUILDS it. Applying the liability rule to every key
+        // drove the silver key to −4.174.294 on 14 purchases from GOLDSILVER.COM
+        // and "Kostnaður vegna Akurgerði 13" to −776.150 on the money actually
+        // spent on the flat, so both sat among the LIABILITIES: an asset the
+        // company owns, shown as a debt it owes.
+        // MONEY SPENT ON AN ASSET BUILDS IT — it does not spend it away.
+        // The rule above is written for a LIABILITY: money in raises what is owed,
+        // a payment lowers it. Applied to an asset key it inverted the meaning of
+        // every purchase, so the silver key stood at −4.174.294 after 14 buys from
+        // GOLDSILVER.COM and "Kostnaður vegna Akurgerði 13" at −776.150 — assets
+        // the company owns, printed among the debts it owes.
+        //
+        // Only the OUTFLOW flips. Money IN on an asset key keeps the existing
+        // behaviour: the receivables (1450 Eiríkur, 1460, 1470 Fylkir) are booked
+        // as money in and read correctly today. Measuring first showed that
+        // flipping both directions would have broken those three to fix these two.
+        const buildsAnAsset = account.type === 'asset' && !moneyIn;
+        return s + (moneyIn ? gross : (buildsAnAsset ? 1 : -1) * ((gross - interest) / at));
       }, 0);
     bal += net;
     // Index at the YEAR END the row reports, not today: a 2024 balance sheet has
