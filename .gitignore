@@ -31,3 +31,7 @@ npm-debug.log*
 .cache/
 .parcel-cache/
 .vite/
+
+# Local-only: a real backup copied in so the dev server can load it.
+# NEVER commit or deploy — it is the owner's whole book of accounts.
+public/_dev_backup.json
