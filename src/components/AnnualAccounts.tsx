@@ -133,7 +133,7 @@ export default function AnnualAccounts() {
 
   // "Other operating expenses" = every operating line except wages and depreciation,
   // computed once (incl. electricity/heating) so the display and the export agree.
-  const otherOp = pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.adrir;
+  const otherOp = pl.husaleiga + pl.rafmagnHiti + pl.simagjold + pl.skrifstofugjold + pl.samgongur + pl.markadsmal + pl.fagthjonusta + pl.vorur + pl.faedi + pl.adrir;
 
 
 
@@ -328,7 +328,7 @@ export default function AnnualAccounts() {
   // the memoised values above for the selected year.
   function computeYear(y: number) {
     const plY = withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, y);
-    const otherOpY = plY.husaleiga + plY.rafmagnHiti + plY.simagjold + plY.skrifstofugjold + plY.samgongur + plY.markadsmal + plY.fagthjonusta + plY.vorur + plY.adrir;
+    const otherOpY = plY.husaleiga + plY.rafmagnHiti + plY.simagjold + plY.skrifstofugjold + plY.samgongur + plY.markadsmal + plY.fagthjonusta + plY.vorur + plY.faedi + plY.adrir;
     const closingFor = (acc: Account): number => {
       const rows = accountBalanceByYear(acc, data.transactions, priceIndex).filter(r => r.year <= y);
       if (rows.length) return rows[rows.length - 1].closing;

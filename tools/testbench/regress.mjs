@@ -241,6 +241,28 @@ check('every income and expense category is counted in the profit & loss', () =>
     : null;
 });
 
+// ── 5f. A counted category must also be a VISIBLE line ──────────────────────
+// Catches the other half of the same fault. Meals reached the total — 2024 costs
+// added to 9.761.085 — but no row on the report said where 526.300 of it went;
+// the printed lines came to 9.234.785 and the reader was left to wonder. Money
+// that is counted but never shown is not much better than money that is lost.
+//
+// This one is a SHAPE check, not arithmetic: JSX cannot be run here. It only
+// proves each expense field is mentioned where the statement is drawn. 5e does
+// the arithmetic; this makes sure the screen names it.
+check('every expense line in the P&L is drawn on the report', () => {
+  const src = readFileSync(join(REPO, 'src', 'components', 'Reports.tsx'), 'utf8');
+  const pl = app.calcProfitLoss([], 20, false);
+  const skip = new Set(['totalRevenue', 'totalOperatingExpenses', 'operatingProfit',
+    'profitBeforeTax', 'incomeTax', 'netResult', 'fjarmagntekjur', 'fjarmagnsgjold',
+    'salaTekjur', 'thjonustutekjur', 'leigutekjur', 'adrarTekjur']);
+  const missing = Object.keys(pl).filter(k => typeof pl[k] === 'number' && !skip.has(k))
+    .filter(k => !src.includes('pl.' + k) && !src.includes('plY.' + k));
+  return missing.length
+    ? 'counted but never drawn on the report: ' + missing.join(', ')
+    : null;
+});
+
 // ── 6. Setting up a country picks a language ────────────────────────────────
 check('every supported country resolves to a language', () => {
   const bad = Object.keys(app.COUNTRY_CONFIGS).filter(c => !app.languageForCountry(c));

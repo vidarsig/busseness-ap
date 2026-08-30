@@ -43,6 +43,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
     pushIf(pl.markadsmal > 0,      t('markadsmal'),        -pl.markadsmal);
     pushIf(pl.fagthjonusta > 0,    t('fagthjonusta'),      -pl.fagthjonusta);
     pushIf(pl.vorur !== 0,         t('vorur'),             -pl.vorur);
+    pushIf(pl.faedi !== 0,         t('faedi'),             -pl.faedi);
     pushIf(pl.afskriftir > 0,      t('afskriftir'),        -pl.afskriftir);
     pushIf(pl.adrir > 0,           t('adrir_rekstrargjold'), -pl.adrir);
     push(t('operatingExpenses'), -pl.totalOperatingExpenses);
@@ -219,6 +220,7 @@ export default function Reports({ drill }: { drill?: (category: string, year: nu
             {pl.markadsmal > 0 && <Row label={t('markadsmal')} amount={pl.markadsmal} indent isNegative catKey="markadsmal" />}
             {pl.fagthjonusta > 0 && <Row label={t('fagthjonusta')} amount={pl.fagthjonusta} indent isNegative catKey="fagthjonusta" />}
             {pl.vorur > 0 && <Row label={t('vorur')} amount={pl.vorur} indent isNegative catKey="vorur" />}
+            {pl.faedi > 0 && <Row label={t('faedi')} amount={pl.faedi} indent isNegative catKey="faedi" />}
             {pl.afskriftir > 0 && <Row label={t('afskriftir')} amount={pl.afskriftir} indent isNegative catKey="afskriftir" />}
             {pl.adrir > 0 && <Row label={t('adrir_rekstrargjold')} amount={pl.adrir} indent isNegative catKey="adrir_rekstrargjold" />}
             <Row label={t('operatingExpenses')} amount={-pl.totalOperatingExpenses} bold />
