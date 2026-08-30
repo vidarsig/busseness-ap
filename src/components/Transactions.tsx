@@ -19,6 +19,25 @@ import { exportPDF, exportExcel } from '../utils/exports';
 // filter finds "Krónan"/"Vörður" when you type "kronan"/"vordur".
 const foldAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/ð/g, 'd').replace(/þ/g, 'th').replace(/æ/g, 'ae').replace(/ø/g, 'o');
 
+// EVERYTHING THE ROW SHOWS IS SEARCHABLE. The box used to look only at the shop
+// name, so typing "Fæði" — a word printed on the rows themselves, in the category
+// chip and on the key — returned "no entries found". That does not read as "the
+// filter matched nothing", it reads as the money being gone: 2.714 meal rows were
+// on screen a moment earlier. Anything a person can see on a row they will type
+// into the box, so the box must look at all of it.
+export function txSearchHaystack(
+  description: string, reference: string | undefined,
+  category: string, categoryLabel: string,
+  accountNumber?: string, accountName?: string,
+): string {
+  return foldAccents([description, reference ?? '', category, categoryLabel, accountNumber ?? '', accountName ?? ''].join(' '));
+}
+
+/** Accent- and case-insensitive, so "faedi" finds "Fæði" and "kronan" finds "Krónan". */
+export function txMatchesSearch(haystack: string, query: string): boolean {
+  return !query || haystack.includes(foldAccents(query));
+}
+
 // How a row reads at a glance in a long list. Money IN — income, a loan RECEIVED
 // ('lan_mottekid'), or an owner contribution ('framlag') — is green +. Money OUT —
 // expense, or a loan repayment ('lan_afborgun' transfer) — is red −. A neutral
@@ -477,6 +496,9 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     return Array.from(ys).sort((a, b) => b - a);
   }, [data.transactions]);
 
+  // Looked up once per render instead of scanning the key list for every row.
+  const accountById = useMemo(() => new Map(data.accounts.map(a => [a.id, a])), [data.accounts]);
+
   const filtered = useMemo(() => {
     return data.transactions
       .filter(tx => {
@@ -487,8 +509,14 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         else if (filterKey !== 'all' && tx.accountId !== filterKey) return false;
         if (dateFrom && tx.date < dateFrom) return false;
         if (dateTo && tx.date > dateTo) return false;
-        if (search && !tx.description.toLowerCase().includes(search.toLowerCase()) &&
-          !tx.reference?.toLowerCase().includes(search.toLowerCase())) return false;
+        if (search) {
+          const acc = tx.accountId ? accountById.get(tx.accountId) : undefined;
+          const hay = txSearchHaystack(
+            tx.description, tx.reference, tx.category, t(tx.category as never),
+            acc?.number, acc ? (lang === 'is' ? acc.name : (acc.nameEn || acc.name)) : undefined,
+          );
+          if (!txMatchesSearch(hay, search)) return false;
+        }
         if (filterName) {
           // Accent-insensitive so "kronan" finds "Krónan", "vordur" finds "Vörður".
           const q = foldAccents(filterName);
@@ -500,7 +528,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, filterType, filterYear, filterCategory, filterKey, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
+  }, [data.transactions, accountById, t, lang, filterType, filterYear, filterCategory, filterKey, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
 
   // Keys (categories) actually in use, so the filter only lists real ones.
   const usedCategories = useMemo(() =>

@@ -3,6 +3,7 @@
 // picks it up on the next build with no edit here.
 export { buildChatSystem, buildContext, streamClaude, categorizeBatch, detectImportColumns, generateInsights, detectYear, txPool } from '../../src/utils/ai';
 export { findHeaderMap, parseBank, stampBankDirection } from '../../src/components/BankImport';
+export { txSearchHaystack, txMatchesSearch } from '../../src/components/Transactions';
 export {
   DEFAULT_ACCOUNTS, DEFAULT_SETTINGS, DEFAULT_COMPANY,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES, CATEGORY_ALIASES, canonicalCategory,

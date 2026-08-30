@@ -124,6 +124,25 @@ for (const [alias, key] of Object.entries(app.CATEGORY_ALIASES)) {
   });
 }
 
+// ── 2d. The search box must find what the row shows ────────────────────────
+// Catches: the box looked only at the shop name. Filtering to key 6650 and then
+// typing "Fæði" — the word printed on every one of those rows — emptied the
+// screen, which reads as the money being gone rather than as a filter matching
+// nothing. A person types what they can see.
+const HAY = () => app.txSearchHaystack('KRONAN FITJUM', '4861907', 'faedi', 'Fæði', '6650', 'Fæði');
+for (const [what, q] of [
+  ['the shop name', 'kronan'], ['the shop name with no accents typed', 'KRONAN'],
+  ['the category label', 'Fæði'], ['the category label typed without accents', 'faedi'],
+  ['the category key', 'faedi'], ['the account number', '6650'], ['the reference', '4861907'],
+]) {
+  check('search finds a row by ' + what, () =>
+    app.txMatchesSearch(HAY(), q) ? null : 'searching "' + q + '" does not find a row that shows it');
+}
+check('search still excludes a row that does not match', () =>
+  app.txMatchesSearch(HAY(), 'N1 Hafnarfjordur') ? 'matched a row it should not' : null);
+check('an empty search excludes nothing', () =>
+  app.txMatchesSearch(HAY(), '') ? null : 'an empty box filtered rows out');
+
 // ── 3. Borrowed money is not profit ─────────────────────────────────────────
 check('a transfer changes neither revenue nor costs', () => {
   const pl = app.calcProfitLoss([tx({ type: 'transfer', category: 'lan_afborgun', amount: 900000 })], 20, false);
