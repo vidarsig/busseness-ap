@@ -7,6 +7,6 @@ export {
   DEFAULT_ACCOUNTS, DEFAULT_SETTINGS, DEFAULT_COMPANY,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
 } from '../../src/types';
-export { calcProfitLoss, calcVATSummary, calcVAT } from '../../src/utils/calculations';
+export { calcProfitLoss, calcVATSummary, calcVAT, accumulatedResult, accountBalanceByYear, withAssetDepreciation } from '../../src/utils/calculations';
 export { COUNTRY_CONFIGS, US_STATES, CA_PROVINCES, languageForCountry } from '../../src/data/countries';
 export { translations } from '../../src/i18n/translations';

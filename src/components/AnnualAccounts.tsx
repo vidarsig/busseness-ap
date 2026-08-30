@@ -4,7 +4,7 @@ import { useApp } from '../contexts/AppContext';
 import { filterByYear, calcProfitLoss, withAssetDepreciation, accountBalanceByYear, getTransactionISK, yearOf } from '../utils/calculations';
 import { exportPDF, sharePDF, ExportColumn, ExportRow } from '../utils/exports';
 import { BalanceSheetItem, Account } from '../types';
-import { assetBookValue, assetVisible } from '../utils/calculations';
+import { assetBookValue, assetVisible, accumulatedResult } from '../utils/calculations';
 import { IS_PRICE_INDEX } from '../data/priceIndex';
 
 function newId() {
@@ -243,8 +243,17 @@ export default function AnnualAccounts() {
   // asset key (that key tracks its own balance, counting it here too would double
   // it) and (b) DEPRECIATION (afskriftir) — a non-cash expense: it lowers profit
   // and the fixed-asset book value (book it onto the asset key) but no money moves.
-  // Retained earnings = accumulated profit before income tax (a tax accrual isn't a
-  // cash movement; actual tax paid is its own transaction). Verified to net to 0
+  // RETAINED EARNINGS CARRY PROFIT AFTER TAX, AND THE TAX STANDS AS A LIABILITY.
+  // They used to accumulate profit BEFORE tax, on the reasoning that a tax accrual
+  // moves no cash. True, but it made the two statements contradict each other: the
+  // P&L reported 1.769.127 for 2024 while equity moved by 2.211.409, and the
+  // difference was the income tax to the króna — charged in one statement and
+  // invisible in the other. An annual account whose own profit does not explain the
+  // change in its own equity invites exactly the question the owner asked: whether
+  // the tax office would reopen the years.
+  //   The correction is balance-neutral. Equity falls by the tax and liabilities
+  // rise by the same, so the residual below does not move; only the story adds up.
+  // Verified to net to 0
   // when the opening balances balance and entries are complete; any residual is
   // shown honestly so the owner can complete opening balances / fix an entry.
   const isAssetKey = (id?: string) => !!id && data.accounts.find(a => a.id === id)?.type === 'asset';
@@ -279,10 +288,9 @@ export default function AnnualAccounts() {
   const overdraft = Math.max(0, -cashRaw);
   const currentAssetValue = (b: BalanceSheetItem) => isCashLine(b) ? cashAsset : b.amount;
   const totalCurrentAssets = getSection('current_assets').reduce((s, b) => s + currentAssetValue(b), 0);
-  const retainedEarnings = useMemo(() => {
-    const yrs = [...new Set(data.transactions.map(t => yearOf(t.date)))].filter(y => y <= year);
-    return yrs.reduce((s, y) => s + withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, y), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, y).profitBeforeTax, 0);
-  }, [data.transactions, year, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT]);
+  const { retained: retainedEarnings, accruedTax } = useMemo(
+    () => accumulatedResult(data.transactions, data.balanceSheetItems, year, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT),
+    [data.transactions, data.balanceSheetItems, year, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT]);
   const posAssetKeys = balanceKeys.asset.reduce((s, r) => s + r.closing, 0);
   const posLiab = balanceKeys.liability.reduce((s, r) => s + r.closing, 0);
   const posEquityKeys = balanceKeys.equity.reduce((s, r) => s + r.closing, 0);
@@ -298,7 +306,9 @@ export default function AnnualAccounts() {
   // the owner's own funds); it balances the property asset. Any residual (bsDiff) is
   // shown honestly — it means opening balances/loans aren't fully entered yet.
   const totalAssets = totalFixedAssets + totalCurrentAssets + posAssetKeys;
-  const totalLiabilities = posLiab + staticLongTerm + staticCurrentLiab + overdraft;
+  // The tax charged in the P&L but not yet paid is a debt of the company. Without
+  // it on this side, equity falls by the tax and nothing rises to meet it.
+  const totalLiabilities = posLiab + staticLongTerm + staticCurrentLiab + overdraft + accruedTax;
   // Owner's equity in the properties = their book value MINUS the loans that finance
   // them (the liability keys). This balances the property asset against its mortgages
   // + this equity, so the properties don't inflate the sheet. Only when properties
@@ -331,14 +341,12 @@ export default function AnnualAccounts() {
     const cash = data.transactions
       .filter(tx => yearOf(tx.date) <= y && !isAssetKey(tx.accountId) && tx.category !== 'afskriftir')
       .reduce((s, tx) => s + ((tx.type === 'income' || tx.category === 'lan_mottekid' || tx.category === 'framlag') ? getTransactionISK(tx) : -getTransactionISK(tx)), 0);
-    const retained = [...new Set(data.transactions.map(t => yearOf(t.date)))]
-      .filter(yy => yy <= y)
-      .reduce((s, yy) => s + withAssetDepreciation(calcProfitLoss(filterByYear(data.transactions, yy), data.settings.corporateTaxRate, data.settings.pricesIncludeVAT), data.balanceSheetItems, yy).profitBeforeTax, 0);
+    const { retained, accruedTax: accrued } = accumulatedResult(data.transactions, data.balanceSheetItems, y, data.settings.corporateTaxRate, data.settings.pricesIncludeVAT);
     const posAssets = cash + bk.asset.reduce((s, r) => s + r.closing, 0);
-    const posLiab = bk.liability.reduce((s, r) => s + r.closing, 0);
+    const posLiab = bk.liability.reduce((s, r) => s + r.closing, 0) + accrued;
     const posEquity = bk.equity.reduce((s, r) => s + r.closing, 0) + retained;
     const hasPosition = bk.asset.length + bk.liability.length + bk.equity.length > 0 || Math.abs(cash) > 0.5 || Math.abs(retained) > 0.5;
-    return { plY, otherOpY, bk, cash, retained, posAssets, posLiab, posEquity, posDiff: posAssets - posLiab - posEquity, hasPosition };
+    return { plY, otherOpY, bk, cash, retained, accrued, posAssets, posLiab, posEquity, posDiff: posAssets - posLiab - posEquity, hasPosition };
   }
 
   function handleSaveBs(item: BalanceSheetItem) {
@@ -357,7 +365,7 @@ export default function AnnualAccounts() {
     const nm = (i: BalanceSheetItem) => lang === 'is' ? i.name : (i.nameEn || i.name);
     const R = (label: string, amount: number): ExportRow => ({ label, amount: fmtISK(amount) });
     const SEC = (label: string): ExportRow => ({ label: label.toUpperCase(), amount: '' });
-    const { plY, otherOpY, bk, cash, retained } = computeYear(y);
+    const { plY, otherOpY, bk, cash, retained, accrued } = computeYear(y);
     // Fixed assets at their book value for THIS year (a property only from its
     // acquired year), so each year's PDF shows that year's depreciated value.
     const fixedRowsY = getSection('fixed_assets').filter(i => assetVisible(i, y)).map(i => ({ i, v: assetBookValue(i, y) }));
@@ -379,7 +387,7 @@ export default function AnnualAccounts() {
     // non-mortgage debt stays a normal liability offset by the cash it produced.
     const mortgageLiabY = bk.liability.reduce((s, r) => s + (r.acc.isPropertyMortgage ? r.closing : 0), 0);
     const propertyEquityY = totalFixedY > 0 ? totalFixedY - mortgageLiabY : 0;
-    const totalLiabY = liabKeysY + staticLongTerm + staticCurrentLiab + overdraftY;
+    const totalLiabY = liabKeysY + staticLongTerm + staticCurrentLiab + overdraftY + accrued;
     const totalEquityY = staticEquity + equityKeysY + retained + propertyEquityY;
     const totalEquityAndLiabY = totalLiabY + totalEquityY;
     const bsDiffY = totalAssetsY - totalEquityAndLiabY;
@@ -421,6 +429,8 @@ export default function AnnualAccounts() {
     rows.push(R(t('totalEquity'), totalEquityY));
     getSection('long_term_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
     bk.liability.forEach(({ acc, closing }) => rows.push(R(keyLbl(acc), closing)));
+    if (accrued > 0) rows.push(R(lang === 'is' ? 'Tekjuskattur, áfallinn og ógreiddur'
+      : 'Income tax, accrued and unpaid', accrued));
     rows.push(R(t('longTermLiabilities'), staticLongTerm + liabKeysY));
     getSection('current_liabilities').forEach(i => rows.push(R(nm(i), i.amount)));
     rows.push(R(t('currentLiabilities'), staticCurrentLiab));
@@ -728,6 +738,9 @@ export default function AnnualAccounts() {
                     <td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(closing)}</td>
                   </tr>
                 ))}
+                {accruedTax > 0 && (
+                  <tr><td className="px-4 py-1.5 text-sm pl-8">{lang === 'is' ? 'Tekjuskattur, áfallinn og ógreiddur' : 'Income tax, accrued and unpaid'}</td><td className="px-4 py-1.5 text-sm text-right font-mono">{fmtISK(accruedTax)}</td></tr>
+                )}
                 <BSRow label={t('longTermLiabilities')} amount={staticLongTerm + posLiab} bold />
 
                 <tr className="bg-blue-50"><td colSpan={2} className="px-4 py-1.5 text-xs font-bold text-blue-700 uppercase">{t('currentLiabilities')}</td></tr>

@@ -182,6 +182,39 @@ check('no screen hand-writes its own copy of a category list', () => {
     : null;
 });
 
+// ── 5c. Equity must move by profit AFTER tax ────────────────────────────────
+// Catches: the annual accounts accumulated profitBeforeTax into equity, so they
+// reported 1.769.127 of profit for 2024 while equity moved by 2.211.409 — the
+// income tax to the króna, charged in one statement and invisible in the other.
+// An account whose own profit does not explain the change in its own equity is
+// the first thing a tax office asks about.
+//
+// The first version of this check only looked for the right WORDS in the source
+// and passed happily with the bug put back. This one runs the arithmetic.
+check('retained earnings carry profit after tax, and the tax is carried as a debt', () => {
+  const tx = (date, type, amount, category) => ({
+    id: date + type + amount, date, type, amount, vatRate: 0, category,
+    currency: 'ISK', eurToIskRate: 148, description: 'p',
+  });
+  const rows = [
+    tx('2023-05-01', 'income', 1_000_000, 'sala_thjonustu'),
+    tx('2023-05-02', 'expense', 4_000_000, 'vorur'),      // 2023: 3.000.000 loss, no tax
+    tx('2024-05-01', 'income', 9_000_000, 'sala_thjonustu'),
+    tx('2024-05-02', 'expense', 4_000_000, 'vorur'),      // 2024: 5.000.000 profit, 1.000.000 tax
+  ];
+  const r = app.accumulatedResult(rows, [], 2024, 20, false);
+  if (Math.round(r.accruedTax) !== 1_000_000)
+    return `accrued tax ${Math.round(r.accruedTax)}, expected 1.000.000`;
+  if (Math.round(r.retained) !== 1_000_000)   // -3.000.000 + (5.000.000 - 1.000.000)
+    return `retained ${Math.round(r.retained)}, expected 1.000.000 (after tax)`;
+  // and the two together must still be the pre-tax accumulation
+  const pre = [2023, 2024].reduce((s, y) =>
+    s + app.calcProfitLoss(rows.filter(t => t.date.slice(0, 4) === String(y)), 20, false).profitBeforeTax, 0);
+  if (Math.round(r.retained + r.accruedTax) !== Math.round(pre))
+    return `retained + tax ${Math.round(r.retained + r.accruedTax)} != pre-tax ${Math.round(pre)}`;
+  return null;
+});
+
 // ── 6. Setting up a country picks a language ────────────────────────────────
 check('every supported country resolves to a language', () => {
   const bad = Object.keys(app.COUNTRY_CONFIGS).filter(c => !app.languageForCountry(c));

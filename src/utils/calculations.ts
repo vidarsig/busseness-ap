@@ -406,6 +406,32 @@ export interface ProfitLoss {
   netResult: number;
 }
 
+/** Accumulated result to the end of `year`, split into what belongs in equity and
+ *  what the company still owes the tax office.
+ *
+ *  Retained earnings carry profit AFTER tax; the tax charged but not yet paid is a
+ *  liability. Keeping the two together in one function is the point: they used to
+ *  be computed inside the annual-accounts screen, where nothing could test them,
+ *  and equity silently accumulated profit BEFORE tax. The statements then
+ *  contradicted each other — 1.769.127 of profit reported for 2024 while equity
+ *  moved by 2.211.409 — and the difference was the income tax to the króna.
+ *
+ *  retained + accruedTax === the accumulated profit before tax, always. */
+export function accumulatedResult(
+  transactions: Transaction[],
+  balanceSheetItems: BalanceSheetItem[],
+  year: number,
+  corporateTaxRate = 20,
+  pricesInclVat = false,
+): { retained: number; accruedTax: number } {
+  const years = [...new Set(transactions.map(t => yearOf(t.date)))].filter(y => y <= year);
+  return years.reduce((acc, y) => {
+    const rows = transactions.filter(t => yearOf(t.date) === y);
+    const pl = withAssetDepreciation(calcProfitLoss(rows, corporateTaxRate, pricesInclVat), balanceSheetItems, y);
+    return { retained: acc.retained + pl.netResult, accruedTax: acc.accruedTax + pl.incomeTax };
+  }, { retained: 0, accruedTax: 0 });
+}
+
 export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 20, pricesInclVat = false): ProfitLoss {
   // Revenue and costs are NET of VAT — when amounts are gross (pricesInclVat) the
   // VAT is extracted so profit isn't overstated by the tax portion.
