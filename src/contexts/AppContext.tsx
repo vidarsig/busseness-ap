@@ -6,6 +6,7 @@ import {
   Account, Invoice, RecurringTransaction, BudgetLine, PayrollEntry, CategoryRule, Task,
   StockItem, StockMovement, Supplier, Customer, Job, TimeEntry, JobMaterial, JobPhoto, AppUser, Employee,
   DEFAULT_SETTINGS, DEFAULT_ACCOUNTS, DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY, Language, CountryConfig,
+  canonicalCategory,
 } from '../types';
 import { translations, TranslationKey } from '../i18n/translations';
 import { COUNTRY_CONFIGS } from '../data/countries';
@@ -371,10 +372,26 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 const SYNC_TS_KEY = 'bokhalds_sync_ts';
 
+// A category written as its LABEL instead of its key ("fæði" for 'faedi') is a row
+// no total names, so it disappears from the accounts without appearing anywhere as
+// an error. Heal it on the way in — on first load and on every restore — so the row
+// shows on its own line in the lists too, not merely in the totals.
+function healCategories(list: Transaction[]): Transaction[] {
+  let changed = false;
+  const healed = list.map(t => {
+    const c = canonicalCategory(t.category);
+    if (c === t.category) return t;
+    changed = true;
+    return { ...t, category: c as Transaction['category'] };
+  });
+  return changed ? healed : list;
+}
+
 function migrateData(parsed: Partial<AppData>): AppData {
   return applyOwnerSeeds({
     ...defaultData,
     ...parsed,
+    transactions: healCategories(parsed.transactions ?? []),
     seededMigrations: parsed.seededMigrations ?? [],
     accounts: parsed.accounts?.length ? parsed.accounts : DEFAULT_ACCOUNTS,
     invoices: (parsed.invoices ?? []).map((inv: Invoice) => ({ ...inv, type: inv.type ?? 'invoice' as const })),

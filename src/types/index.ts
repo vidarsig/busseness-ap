@@ -599,6 +599,23 @@ export const TRANSFER_CATEGORIES = [
 // leaving the owner account showing only the money paid IN.
 export const KEY_REQUIRED_CATEGORIES = ['lan_afborgun', 'lan_mottekid', 'framlag', 'uttekt'] as const;
 
+// A CATEGORY IS A KEY, NEVER A LABEL. 95 real meal rows were stored as the
+// Icelandic word "fæði" instead of the key "faedi". Nothing rejected them and
+// nothing showed them: the profit and loss is built from a named list, so a row
+// whose category is not on that list is money that appears nowhere at all —
+// 195.263 kr of cost, invisible. Anything ever written where a key belongs is
+// mapped back to the key here, so the row lands on its own line.
+export const CATEGORY_ALIASES: Record<string, string> = {
+  'fæði': 'faedi',
+};
+
+/** The key a stored category really means. Unknown names are returned unchanged
+ *  so the accounts can still sweep them somewhere visible rather than drop them. */
+export function canonicalCategory(category: string | undefined | null): string {
+  const raw = String(category ?? '').trim();
+  return CATEGORY_ALIASES[raw] ?? CATEGORY_ALIASES[raw.toLowerCase()] ?? raw;
+}
+
 export type IncomeCategory = typeof INCOME_CATEGORIES[number];
 export type ExpenseCategory = typeof EXPENSE_CATEGORIES[number];
 

@@ -5,7 +5,7 @@ export { buildChatSystem, buildContext, streamClaude, categorizeBatch, detectImp
 export { findHeaderMap, parseBank, stampBankDirection } from '../../src/components/BankImport';
 export {
   DEFAULT_ACCOUNTS, DEFAULT_SETTINGS, DEFAULT_COMPANY,
-  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
+  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES, CATEGORY_ALIASES, canonicalCategory,
 } from '../../src/types';
 export { calcProfitLoss, calcVATSummary, calcVAT, accumulatedResult, accountBalanceByYear, withAssetDepreciation } from '../../src/utils/calculations';
 export { COUNTRY_CONFIGS, US_STATES, CA_PROVINCES, languageForCountry } from '../../src/data/countries';

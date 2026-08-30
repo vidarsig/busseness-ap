@@ -1,4 +1,5 @@
-import { Transaction, Currency, Account, BalanceSheetItem } from '../types';
+import { Transaction, Currency, Account, BalanceSheetItem,
+  INCOME_CATEGORIES, EXPENSE_CATEGORIES, canonicalCategory } from '../types';
 import { indexFactor } from '../data/priceIndex';
 
 // Transaction dates are stored as date-only "YYYY-MM-DD". `new Date("2025-01-01")`
@@ -438,7 +439,18 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   // VAT is extracted so profit isn't overstated by the tax portion.
   const sumCat = (type: 'income' | 'expense', category: string) =>
     transactions
-      .filter(t => t.type === type && t.category === category)
+      .filter(t => t.type === type && canonicalCategory(t.category) === category)
+      .reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
+
+  // NOTHING BOOKED MAY GO UNCOUNTED. Every line below names the category it sums,
+  // so a row carrying any other name is money that reaches no total and shows on
+  // no screen — it does not look wrong, it is simply absent, and profit rises by
+  // exactly what vanished. Rows whose category the accounts do not know are swept
+  // into "other" here: the wrong line is a mistake anyone can see and correct, an
+  // invisible one is not.
+  const sumUnknown = (type: 'income' | 'expense', known: readonly string[]) =>
+    transactions
+      .filter(t => t.type === type && !known.includes(canonicalCategory(t.category)))
       .reduce((sum, t) => sum + getNetISK(t, pricesInclVat), 0);
 
   const salaTekjur = sumCat('income', 'sala_vara');
@@ -450,7 +462,7 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   // in any report. Adding the category without adding this line would have made
   // every krona of rent silently vanish.
   const leigutekjur = sumCat('income', 'leigutekjur');
-  const adrarTekjur = sumCat('income', 'adrar_tekjur');
+  const adrarTekjur = sumCat('income', 'adrar_tekjur') + sumUnknown('income', INCOME_CATEGORIES);
   const fjarmagntekjur = sumCat('income', 'fjarmagns_tekjur');
   // Operating revenue only — financial income (fjarmagntekjur) belongs BELOW operating
   // profit, so it must not inflate totalRevenue/operatingProfit (added back in profitBeforeTax).
@@ -477,7 +489,7 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   // correct even though the payment itself is a balance-sheet/transfer entry.
   const loanInterest = transactions.reduce((s, t) => s + (t.interestAmount ? toISK(t.interestAmount, t.currency, t.eurToIskRate) : 0), 0);
   const fjarmagnsgjold = sumCat('expense', 'fjarmagnsgjold') + loanInterest;
-  const adrir = sumCat('expense', 'adrir_rekstrargjold');
+  const adrir = sumCat('expense', 'adrir_rekstrargjold') + sumUnknown('expense', EXPENSE_CATEGORIES);
 
   const totalOperatingExpenses = laun + launatengd + husaleiga + rafmagnHiti + simagjold +
     skrifstofugjold + samgongur + markadsmal + fagthjonusta + vorur + faedi + afskriftir + adrir;

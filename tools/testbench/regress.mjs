@@ -90,6 +90,40 @@ for (const cat of app.EXPENSE_CATEGORIES) {
   });
 }
 
+// ── 2b. A category no line names must still be counted ──────────────────────
+// Catches: 95 meal rows were stored as the LABEL "fæði" instead of the key
+// "faedi". Every total is built from a named list, so those rows reached no
+// line at all — 195.263 kr of real cost that was on no screen and lifted the
+// profit by exactly that. Rows the accounts do not recognise now land in
+// "other": a visible wrong line can be corrected, an absent one cannot.
+check('an expense on an unknown category still reaches total costs', () => {
+  const pl = app.calcProfitLoss([tx({ type: 'expense', category: 'engin_slik_grein', amount: 50000 })], 20, false);
+  return pl.totalOperatingExpenses === 50000 ? null
+    : 'booked 50.000 on a category no line names and total costs show ' + pl.totalOperatingExpenses;
+});
+check('income on an unknown category still reaches revenue', () => {
+  const pl = app.calcProfitLoss([tx({ type: 'income', category: 'engin_slik_grein', amount: 100000 })], 20, false);
+  return pl.totalRevenue === 100000 ? null
+    : 'booked 100.000 on a category no line names and revenue shows ' + pl.totalRevenue;
+});
+check('an unknown category never turns a transfer into profit', () => {
+  const pl = app.calcProfitLoss([tx({ type: 'transfer', category: 'engin_slik_grein', amount: 900000 })], 20, false);
+  return (pl.totalRevenue === 0 && pl.totalOperatingExpenses === 0) ? null
+    : 'revenue ' + pl.totalRevenue + ', costs ' + pl.totalOperatingExpenses;
+});
+
+// ── 2c. Every alias lands on the line its key owns, not merely in "other" ────
+for (const [alias, key] of Object.entries(app.CATEGORY_ALIASES)) {
+  check('alias "' + alias + '" is booked on the "' + key + '" line', () => {
+    if (app.canonicalCategory(alias) !== key) return 'canonicalCategory("' + alias + '") = ' + app.canonicalCategory(alias);
+    const kind = app.INCOME_CATEGORIES.includes(key) ? 'income' : 'expense';
+    const viaAlias = app.calcProfitLoss([tx({ type: kind, category: alias, amount: 50000 })], 20, false);
+    const viaKey = app.calcProfitLoss([tx({ type: kind, category: key, amount: 50000 })], 20, false);
+    return JSON.stringify(viaAlias) === JSON.stringify(viaKey) ? null
+      : 'the alias and the key do not produce the same accounts';
+  });
+}
+
 // ── 3. Borrowed money is not profit ─────────────────────────────────────────
 check('a transfer changes neither revenue nor costs', () => {
   const pl = app.calcProfitLoss([tx({ type: 'transfer', category: 'lan_afborgun', amount: 900000 })], 20, false);
