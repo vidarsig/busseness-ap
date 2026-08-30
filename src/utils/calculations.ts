@@ -393,6 +393,7 @@ export interface ProfitLoss {
   markadsmal: number;
   fagthjonusta: number;
   vorur: number;
+  faedi: number;
   afskriftir: number;
   rafmagnHiti: number;
   adrir: number;
@@ -465,6 +466,11 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const markadsmal = sumCat('expense', 'markadsmal');
   const fagthjonusta = sumCat('expense', 'fagthjonusta');
   const vorur = sumCat('expense', 'vorur');
+  // Meals away from base. The category existed as a KEY (6650) with no category
+  // behind it, so anything booked to it fell out of the P&L entirely — the same
+  // shape as rent having no income line. 3.577.265 of forecourt meals would have
+  // vanished and lifted profit by exactly that.
+  const faedi = sumCat('expense', 'faedi');
   const afskriftir = sumCat('expense', 'afskriftir');
   // Interest portion of loan payments (entered on the payment, whatever category
   // it's booked under) is a financial expense — recognise it here so profit is
@@ -474,7 +480,7 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   const adrir = sumCat('expense', 'adrir_rekstrargjold');
 
   const totalOperatingExpenses = laun + launatengd + husaleiga + rafmagnHiti + simagjold +
-    skrifstofugjold + samgongur + markadsmal + fagthjonusta + vorur + afskriftir + adrir;
+    skrifstofugjold + samgongur + markadsmal + fagthjonusta + vorur + faedi + afskriftir + adrir;
 
   const operatingProfit = totalRevenue - totalOperatingExpenses;
   // Financial income (interest etc.) and financial expenses sit below operating profit.
@@ -485,7 +491,7 @@ export function calcProfitLoss(transactions: Transaction[], corporateTaxRate = 2
   return {
     salaTekjur, thjonustutekjur, leigutekjur, adrarTekjur, fjarmagntekjur, totalRevenue,
     laun, launatengd, husaleiga, simagjold, skrifstofugjold, samgongur,
-    markadsmal, fagthjonusta, vorur, afskriftir, rafmagnHiti, adrir, totalOperatingExpenses,
+    markadsmal, fagthjonusta, vorur, faedi, afskriftir, rafmagnHiti, adrir, totalOperatingExpenses,
     operatingProfit, fjarmagnsgjold, profitBeforeTax, incomeTax, netResult,
   };
 }

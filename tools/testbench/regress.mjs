@@ -215,6 +215,32 @@ check('retained earnings carry profit after tax, and the tax is carried as a deb
   return null;
 });
 
+// ── 5e. Every category must reach the profit & loss ─────────────────────────
+// Catches BOTH of this week's silent-loss bugs in one rule. Rent had no income
+// line, so tenants' money landed on "sale of goods"; meals had no expense line,
+// so 3.577.265 of them would have dropped out of the accounts entirely and
+// lifted profit by exactly that. A category the app offers but the P&L does not
+// count is money that disappears with nothing on screen to show it.
+check('every income and expense category is counted in the profit & loss', () => {
+  const one = (type, category) => ([{
+    id: 'x', date: '2024-06-01', type, amount: 100_000, vatRate: 0, category,
+    currency: 'ISK', eurToIskRate: 148, description: 'p',
+  }]);
+  const missing = [];
+  for (const c of app.INCOME_CATEGORIES) {
+    const pl = app.calcProfitLoss(one('income', c), 0, false);
+    // financial income sits below operating profit by design, so check the bottom line
+    if (Math.round(pl.profitBeforeTax) !== 100_000) missing.push('income/' + c);
+  }
+  for (const c of app.EXPENSE_CATEGORIES) {
+    const pl = app.calcProfitLoss(one('expense', c), 0, false);
+    if (Math.round(pl.profitBeforeTax) !== -100_000) missing.push('expense/' + c);
+  }
+  return missing.length
+    ? 'these categories never reach the P&L, so money booked to them vanishes: ' + missing.join(', ')
+    : null;
+});
+
 // ── 6. Setting up a country picks a language ────────────────────────────────
 check('every supported country resolves to a language', () => {
   const bad = Object.keys(app.COUNTRY_CONFIGS).filter(c => !app.languageForCountry(c));

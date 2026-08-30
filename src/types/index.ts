@@ -573,7 +573,7 @@ export const INCOME_CATEGORIES = [
 export const EXPENSE_CATEGORIES = [
   'laun', 'launatengd_gjold', 'husaleiga', 'rafmagn_hiti',
   'simagjold', 'skrifstofugjold', 'samgongur', 'markadsmal',
-  'fagthjonusta', 'vorur', 'afskriftir', 'fjarmagnsgjold', 'adrir_rekstrargjold',
+  'fagthjonusta', 'vorur', 'faedi', 'afskriftir', 'fjarmagnsgjold', 'adrir_rekstrargjold',
 ] as const;
 
 // Categories for 'transfer' transactions — things that are NOT profit/loss.
