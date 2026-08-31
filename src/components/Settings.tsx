@@ -46,8 +46,16 @@ function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUs
     setTestMsg(lang === 'is' ? '✓ Gögn sótt úr skýi' : '✓ Data pulled from cloud');
   }
 
-  const statusColor = syncStatus === 'synced' ? 'text-green-600' : syncStatus === 'error' ? 'text-red-600' : syncStatus === 'syncing' ? 'text-blue-600' : 'text-gray-400';
-  const statusLabel = syncStatus === 'synced' ? (lang === 'is' ? 'Samstillt' : 'Synced') : syncStatus === 'error' ? (lang === 'is' ? 'Villa' : 'Error') : syncStatus === 'syncing' ? (lang === 'is' ? 'Samstilli…' : 'Syncing…') : (lang === 'is' ? 'Óvirkt' : 'Inactive');
+  const statusColor = syncStatus === 'synced' ? 'text-green-600'
+    : syncStatus === 'error' || syncStatus === 'signedout' ? 'text-red-600'
+    : syncStatus === 'syncing' ? 'text-blue-600' : 'text-gray-400';
+  // "Villa" for a device that is merely signed out sent the owner hunting for a fault
+  // in the connection. Nothing is broken there — nobody is logged in.
+  const statusLabel = syncStatus === 'synced' ? (lang === 'is' ? 'Samstillt' : 'Synced')
+    : syncStatus === 'signedout' ? (lang === 'is' ? 'Ekki innskráð(ur)' : 'Not signed in')
+    : syncStatus === 'error' ? (lang === 'is' ? 'Villa' : 'Error')
+    : syncStatus === 'syncing' ? (lang === 'is' ? 'Samstilli…' : 'Syncing…')
+    : (lang === 'is' ? 'Óvirkt' : 'Inactive');
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">

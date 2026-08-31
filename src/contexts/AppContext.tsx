@@ -341,7 +341,9 @@ function reducer(state: AppData, action: Action): AppData {
   }
 }
 
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
+// 'signedout' is its own state, not an error: nothing is broken, the device just
+// has nobody logged in, and that is the one cause the owner can actually act on.
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'signedout';
 
 interface AppContextValue {
   data: AppData;
@@ -509,8 +511,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Best-effort mirror to localStorage for a fast cold-start paint. This may
       // exceed the 5 MB cap once there's lots of data/photos — that's fine, the
       // full copy lives in IndexedDB either way.
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
-      catch { /* over the localStorage cap — IndexedDB holds the complete data */ }
+      // THE BOOKS ARE NOT MIRRORED INTO localStorage ANY MORE. They used to be, for a
+      // fast cold-start paint, and on this owner's machine that copy had grown to
+      // 3,15 MB of a 5 MB bucket — a bucket the app does not own alone. Supabase keeps
+      // the LOGIN in there too, and with the shelf that full the session was never
+      // stored: every reload landed back on the sign-in screen. A signed-out app
+      // resolves no company key, so "Samstilla núna" then did nothing at all, in
+      // silence, and a phone sat seven weeks behind because of it. IndexedDB holds the
+      // complete copy and is measured in gigabytes; the mirror bought a few
+      // milliseconds of paint at the price of staying logged in.
     }, 500);
     return () => clearTimeout(persistTimer.current);
   }, [data]);
@@ -561,6 +570,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // in localStorage so no existing data is lost.
           await idbSet(STORAGE_KEY, local);
         }
+        // IndexedDB now holds the books either way, so give the localStorage bucket
+        // back to whoever else needs it — the login above all. Only after a clean
+        // hydration: a throw above skips this and the old copy stays put.
+        try { localStorage.removeItem(STORAGE_KEY); } catch { /* nothing to free */ }
       } catch { /* fall back to the localStorage-seeded state */ }
       idbReady.current = true;
       if (cancelled) return;
@@ -634,7 +647,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (testModeRef.current) return; // never push test data, even on a manual sync
     const { supabaseUrl, supabaseKey } = data.settings;
     const syncKey = syncKeyRef.current;
-    if (!supabaseUrl || !supabaseKey || !syncKey) return;
+    // A DEAD BUTTON MUST NOT LOOK LIKE A WORKING ONE. With no company key — which is
+    // what a signed-out app has — this used to return in silence, so the owner tapped
+    // "Samstilla núna" and nothing whatsoever happened, no message, no change. Say it.
+    if (!supabaseUrl || !supabaseKey || !syncKey) { setSyncStatus('signedout'); return; }
     setSyncStatus('syncing');
 
     const stamp = await remoteUpdatedAt(supabaseUrl, supabaseKey, syncKey);
@@ -674,7 +690,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'LOAD', payload: migrated });
     idbReady.current = true;
     try { await idbSet(STORAGE_KEY, migrated); } catch { /* IndexedDB write failed — cloud/localStorage still hold it */ }
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated)); } catch { /* over the localStorage cap — IndexedDB has the full copy */ }
+    // No localStorage mirror here either — see the persist effect above. A restored
+    // backup is the biggest blob the app ever holds, and it is exactly the moment
+    // the login must not be crowded out of storage.
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* nothing to free */ }
     const now = new Date().toISOString();
     localStorage.setItem(SYNC_TS_KEY, now); // mark local as newest so the mount pull won't overwrite the restore
     setLastSyncedAt(now);

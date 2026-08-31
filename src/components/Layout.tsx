@@ -81,14 +81,17 @@ const bottomNavItems: NavItem[] = [
 function SyncIndicator() {
   const { syncStatus, lastSyncedAt, syncNow, data } = useApp();
   if (!data.settings.supabaseUrl) return null;
+  const isIS = data.settings.language === 'is';
   const icon = syncStatus === 'syncing'
     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-    : syncStatus === 'error'
+    : syncStatus === 'error' || syncStatus === 'signedout'
     ? <CloudOff className="w-3.5 h-3.5 text-red-500" />
     : <Cloud className="w-3.5 h-3.5 text-blue-500" />;
-  const title = syncStatus === 'syncing' ? 'Syncing…'
-    : syncStatus === 'error' ? 'Sync error'
-    : lastSyncedAt ? `Synced ${new Date(lastSyncedAt).toLocaleTimeString()}` : 'Cloud sync';
+  // Signed out is the one the owner can act on, so it says so rather than "error".
+  const title = syncStatus === 'syncing' ? (isIS ? 'Samstilli…' : 'Syncing…')
+    : syncStatus === 'signedout' ? (isIS ? 'Ekki innskráð(ur) — ekkert samstillist' : 'Not signed in — nothing syncs')
+    : syncStatus === 'error' ? (isIS ? 'Samstilling mistókst' : 'Sync error')
+    : lastSyncedAt ? `${isIS ? 'Samstillt' : 'Synced'} ${new Date(lastSyncedAt).toLocaleTimeString()}` : (isIS ? 'Samstilling í skýi' : 'Cloud sync');
   return (
     <button onClick={syncNow} title={title}
       className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 flex items-center">
