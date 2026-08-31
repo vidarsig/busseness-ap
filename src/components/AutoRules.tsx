@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, Zap, TrendingUp } from 'lucide-react';
+import SearchableSelect from './SearchableSelect';
 import { useApp } from '../contexts/AppContext';
 import { CategoryRule, TransactionType, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES } from '../types';
 import { formatDate } from '../utils/formatters';
@@ -78,9 +79,9 @@ function RuleModal({ initial, onSave, onClose }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>{t('category')}</label>
-              <select className={inp} value={category} onChange={e => setCategory(e.target.value)}>
-                {cats.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
-              </select>
+              <SearchableSelect className={inp} value={category}
+                onChange={setCategory}
+                options={cats.map(c => ({ value: c, label: t(c as never) }))} />
             </div>
             <div>
               <label className={lbl}>{cc.isUSA ? `${cc.vatTerm} Rate` : t('vatRate')}</label>

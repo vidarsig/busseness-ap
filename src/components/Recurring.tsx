@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Pencil, Trash2, X, Play, RefreshCw } from 'lucide-react';
+import SearchableSelect from './SearchableSelect';
 import { useApp } from '../contexts/AppContext';
 import { RecurringTransaction, Currency, INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../types';
 import { formatDate, todayISO } from '../utils/formatters';
@@ -49,9 +50,9 @@ function RecurringModal({ initial, onSave, onClose }: {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>{t('category')}</label>
-              <select className={inp} value={form.category} onChange={e => set('category', e.target.value)}>
-                {cats.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
-              </select>
+              <SearchableSelect className={inp} value={form.category}
+                onChange={v => set('category', v)}
+                options={cats.map(c => ({ value: c, label: t(c as never) }))} />
             </div>
             <div>
               <label className={lbl}>{t('frequency')}</label>

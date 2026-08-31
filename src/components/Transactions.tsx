@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpread
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
 import PhotoViewer from './PhotoViewer';
+import SearchableSelect from './SearchableSelect';
 import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
@@ -197,12 +198,12 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
             </div>
             <div>
               <label className={labelCls}>{t('category')}</label>
-              <select className={inputCls} value={form.category}
-                onChange={e => set('category', e.target.value)} required>
-                {categories.map(c => (
-                  <option key={c} value={c}>{t(c as never)}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                className={inputCls}
+                value={form.category}
+                onChange={v => set('category', v)}
+                options={categories.map(c => ({ value: c, label: t(c as never) }))}
+              />
             </div>
           </div>
 
@@ -273,15 +274,17 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
               <label className={labelCls}>{keyRequired
                 ? (lang === 'is' ? 'Bókhaldslykill (skylda)' : 'Key / account (required)')
                 : (lang === 'is' ? 'Bókhaldslykill (valfrjálst)' : 'Key / account (optional)')}</label>
-              <select className={keyMissing ? inputCls.replace('border-gray-300', 'border-red-400') : inputCls}
-                value={form.accountId ?? ''} onChange={e => set('accountId', e.target.value)}>
-                <option value="">{lang === 'is' ? 'Enginn lykill' : 'No key'}</option>
-                {data.accounts.filter(a => a.isActive)
-                  .sort((a, b) => a.number.localeCompare(b.number))
-                  .map(a => (
-                    <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
-                  ))}
-              </select>
+              <SearchableSelect
+                className={keyMissing ? inputCls.replace('border-gray-300', 'border-red-400') : inputCls}
+                value={form.accountId ?? ''}
+                onChange={v => set('accountId', v)}
+                options={[
+                  { value: '', label: lang === 'is' ? 'Enginn lykill' : 'No key' },
+                  ...data.accounts.filter(a => a.isActive)
+                    .sort((a, b) => a.number.localeCompare(b.number))
+                    .map(a => ({ value: a.id, label: `${a.number} — ${lang === 'is' ? a.name : (a.nameEn || a.name)}` })),
+                ]}
+              />
               {keyMissing ? (
                 <p className="text-xs text-red-600 mt-1">{lang === 'is'
                   ? 'Veldu lykilinn sem þessi færsla á að fara á — t.d. viðskiptareikning eiganda eða lánið. Annars kemur hún hvergi fram á efnahagsreikningnum.'
@@ -791,27 +794,28 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               <option value="all">{t('all')}</option>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
-            <select
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <SearchableSelect
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               value={filterCategory}
-              onChange={e => setFilterCategory(e.target.value)}
+              onChange={setFilterCategory}
               title={lang === 'is' ? 'Flokkur' : 'Category'}
-            >
-              <option value="all">{lang === 'is' ? 'Allir flokkar' : 'All categories'}</option>
-              {usedCategories.map(c => <option key={c} value={c}>{t(c as never)}</option>)}
-            </select>
-            <select
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              options={[
+                { value: 'all', label: lang === 'is' ? 'Allir flokkar' : 'All categories' },
+                ...usedCategories.map(c => ({ value: c, label: t(c as never) })),
+              ]}
+            />
+            <SearchableSelect
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               value={filterKey}
-              onChange={e => setFilterKey(e.target.value)}
+              onChange={setFilterKey}
               title={lang === 'is' ? 'Bókhaldslykill' : 'Key / account'}
-            >
-              <option value="all">{lang === 'is' ? 'Allir lyklar' : 'All keys'}</option>
-              <option value="none">{lang === 'is' ? 'Enginn lykill' : 'No key'}</option>
-              {[...data.accounts].sort((a, b) => a.number.localeCompare(b.number)).map(a => (
-                <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
-              ))}
-            </select>
+              options={[
+                { value: 'all', label: lang === 'is' ? 'Allir lyklar' : 'All keys' },
+                { value: 'none', label: lang === 'is' ? 'Enginn lykill' : 'No key' },
+                ...[...data.accounts].sort((a, b) => a.number.localeCompare(b.number))
+                  .map(a => ({ value: a.id, label: `${a.number} — ${lang === 'is' ? a.name : (a.nameEn || a.name)}` })),
+              ]}
+            />
             <div className="flex items-center gap-1.5">
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
                 title={lang === 'is' ? 'Frá dagsetningu' : 'From date'}
@@ -905,12 +909,17 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
             <option value="transfer">{t('transfer')}</option>
           </select>
           {bulkType && (
-            <select value={bulkCat} onChange={e => setBulkCat(e.target.value)}
-              className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">{lang === 'is' ? 'Flokkur…' : 'Category…'}</option>
-              {(bulkType === 'income' ? INCOME_CATEGORIES : bulkType === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES)
-                .map(c => <option key={c} value={c}>{t(c as never)}</option>)}
-            </select>
+            <SearchableSelect
+              value={bulkCat}
+              onChange={setBulkCat}
+              className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              placeholder={lang === 'is' ? 'Flokkur…' : 'Category…'}
+              options={[
+                { value: '', label: lang === 'is' ? 'Flokkur…' : 'Category…' },
+                ...(bulkType === 'income' ? INCOME_CATEGORIES : bulkType === 'transfer' ? TRANSFER_CATEGORIES : EXPENSE_CATEGORIES)
+                  .map(c => ({ value: c, label: t(c as never) })),
+              ]}
+            />
           )}
           <select value={bulkVat} onChange={e => setBulkVat(e.target.value)}
             className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
@@ -919,14 +928,18 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
               .filter((r, i, arr) => arr.indexOf(r) === i)
               .map(r => <option key={r} value={r}>{r}%</option>)}
           </select>
-          <select value={bulkKey} onChange={e => setBulkKey(e.target.value)}
-            className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="">{lang === 'is' ? 'Lykill…' : 'Key…'}</option>
-            <option value="__none__">{lang === 'is' ? '— Taka lykil af (hreinsa) —' : '— Remove key (clear) —'}</option>
-            {[...data.accounts].sort((a, b) => a.number.localeCompare(b.number)).map(a => (
-              <option key={a.id} value={a.id}>{a.number} — {lang === 'is' ? a.name : (a.nameEn || a.name)}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={bulkKey}
+            onChange={setBulkKey}
+            className="border border-amber-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+            placeholder={lang === 'is' ? 'Lykill…' : 'Key…'}
+            options={[
+              { value: '', label: lang === 'is' ? 'Lykill…' : 'Key…' },
+              { value: '__none__', label: lang === 'is' ? '— Taka lykil af (hreinsa) —' : '— Remove key (clear) —' },
+              ...[...data.accounts].sort((a, b) => a.number.localeCompare(b.number))
+                .map(a => ({ value: a.id, label: `${a.number} — ${lang === 'is' ? a.name : (a.nameEn || a.name)}` })),
+            ]}
+          />
           <button onClick={bulkApply} disabled={!bulkType && !bulkCat && !bulkKey && bulkVat === ''}
             className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:bg-gray-300">
             {lang === 'is' ? 'Setja á allar' : 'Apply to all'}

@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, Check, X, AlertCircle, Zap, BookOpen, Bot, Loader2, Receipt, FileText } from 'lucide-react';
 import ReceiptMatcher from './ReceiptMatcher';
+import SearchableSelect from './SearchableSelect';
 import OpeningBalances from './OpeningBalances';
 import { useApp } from '../contexts/AppContext';
 import { Transaction, TransactionType, Invoice, Account, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
@@ -1169,25 +1170,27 @@ ${(data.aiMemory || '').trim()}`
                         </select>
                       </td>
                       <td className="px-2 py-2">
-                        <select value={row.category} className={inp}
-                          onChange={e => {
-                            const category = e.target.value;
-                            setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
-                            setRows(prev => prev.map((r, j) => j === i
-                              ? { ...r, category, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true, invoiceId: undefined, matchedInvoice: undefined }
-                              : { ...r, learnOpen: false }));
-                          }}>
-                          // INCOME_CATEGORIES, never a copy of it. A hand-written list here silently
-                          // dropped 'leigutekjur': the categoriser answered "leigutekjur" correctly and the
-                          // dropdown, having no such option, displayed the FIRST one instead. The screen said
-                          // "Sala vara" while the row said rent — the app lying about its own data.
-                          {(row.type === 'income'
+                        {/* The list comes straight from INCOME_CATEGORIES, never a copy of it. A
+                            hand-written list here silently dropped 'leigutekjur': the categoriser
+                            answered "leigutekjur" correctly and the dropdown, having no such option,
+                            displayed the FIRST one instead. The screen said "Sala vara" while the row
+                            said rent — the app lying about its own data. */}
+                        <SearchableSelect
+                          value={row.category}
+                          className={inp}
+                          options={(row.type === 'income'
                             ? INCOME_CATEGORIES
                             : row.type === 'transfer'
                             ? TRANSFER_CATEGORIES
                             : EXPENSE_CATEGORIES
-                          ).map(c => <option key={c} value={c}>{t(c as never)}</option>)}
-                        </select>
+                          ).map(c => ({ value: c, label: t(c as never) }))}
+                          onChange={category => {
+                            setLearnPattern(row.description.split(/\s+/).slice(0, 2).join(' '));
+                            setRows(prev => prev.map((r, j) => j === i
+                              ? { ...r, category, matchedRule: undefined, learned: false, needsReview: false, learnOpen: true, invoiceId: undefined, matchedInvoice: undefined }
+                              : { ...r, learnOpen: false }));
+                          }}
+                        />
                       </td>
                       <td className="px-2 py-2">
                         <select value={row.vatRate} className={inp}

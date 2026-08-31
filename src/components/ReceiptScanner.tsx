@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Camera, X, Loader2, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
+import SearchableSelect from './SearchableSelect';
 import { useApp } from '../contexts/AppContext';
 import { Transaction, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../types';
 import { scanReceipt, ScannedReceipt } from '../utils/ai';
@@ -302,14 +303,14 @@ export default function ReceiptScanner({ onClose }: Props) {
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{lang === 'is' ? 'Flokkur' : 'Category'}</label>
-                <select className={inp} value={form.category ?? ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                  <optgroup label={lang === 'is' ? 'Tekjur' : 'Income'}>
-                    {INCOME_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </optgroup>
-                  <optgroup label={lang === 'is' ? 'Útgjöld' : 'Expenses'}>
-                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                  </optgroup>
-                </select>
+                {/* One searchable list instead of two optgroups — the group each
+                    category belongs to is kept as the small line under its name. */}
+                <SearchableSelect className={inp} value={form.category ?? ''}
+                  onChange={v => setForm(f => ({ ...f, category: v }))}
+                  options={[
+                    ...INCOME_CATEGORIES.map(c => ({ value: c, label: c, hint: lang === 'is' ? 'Tekjur' : 'Income' })),
+                    ...EXPENSE_CATEGORIES.map(c => ({ value: c, label: c, hint: lang === 'is' ? 'Útgjöld' : 'Expenses' })),
+                  ]} />
               </div>
 
               <div className="flex gap-3 pt-1">
