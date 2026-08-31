@@ -347,6 +347,31 @@ check('every US state carries a sales-tax rate', () => {
   return bad.length ? 'no rate for: ' + bad.map(s => s.name).join(', ') : null;
 });
 
+// ── 9. A sync can never put an older book over a newer one ──────────────────
+// The cloud button used to push, always. A phone that had been signed out since
+// 10 July still held 9.584 færslur while the books had grown to 11.652, and one tap
+// would have written July over August. Behind means fetch; level or ahead means send.
+check('a device that is behind the cloud fetches instead of sending', () => {
+  const dir = app.syncDirection('2026-07-10T12:00:00.000Z', '2026-08-31T03:45:36.009Z');
+  return dir === 'pull' ? null : 'a stale device would still have pushed (' + dir + ')';
+});
+check('a device that is ahead of the cloud sends', () => {
+  const dir = app.syncDirection('2026-08-31T09:00:00.000Z', '2026-08-31T03:45:36.009Z');
+  return dir === 'push' ? null : 'an up-to-date device refused to push (' + dir + ')';
+});
+check('the same timestamp on both sides sends', () => {
+  const ts = '2026-08-31T03:45:36.009Z';
+  return app.syncDirection(ts, ts) === 'push' ? null : 'level device stopped pushing — its own edits would never leave it';
+});
+check('an empty cloud still receives the first push', () => {
+  const bad = [undefined, null, ''].filter(v => app.syncDirection('2026-08-31T03:45:36.009Z', v) !== 'push');
+  return bad.length ? 'a device with nothing in the cloud refused to push' : null;
+});
+check('a device that has never synced fetches what is already there', () => {
+  const bad = [undefined, null, ''].filter(v => app.syncDirection(v, '2026-08-31T03:45:36.009Z') !== 'pull');
+  return bad.length ? 'a fresh device would have pushed its empty book over the real one' : null;
+});
+
 // ── report ──────────────────────────────────────────────────────────────────
 console.log('\n  ' + pass + ' passed, ' + failures.length + ' failed\n');
 for (const f of failures) console.log('  x ' + f + '\n');

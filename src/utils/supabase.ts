@@ -120,6 +120,35 @@ export async function pullData(url: string, key: string, userKey: string): Promi
   return { data: data.payload as AppData, updatedAt: data.updated_at };
 }
 
+// Just the timestamp of the cloud copy — a few bytes, so a device can ask "is the
+// cloud ahead of me?" without pulling megabytes of books to find out.
+export async function remoteUpdatedAt(url: string, key: string, userKey: string): Promise<{ updatedAt?: string; error?: string }> {
+  const sb = getClient(url, key);
+  if (!sb) return { error: 'not_configured' };
+  const { data, error } = await sb
+    .from('app_data')
+    .select('updated_at')
+    .eq('user_key', userKey)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: 'no_data' };
+  return { updatedAt: data.updated_at as string };
+}
+
+// WHICH WAY A SYNC MUST GO. The sync button used to mean one thing only: SEND
+// what this device holds. That is safe on the machine the books are kept on and
+// dangerous everywhere else — a phone left signed out for seven weeks still held
+// 9.584 færslur from 10 July while the real books had grown to 11.652, and one tap
+// on the cloud icon would have written July over August. A device that is BEHIND
+// must fetch, not send. Ahead or level, it sends as before.
+//   Compared as ISO-8601 strings, which sort chronologically. An unknown remote
+// timestamp (no row yet, or the check failed) means push — the old behaviour, so a
+// first device still gets its books up.
+export function syncDirection(localTs: string | null | undefined, remoteTs: string | null | undefined): 'push' | 'pull' {
+  if (!remoteTs) return 'push';
+  return remoteTs > (localTs ?? '') ? 'pull' : 'push';
+}
+
 export const SETUP_SQL = `-- Run this in your Supabase SQL Editor:
 create table if not exists app_data (
   user_key text primary key,

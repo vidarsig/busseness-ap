@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useState, useRef } from 'react';
-import { pushData, pullData, resolveCompanyKey } from '../utils/supabase';
+import { pushData, pullData, remoteUpdatedAt, syncDirection, resolveCompanyKey } from '../utils/supabase';
 import { idbGet, idbSet } from '../utils/idb';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
@@ -627,12 +627,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(pushTimer.current);
   }, [data]);
 
+  // THE SYNC BUTTON LOOKS BEFORE IT WRITES. It used to push, always — so on a
+  // device that had fallen behind, one tap replaced the good books with the stale
+  // ones. See syncDirection: behind the cloud means fetch, level or ahead means send.
   const syncNow = useCallback(async () => {
     if (testModeRef.current) return; // never push test data, even on a manual sync
     const { supabaseUrl, supabaseKey } = data.settings;
     const syncKey = syncKeyRef.current;
     if (!supabaseUrl || !supabaseKey || !syncKey) return;
     setSyncStatus('syncing');
+
+    const stamp = await remoteUpdatedAt(supabaseUrl, supabaseKey, syncKey);
+    if (syncDirection(localStorage.getItem(SYNC_TS_KEY), stamp.updatedAt) === 'pull') {
+      const pulled = await pullData(supabaseUrl, supabaseKey, syncKey);
+      if (pulled.error || !pulled.data) { setSyncStatus('error'); return; }
+      const remote = migrateData(pulled.data);
+      skipNextPush.current = true;     // adopting the cloud copy is not a change to send back
+      dispatch({ type: 'LOAD', payload: remote });
+      try { await idbSet(STORAGE_KEY, remote); } catch { /* cloud still holds it */ }
+      const ts = pulled.updatedAt ?? new Date().toISOString();
+      localStorage.setItem(SYNC_TS_KEY, ts);
+      setLastSyncedAt(ts);
+      setSyncStatus('synced');
+      return;
+    }
+
     const result = await pushData(supabaseUrl, supabaseKey, syncKey, data);
     if (result.error) { setSyncStatus('error'); }
     else {
