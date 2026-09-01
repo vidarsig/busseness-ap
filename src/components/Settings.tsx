@@ -47,12 +47,13 @@ function CloudSyncSection({ lang, url, apiKey, userKey, setUrl, setApiKey, setUs
   }
 
   const statusColor = syncStatus === 'synced' ? 'text-green-600'
-    : syncStatus === 'error' || syncStatus === 'signedout' ? 'text-red-600'
+    : syncStatus === 'error' || syncStatus === 'signedout' || syncStatus === 'conflict' ? 'text-red-600'
     : syncStatus === 'syncing' ? 'text-blue-600' : 'text-gray-400';
   // "Villa" for a device that is merely signed out sent the owner hunting for a fault
   // in the connection. Nothing is broken there — nobody is logged in.
   const statusLabel = syncStatus === 'synced' ? (lang === 'is' ? 'Samstillt' : 'Synced')
     : syncStatus === 'signedout' ? (lang === 'is' ? 'Ekki innskráð(ur)' : 'Not signed in')
+    : syncStatus === 'conflict' ? (lang === 'is' ? 'Árekstur — bæði breyttust' : 'Conflict — both changed')
     : syncStatus === 'error' ? (lang === 'is' ? 'Villa' : 'Error')
     : syncStatus === 'syncing' ? (lang === 'is' ? 'Samstilli…' : 'Syncing…')
     : (lang === 'is' ? 'Óvirkt' : 'Inactive');

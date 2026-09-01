@@ -98,16 +98,38 @@ export async function resolveCompanyKey(url: string, key: string): Promise<strin
 
 // ── Data sync ────────────────────────────────────────────────
 
-export async function pushData(url: string, key: string, userKey: string, data: AppData): Promise<{ error?: string }> {
+// WHAT A COPY OF THE BOOKS SAYS ABOUT ITSELF. Written into the payload, so it needs
+// no column of its own and travels with the data it describes.
+//   `version` counts writes, not minutes: every push stores one more than the copy it
+// replaced. `count` is how many færslur the copy holds — the sanity check that catches
+// the case a version alone would not.
+export interface SyncStamp { version: number; count: number }
+
+export const SYNC_FIELD = '__sync';
+
+type Stamped = AppData & { [SYNC_FIELD]?: SyncStamp };
+
+export function readStamp(payload: unknown): SyncStamp | null {
+  const raw = (payload as Stamped | null)?.[SYNC_FIELD];
+  if (!raw || typeof raw.version !== 'number') return null;
+  return { version: raw.version, count: typeof raw.count === 'number' ? raw.count : 0 };
+}
+
+export function stampOf(data: AppData, version: number): SyncStamp {
+  return { version, count: (data.transactions ?? []).length };
+}
+
+export async function pushData(url: string, key: string, userKey: string, data: AppData, stamp?: SyncStamp): Promise<{ error?: string }> {
   const sb = getClient(url, key);
   if (!sb) return { error: 'not_configured' };
+  const payload: Stamped = stamp ? { ...data, [SYNC_FIELD]: stamp } : data;
   const { error } = await sb
     .from('app_data')
-    .upsert({ user_key: userKey, payload: data, updated_at: new Date().toISOString() }, { onConflict: 'user_key' });
+    .upsert({ user_key: userKey, payload, updated_at: new Date().toISOString() }, { onConflict: 'user_key' });
   return error ? { error: error.message } : {};
 }
 
-export async function pullData(url: string, key: string, userKey: string): Promise<{ data?: AppData; updatedAt?: string; error?: string }> {
+export async function pullData(url: string, key: string, userKey: string): Promise<{ data?: AppData; updatedAt?: string; stamp?: SyncStamp | null; error?: string }> {
   const sb = getClient(url, key);
   if (!sb) return { error: 'not_configured' };
   const { data, error } = await sb
@@ -117,36 +139,62 @@ export async function pullData(url: string, key: string, userKey: string): Promi
     .maybeSingle();
   if (error) return { error: error.message };
   if (!data) return { error: 'no_data' };
-  return { data: data.payload as AppData, updatedAt: data.updated_at };
+  return { data: data.payload as AppData, updatedAt: data.updated_at, stamp: readStamp(data.payload) };
 }
 
-// Just the timestamp of the cloud copy — a few bytes, so a device can ask "is the
-// cloud ahead of me?" without pulling megabytes of books to find out.
-export async function remoteUpdatedAt(url: string, key: string, userKey: string): Promise<{ updatedAt?: string; error?: string }> {
+// The cloud copy's stamp WITHOUT its books — one JSON field, a few bytes, so a device
+// can ask "did you move since I last saw you?" without pulling megabytes to find out.
+// A row written before stamps existed answers `stamp: null`, which the caller must
+// treat as "unknown" and settle with a full pull.
+export async function remoteStamp(url: string, key: string, userKey: string): Promise<{ stamp?: SyncStamp | null; updatedAt?: string; error?: string }> {
   const sb = getClient(url, key);
   if (!sb) return { error: 'not_configured' };
   const { data, error } = await sb
     .from('app_data')
-    .select('updated_at')
+    .select(`updated_at, sync:payload->${SYNC_FIELD}`)
     .eq('user_key', userKey)
     .maybeSingle();
   if (error) return { error: error.message };
   if (!data) return { error: 'no_data' };
-  return { updatedAt: data.updated_at as string };
+  const raw = (data as { sync?: SyncStamp | null }).sync ?? null;
+  return {
+    stamp: raw && typeof raw.version === 'number'
+      ? { version: raw.version, count: typeof raw.count === 'number' ? raw.count : 0 }
+      : null,
+    updatedAt: (data as { updated_at?: string }).updated_at,
+  };
 }
 
-// WHICH WAY A SYNC MUST GO. The sync button used to mean one thing only: SEND
-// what this device holds. That is safe on the machine the books are kept on and
-// dangerous everywhere else — a phone left signed out for seven weeks still held
-// 9.584 færslur from 10 July while the real books had grown to 11.652, and one tap
-// on the cloud icon would have written July over August. A device that is BEHIND
-// must fetch, not send. Ahead or level, it sends as before.
-//   Compared as ISO-8601 strings, which sort chronologically. An unknown remote
-// timestamp (no row yet, or the check failed) means push — the old behaviour, so a
-// first device still gets its books up.
-export function syncDirection(localTs: string | null | undefined, remoteTs: string | null | undefined): 'push' | 'pull' {
-  if (!remoteTs) return 'push';
-  return remoteTs > (localTs ?? '') ? 'pull' : 'push';
+export type SyncMove = 'push' | 'pull' | 'conflict' | 'unknown';
+
+// WHICH WAY A SYNC MUST GO — DECIDED ON WRITES AND ROW COUNTS, NEVER ON A CLOCK.
+// The first version of this asked which side carried the later timestamp, and the
+// owner's phone showed why that is not good enough: it stamped itself 17:09 while
+// holding 9.584 færslur from 10 July, against a cloud stamped 03:45 holding 11.652.
+// By the clock the stale device was "newer" and would have been allowed to push July
+// over August. A clock says when a device last did something; it says nothing about
+// what it holds.
+//
+//   `base`  — the version this device last agreed with the cloud on
+//   `count` — how many færslur this device holds right now
+//   `dirty` — this device has changes that have not been sent yet
+//
+// The cloud moved past us      → fetch, unless we also have unsent changes (a real
+//                                conflict, which must be shown, never resolved by force)
+// We hold fewer rows and have
+// nothing of our own to send   → fetch. This is the stale phone, and no timestamp
+//                                it writes about itself can talk it out of this.
+// Otherwise                    → send.
+export function syncDecision(
+  mine: { base: number; count: number; dirty: boolean },
+  theirs: SyncStamp | null | undefined,
+): SyncMove {
+  // A row from before stamps existed tells us nothing — the caller settles it by
+  // pulling the whole payload and comparing what is actually in it.
+  if (!theirs) return 'unknown';
+  if (theirs.version > mine.base) return mine.dirty ? 'conflict' : 'pull';
+  if (!mine.dirty && theirs.count > mine.count) return 'pull';
+  return 'push';
 }
 
 export const SETUP_SQL = `-- Run this in your Supabase SQL Editor:

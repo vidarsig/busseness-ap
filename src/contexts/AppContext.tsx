@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useState, useRef } from 'react';
-import { pushData, pullData, remoteUpdatedAt, syncDirection, resolveCompanyKey } from '../utils/supabase';
+import { pushData, pullData, remoteStamp, stampOf, syncDecision, SyncStamp, resolveCompanyKey } from '../utils/supabase';
 import { idbGet, idbSet } from '../utils/idb';
 import {
   AppData, Transaction, BalanceSheetItem, AppSettings,
@@ -343,7 +343,9 @@ function reducer(state: AppData, action: Action): AppData {
 
 // 'signedout' is its own state, not an error: nothing is broken, the device just
 // has nobody logged in, and that is the one cause the owner can actually act on.
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'signedout';
+// 'conflict' means BOTH sides moved since they last agreed. Nothing is broken and
+// nothing may be overwritten on a guess — the person decides which copy stands.
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'signedout' | 'conflict';
 
 interface AppContextValue {
   data: AppData;
@@ -373,6 +375,13 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 const SYNC_TS_KEY = 'bokhalds_sync_ts';
+// The write-number this device last agreed with the cloud on. Direction is decided
+// from this and the row counts — never from a clock. See syncDecision.
+const SYNC_VERSION_KEY = 'bokhalds_sync_version';
+const readBase = (): number => {
+  const raw = Number(localStorage.getItem(SYNC_VERSION_KEY));
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+};
 
 // A category written as its LABEL instead of its key ("fæði" for 'faedi') is a row
 // no total names, so it disappears from the accounts without appearing anywhere as
@@ -453,6 +462,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // authenticated, else the legacy manual key. Set during the mount sync.
   const syncKeyRef = useRef<string>('');
   const persistTimer = useRef<ReturnType<typeof setTimeout>>();
+  // Set the moment the books change locally, cleared when the change has been sent.
+  // It is what tells a real conflict (both sides moved) from a device that has simply
+  // fallen behind and should just fetch.
+  const dirtyRef = useRef(false);
 
   // ── Test mode ──────────────────────────────────────────────────────────
   // While on, the app runs on an in-memory copy of the real data: nothing is
@@ -505,6 +518,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // clobber the stored copy with the localStorage-seeded starting state.
   useEffect(() => {
     if (!idbReady.current || testModeRef.current) return; // test mode never persists
+    dirtyRef.current = true;
     clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
       idbSet(STORAGE_KEY, data).catch(() => { /* ignore transient write errors */ });
@@ -552,6 +566,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [data.settings.stripeConnectAccountId]);
 
+  // Record that this device now agrees with the cloud copy it just fetched.
+  const takeRemote = useCallback((stamp: SyncStamp, updatedAt?: string) => {
+    localStorage.setItem(SYNC_VERSION_KEY, String(stamp.version));
+    const ts = updatedAt ?? new Date().toISOString();
+    localStorage.setItem(SYNC_TS_KEY, ts);
+    setLastSyncedAt(ts);
+    dirtyRef.current = false;
+  }, []);
+
+  // Send this device's books up as the next write after `theirVersion`, and remember
+  // the number we wrote, so the next comparison is against a fact and not a clock.
+  const sendUp = useCallback(async (url: string, key: string, syncKey: string, payload: AppData, theirVersion: number) => {
+    const stamp = stampOf(payload, Math.max(theirVersion, readBase()) + 1);
+    const result = await pushData(url, key, syncKey, payload, stamp);
+    if (result.error) { setSyncStatus('error'); return false; }
+    localStorage.setItem(SYNC_VERSION_KEY, String(stamp.version));
+    const now = new Date().toISOString();
+    localStorage.setItem(SYNC_TS_KEY, now);
+    setLastSyncedAt(now);
+    dirtyRef.current = false;
+    setSyncStatus('synced');
+    return true;
+  }, []);
+
   // On mount: (1) hydrate from IndexedDB (migrating from localStorage on first
   // run), then (2) sync with Supabase if configured and the cloud copy is newer.
   useEffect(() => {
@@ -592,24 +630,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const result = await pullData(supabaseUrl, supabaseKey, syncKey);
         if (cancelled) return;
         if (result.error === 'no_data') {
-          // Nothing in cloud yet — push local up
-          await pushData(supabaseUrl, supabaseKey, syncKey, local);
-          const now = new Date().toISOString();
-          localStorage.setItem(SYNC_TS_KEY, now);
-          setLastSyncedAt(now);
+          // Nothing in cloud yet — push local up as the first write.
+          await sendUp(supabaseUrl, supabaseKey, syncKey, local, 0);
           setSyncStatus('synced');
           return;
         }
         if (result.error || !result.data) { setSyncStatus('error'); return; }
-        const localTs = localStorage.getItem(SYNC_TS_KEY) ?? '';
-        const remoteTs = result.updatedAt ?? '';
-        if (remoteTs > localTs) {
+        // A row written before stamps existed carries none, but we are holding its
+        // whole payload here — so count its færslur and judge it on that.
+        const theirs: SyncStamp = result.stamp
+          ?? { version: 0, count: (result.data.transactions ?? []).length };
+        const mine = { base: readBase(), count: local.transactions.length, dirty: dirtyRef.current };
+        const move = syncDecision(mine, theirs);
+        if (move === 'pull') {
           const remote = migrateData(result.data);
           skipNextPush.current = true;
           dispatch({ type: 'LOAD', payload: remote });
           await idbSet(STORAGE_KEY, remote);   // keep the big store in step with cloud
-          localStorage.setItem(SYNC_TS_KEY, remoteTs);
-          setLastSyncedAt(remoteTs);
+          takeRemote(theirs, result.updatedAt);
+        } else if (move === 'conflict') {
+          setSyncStatus('conflict');
+          return;
         }
         setSyncStatus('synced');
       } catch { setSyncStatus('error'); }
@@ -617,6 +658,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ONE ROUTINE DECIDES EVERY SYNC, and it decides on facts: the write-number the
+  // cloud copy carries and how many færslur it holds. Reading that stamp costs a few
+  // bytes; only a decision to fetch pays for the whole book.
+  const syncWithCloud = useCallback(async (payload: AppData) => {
+    const { supabaseUrl, supabaseKey } = payload.settings;
+    const syncKey = syncKeyRef.current;
+    if (!supabaseUrl || !supabaseKey || !syncKey) { setSyncStatus('signedout'); return; }
+    setSyncStatus('syncing');
+    try {
+      const head = await remoteStamp(supabaseUrl, supabaseKey, syncKey);
+      if (head.error === 'no_data') { await sendUp(supabaseUrl, supabaseKey, syncKey, payload, 0); return; }
+      if (head.error) { setSyncStatus('error'); return; }
+
+      // A row written before stamps existed says nothing about itself. Settle it the
+      // expensive way, once: fetch it and count what is actually in it. The next push
+      // stamps the row, so this costs one pull in the whole life of a device.
+      let pulled: Awaited<ReturnType<typeof pullData>> | null = null;
+      let theirs = head.stamp ?? null;
+      if (!theirs) {
+        pulled = await pullData(supabaseUrl, supabaseKey, syncKey);
+        if (pulled.error || !pulled.data) { setSyncStatus('error'); return; }
+        theirs = pulled.stamp ?? { version: 0, count: (pulled.data.transactions ?? []).length };
+      }
+
+      const move = syncDecision(
+        { base: readBase(), count: payload.transactions.length, dirty: dirtyRef.current },
+        theirs);
+
+      if (move === 'conflict') { setSyncStatus('conflict'); return; }
+      if (move === 'pull') {
+        const got = pulled ?? await pullData(supabaseUrl, supabaseKey, syncKey);
+        if (got.error || !got.data) { setSyncStatus('error'); return; }
+        const remote = migrateData(got.data);
+        skipNextPush.current = true;
+        dispatch({ type: 'LOAD', payload: remote });
+        try { await idbSet(STORAGE_KEY, remote); } catch { /* cloud still holds it */ }
+        takeRemote(theirs, got.updatedAt);
+        setSyncStatus('synced');
+        return;
+      }
+      await sendUp(supabaseUrl, supabaseKey, syncKey, payload, theirs.version);
+    } catch { setSyncStatus('error'); }
+  }, [sendUp, takeRemote]);
 
   // Debounced push to Supabase on data change
   useEffect(() => {
@@ -626,57 +711,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!supabaseUrl || !supabaseKey || !syncKey) return;
     if (skipNextPush.current) { skipNextPush.current = false; return; }
     clearTimeout(pushTimer.current);
-    pushTimer.current = setTimeout(async () => {
-      setSyncStatus('syncing');
-      const result = await pushData(supabaseUrl, supabaseKey, syncKey, data);
-      if (result.error) { setSyncStatus('error'); }
-      else {
-        const now = new Date().toISOString();
-        localStorage.setItem(SYNC_TS_KEY, now);
-        setLastSyncedAt(now);
-        setSyncStatus('synced');
-      }
-    }, 3000);
+    // Even the automatic push looks first. It used to upsert straight over whatever
+    // was there, so a device that had fallen behind erased the newer copy the moment
+    // anything was typed on it.
+    pushTimer.current = setTimeout(() => { void syncWithCloud(data); }, 3000);
     return () => clearTimeout(pushTimer.current);
   }, [data]);
 
   // THE SYNC BUTTON LOOKS BEFORE IT WRITES. It used to push, always — so on a
   // device that had fallen behind, one tap replaced the good books with the stale
   // ones. See syncDirection: behind the cloud means fetch, level or ahead means send.
+  // The button is the same routine, asked for by hand.
   const syncNow = useCallback(async () => {
     if (testModeRef.current) return; // never push test data, even on a manual sync
-    const { supabaseUrl, supabaseKey } = data.settings;
-    const syncKey = syncKeyRef.current;
-    // A DEAD BUTTON MUST NOT LOOK LIKE A WORKING ONE. With no company key — which is
-    // what a signed-out app has — this used to return in silence, so the owner tapped
-    // "Samstilla núna" and nothing whatsoever happened, no message, no change. Say it.
-    if (!supabaseUrl || !supabaseKey || !syncKey) { setSyncStatus('signedout'); return; }
-    setSyncStatus('syncing');
-
-    const stamp = await remoteUpdatedAt(supabaseUrl, supabaseKey, syncKey);
-    if (syncDirection(localStorage.getItem(SYNC_TS_KEY), stamp.updatedAt) === 'pull') {
-      const pulled = await pullData(supabaseUrl, supabaseKey, syncKey);
-      if (pulled.error || !pulled.data) { setSyncStatus('error'); return; }
-      const remote = migrateData(pulled.data);
-      skipNextPush.current = true;     // adopting the cloud copy is not a change to send back
-      dispatch({ type: 'LOAD', payload: remote });
-      try { await idbSet(STORAGE_KEY, remote); } catch { /* cloud still holds it */ }
-      const ts = pulled.updatedAt ?? new Date().toISOString();
-      localStorage.setItem(SYNC_TS_KEY, ts);
-      setLastSyncedAt(ts);
-      setSyncStatus('synced');
-      return;
-    }
-
-    const result = await pushData(supabaseUrl, supabaseKey, syncKey, data);
-    if (result.error) { setSyncStatus('error'); }
-    else {
-      const now = new Date().toISOString();
-      localStorage.setItem(SYNC_TS_KEY, now);
-      setLastSyncedAt(now);
-      setSyncStatus('synced');
-    }
-  }, [data]);
+    await syncWithCloud(data);
+  }, [data, syncWithCloud]);
 
   // Restore a backup so it actually STICKS. The old path (bare dispatch LOAD) relied on
   // debounced effects to persist — if the app reloaded first, or the mount-time cloud pull
@@ -694,17 +743,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // backup is the biggest blob the app ever holds, and it is exactly the moment
     // the login must not be crowded out of storage.
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* nothing to free */ }
-    const now = new Date().toISOString();
-    localStorage.setItem(SYNC_TS_KEY, now); // mark local as newest so the mount pull won't overwrite the restore
-    setLastSyncedAt(now);
+    // A RESTORE IS A DELIBERATE ACT AND MUST WIN. It is stamped one write past whatever
+    // the cloud currently holds, so every other device sees a newer number and fetches
+    // it — rather than the restore having to argue with a clock to be believed.
     const { supabaseUrl, supabaseKey } = migrated.settings;
     const syncKey = syncKeyRef.current;
     if (supabaseUrl && supabaseKey && syncKey && !testModeRef.current) {
       setSyncStatus('syncing');
-      const result = await pushData(supabaseUrl, supabaseKey, syncKey, migrated);
-      setSyncStatus(result.error ? 'error' : 'synced');
+      const head = await remoteStamp(supabaseUrl, supabaseKey, syncKey);
+      await sendUp(supabaseUrl, supabaseKey, syncKey, migrated, head.stamp?.version ?? readBase());
+    } else {
+      const now = new Date().toISOString();
+      localStorage.setItem(SYNC_TS_KEY, now);
+      setLastSyncedAt(now);
+      dirtyRef.current = false;
     }
-  }, []);
+  }, [sendUp]);
 
   const lang = data.settings.language;
   const t = useCallback((key: TranslationKey): string => translations[lang][key] ?? translations['is'][key] ?? key, [lang]);

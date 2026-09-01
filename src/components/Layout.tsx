@@ -84,12 +84,13 @@ function SyncIndicator() {
   const isIS = data.settings.language === 'is';
   const icon = syncStatus === 'syncing'
     ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-    : syncStatus === 'error' || syncStatus === 'signedout'
+    : syncStatus === 'error' || syncStatus === 'signedout' || syncStatus === 'conflict'
     ? <CloudOff className="w-3.5 h-3.5 text-red-500" />
     : <Cloud className="w-3.5 h-3.5 text-blue-500" />;
   // Signed out is the one the owner can act on, so it says so rather than "error".
   const title = syncStatus === 'syncing' ? (isIS ? 'Samstilli…' : 'Syncing…')
     : syncStatus === 'signedout' ? (isIS ? 'Ekki innskráð(ur) — ekkert samstillist' : 'Not signed in — nothing syncs')
+    : syncStatus === 'conflict' ? (isIS ? 'Árekstur — bæði tæki breyttust' : 'Conflict — both sides changed')
     : syncStatus === 'error' ? (isIS ? 'Samstilling mistókst' : 'Sync error')
     : lastSyncedAt ? `${isIS ? 'Samstillt' : 'Synced'} ${new Date(lastSyncedAt).toLocaleTimeString()}` : (isIS ? 'Samstilling í skýi' : 'Cloud sync');
   return (

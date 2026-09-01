@@ -347,29 +347,47 @@ check('every US state carries a sales-tax rate', () => {
   return bad.length ? 'no rate for: ' + bad.map(s => s.name).join(', ') : null;
 });
 
-// ── 9. A sync can never put an older book over a newer one ──────────────────
-// The cloud button used to push, always. A phone that had been signed out since
-// 10 July still held 9.584 færslur while the books had grown to 11.652, and one tap
-// would have written July over August. Behind means fetch; level or ahead means send.
-check('a device that is behind the cloud fetches instead of sending', () => {
-  const dir = app.syncDirection('2026-07-10T12:00:00.000Z', '2026-08-31T03:45:36.009Z');
-  return dir === 'pull' ? null : 'a stale device would still have pushed (' + dir + ')';
+// ── 9. A sync is decided on writes and rows, never on a clock ─────────────
+// The owner's phone stamped itself 17:09 while holding 9.584 færslur from 10 July,
+// against a cloud stamped 03:45 holding 11.652. By the clock the stale device was the
+// newer one. These contracts are that phone, written down.
+const PHONE = { base: 4, count: 9584, dirty: false };     // seven weeks behind, nothing of its own
+const CLOUD = { version: 9, count: 11652 };               // the real books
+
+check('a device that is behind fetches, whatever its own clock says', () => {
+  const move = app.syncDecision(PHONE, CLOUD);
+  return move === 'pull' ? null : 'the stale phone was allowed to ' + move;
 });
-check('a device that is ahead of the cloud sends', () => {
-  const dir = app.syncDirection('2026-08-31T09:00:00.000Z', '2026-08-31T03:45:36.009Z');
-  return dir === 'push' ? null : 'an up-to-date device refused to push (' + dir + ')';
+check('a device level on writes but holding fewer rows still fetches', () => {
+  // The case a version alone would miss: same write-number, half the books.
+  const move = app.syncDecision({ base: 9, count: 9584, dirty: false }, CLOUD);
+  return move === 'pull' ? null : 'a device missing 2.068 rows was allowed to ' + move;
 });
-check('the same timestamp on both sides sends', () => {
-  const ts = '2026-08-31T03:45:36.009Z';
-  return app.syncDirection(ts, ts) === 'push' ? null : 'level device stopped pushing — its own edits would never leave it';
+check('a device with its own unsent changes never has them overwritten', () => {
+  const move = app.syncDecision({ base: 4, count: 9584, dirty: true }, CLOUD);
+  return move === 'conflict' ? null : 'both sides had changed and the app chose ' + move;
 });
-check('an empty cloud still receives the first push', () => {
-  const bad = [undefined, null, ''].filter(v => app.syncDirection('2026-08-31T03:45:36.009Z', v) !== 'push');
-  return bad.length ? 'a device with nothing in the cloud refused to push' : null;
+check('the device holding the books sends them', () => {
+  const move = app.syncDecision({ base: 9, count: 11652, dirty: true }, CLOUD);
+  return move === 'push' ? null : 'the up-to-date device refused to push (' + move + ')';
 });
-check('a device that has never synced fetches what is already there', () => {
-  const bad = [undefined, null, ''].filter(v => app.syncDirection(v, '2026-08-31T03:45:36.009Z') !== 'pull');
-  return bad.length ? 'a fresh device would have pushed its empty book over the real one' : null;
+check('deleting rows on the newest device is still allowed to send', () => {
+  // A real deletion lowers the count on a device that is the source of the change.
+  const move = app.syncDecision({ base: 9, count: 11600, dirty: true }, CLOUD);
+  return move === 'push' ? null : 'a legitimate deletion was blocked (' + move + ')';
+});
+check('an unstamped cloud row is never guessed at', () => {
+  const move = app.syncDecision({ base: 0, count: 9584, dirty: false }, null);
+  return move === 'unknown' ? null : 'a row with no stamp was treated as ' + move;
+});
+check('the stamp counts the færslur it travels with', () => {
+  const stamp = app.stampOf({ transactions: new Array(11652) }, 7);
+  return stamp.count === 11652 && stamp.version === 7 ? null : 'stamp came out as ' + JSON.stringify(stamp);
+});
+check('a stamp survives the round trip through a payload', () => {
+  const payload = { [app.SYNC_FIELD]: { version: 3, count: 10 } };
+  const back = app.readStamp(payload);
+  return back && back.version === 3 && back.count === 10 ? null : 'stamp did not read back: ' + JSON.stringify(back);
 });
 
 // ── report ──────────────────────────────────────────────────────────────────
