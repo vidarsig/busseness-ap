@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users, AlertTriangle } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
 import PhotoViewer from './PhotoViewer';
@@ -7,9 +7,10 @@ import SearchableSelect from './SearchableSelect';
 import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
-  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES, KEY_REQUIRED_CATEGORIES,
+  INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
+  keyIsRequired, missingRequiredKey,
 } from '../types';
-import { getVATAmountISK, getTotalISK, invoiceReceivedISK, yearOf } from '../utils/calculations';
+import { getVATAmountISK, getTotalISK, getTransactionISK, invoiceReceivedISK, yearOf } from '../utils/calculations';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { formatISK, formatDate, formatCurrency, todayISO } from '../utils/formatters';
 import { isTransactionLimitReached } from '../utils/planLimits';
@@ -136,8 +137,8 @@ function TransactionModal({ initial, onSave, onClose }: ModalProps) {
 
   // A contribution, a draw or a loan movement has to land on a key or it lands
   // nowhere — the entry silently misses the balance sheet. Block the save instead.
-  const keyRequired = (KEY_REQUIRED_CATEGORIES as readonly string[]).includes(form.category);
-  const keyMissing = keyRequired && !data.accounts.some(a => a.id === form.accountId && a.isActive);
+  const keyRequired = keyIsRequired(form.category);
+  const keyMissing = missingRequiredKey(form, data.accounts);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -578,6 +579,23 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     if (clearing) changes.accountId = undefined;
     else if (bulkKey) changes.accountId = bulkKey;
     if (Object.keys(changes).length === 0) return;
+    // THE SAME RULE THE ENTRY FORM ENFORCES, ENFORCED HERE TOO. Setting a whole
+    // filtered set to 'uttekt' or 'framlag' without also setting a key books
+    // money that moves no balance-sheet key and so lands nowhere at all — and
+    // clearing the key off such rows does the same damage in reverse. Twelve
+    // owner draws went through this path unkeyed before it was checked.
+    const wouldBreak = filtered.filter(tx => missingRequiredKey({ ...tx, ...changes }, data.accounts));
+    if (wouldBreak.length) {
+      const sum = wouldBreak.reduce((n, tx) => n + getTransactionISK(tx), 0);
+      window.alert(lang === 'is'
+        ? `${wouldBreak.length} færslur (${fmtISK(sum)}) lentu á flokki sem KREFST lykils — framlag, úttekt eða lánahreyfing færir stöðu á lykli.
+
+Veldu lykil líka, annars bókast peningarnir hvergi.`
+        : `${wouldBreak.length} entries (${fmtISK(sum)}) would land on a category that REQUIRES a key — a contribution, draw or loan movement moves a balance-sheet key.
+
+Choose a key as well, or the money is booked nowhere.`);
+      return;
+    }
     const parts: string[] = [];
     if (bulkType) parts.push(`${lang === 'is' ? 'tegund' : 'type'} → ${t(bulkType as never)}`);
     if (bulkCat) parts.push(`${lang === 'is' ? 'flokkur' : 'category'} → ${t(bulkCat as never)}`);
@@ -591,6 +609,14 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
     for (const tx of filtered) dispatch({ type: 'UPDATE_TRANSACTION', payload: { ...tx, ...changes } });
     setBulkType(''); setBulkCat(''); setBulkKey(''); setBulkVat('');
   }
+
+  // MONEY THAT MOVES NO KEY MOVES NOWHERE, so say so on the screen rather than
+  // leaving it to be found years later in a balance sheet that will not add up.
+  // Covers rows that arrived before the rule was enforced, and anything a future
+  // import or edit lets through.
+  const unkeyed = useMemo(
+    () => data.transactions.filter(tx => missingRequiredKey(tx, data.accounts)),
+    [data.transactions, data.accounts]);
 
   // Render only a page at a time — a full history can be thousands of rows, and
   // drawing them all at once freezes the screen (especially right after a big
@@ -872,6 +898,23 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
           </div>
         )}
       </div>
+
+      {/* ── Entries on a key-required category that carry no key ───── */}
+      {unkeyed.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          <span className="text-amber-900">
+            {lang === 'is'
+              ? <><strong>{unkeyed.length} færslur</strong> eru framlag, úttekt eða lánahreyfing <strong>án lykils</strong> ({fmtISK(unkeyed.reduce((n, tx) => n + getTransactionISK(tx), 0))}). Þær færa engan lykil og sjást hvergi í efnahagsreikningi.</>
+              : <><strong>{unkeyed.length} entries</strong> are a contribution, draw or loan movement <strong>with no key</strong> ({fmtISK(unkeyed.reduce((n, tx) => n + getTransactionISK(tx), 0))}). They move no key and appear nowhere on the balance sheet.</>}
+          </span>
+          <button
+            onClick={() => { setFilterKey('none'); setFilterType('transfer'); setShowFilters(true); }}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-medium hover:bg-amber-700">
+            {lang === 'is' ? 'Sýna þær' : 'Show them'}
+          </button>
+        </div>
+      )}
 
       {/* ── Summary of the current selection (per key) ───── */}
       {filtered.length > 0 && (

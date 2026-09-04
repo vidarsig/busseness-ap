@@ -599,6 +599,25 @@ export const TRANSFER_CATEGORIES = [
 // leaving the owner account showing only the money paid IN.
 export const KEY_REQUIRED_CATEGORIES = ['lan_afborgun', 'lan_mottekid', 'framlag', 'uttekt'] as const;
 
+/** True when this category MOVES a balance-sheet key and so cannot be booked without one. */
+export function keyIsRequired(category: string | undefined | null): boolean {
+  return (KEY_REQUIRED_CATEGORIES as readonly string[]).includes(canonicalCategory(category));
+}
+
+// A RULE THAT IS ONLY WRITTEN DOWN IS NOT A RULE. The list above said a key was
+// mandatory on these four categories and the entry form did check it — but the
+// bulk reclassifier did not, so twelve úttektir totalling 403.000 were booked
+// through it with no key and never reached the owner's account. The same list
+// now has a function behind it, the bulk path calls it, and the suite asserts
+// the RULE rather than the existence of the constant.
+export function missingRequiredKey(
+  tx: { category?: string; accountId?: string },
+  accounts: readonly { id: string; isActive?: boolean }[],
+): boolean {
+  if (!keyIsRequired(tx.category)) return false;
+  return !accounts.some(a => a.id === tx.accountId && a.isActive !== false);
+}
+
 // A CATEGORY IS A KEY, NEVER A LABEL. 95 real meal rows were stored as the
 // Icelandic word "fæði" instead of the key "faedi". Nothing rejected them and
 // nothing showed them: the profit and loss is built from a named list, so a row

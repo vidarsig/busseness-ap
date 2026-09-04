@@ -143,6 +143,35 @@ check('search still excludes a row that does not match', () =>
 check('an empty search excludes nothing', () =>
   app.txMatchesSearch(HAY(), '') ? null : 'an empty box filtered rows out');
 
+// ── 2e. A category that MOVES A KEY cannot be booked without one ─────────────
+// Catches: KEY_REQUIRED_CATEGORIES existed as a list, the entry form checked it,
+// and the bulk reclassifier did not — so twelve úttektir totalling 403.000 were
+// booked with no key and reached the owner's account never. A rule that is only
+// written down is not a rule; these assert the RULE, not the constant.
+const ACCS = [{ id: 'k2420', isActive: true }, { id: 'gamall', isActive: false }];
+for (const cat of app.KEY_REQUIRED_CATEGORIES) {
+  check('"' + cat + '" is known to require a key', () =>
+    app.keyIsRequired(cat) ? null : 'keyIsRequired("' + cat + '") is false, so nothing will stop it');
+  check('"' + cat + '" with no key is refused', () =>
+    app.missingRequiredKey({ category: cat }, ACCS) ? null
+      : 'a ' + cat + ' with no key passed — that money moves no key and lands nowhere');
+  check('"' + cat + '" with a live key is allowed', () =>
+    app.missingRequiredKey({ category: cat, accountId: 'k2420' }, ACCS)
+      ? 'a properly keyed ' + cat + ' was refused' : null);
+  check('"' + cat + '" on a deactivated key is refused', () =>
+    app.missingRequiredKey({ category: cat, accountId: 'gamall' }, ACCS) ? null
+      : 'a ' + cat + ' pointing at an inactive key passed');
+}
+check('an ordinary expense needs no key', () =>
+  app.missingRequiredKey({ category: 'adrir_rekstrargjold' }, ACCS)
+    ? 'an ordinary expense was refused for having no key' : null);
+check('the key rule reads a category through its alias', () => {
+  const alias = Object.entries(app.CATEGORY_ALIASES).find(([, k]) => app.keyIsRequired(k));
+  if (!alias) return null;   // no alias currently maps onto a key-required category
+  return app.keyIsRequired(alias[0]) ? null
+    : 'alias "' + alias[0] + '" escapes the key rule its own key is subject to';
+});
+
 // ── 3. Borrowed money is not profit ─────────────────────────────────────────
 check('a transfer changes neither revenue nor costs', () => {
   const pl = app.calcProfitLoss([tx({ type: 'transfer', category: 'lan_afborgun', amount: 900000 })], 20, false);
