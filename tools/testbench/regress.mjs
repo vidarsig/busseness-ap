@@ -172,6 +172,41 @@ check('the key rule reads a category through its alias', () => {
     : 'alias "' + alias[0] + '" escapes the key rule its own key is subject to';
 });
 
+// ── 2f. An assumption must not look like a decision ──────────────────────────
+// Catches: Bank Import stamped a category on an unknown payer and moved on in
+// silence, and its "the AI was unsure" flag lived only on the import screen —
+// gone the moment the rows were saved. 1.800.000 came in from a party who is
+// both customer and lender, was stamped "sala þjónustu" from history, and
+// nothing asked. A guess has to say it is a guess, and say it in the books.
+const BIG = app.REVIEW_THRESHOLD_DEFAULT;
+check('an entry the importer guessed at is flagged whatever its size', () =>
+  app.needsHumanReview({ amount: 900, category: 'vorur', needsReview: true }) ? null
+    : 'an entry the importer was unsure about passed as settled');
+check('an entry a person has confirmed is never flagged again', () =>
+  app.needsHumanReview({ amount: 50_000_000, category: 'sala_thjonustu', needsReview: false })
+    ? 'a confirmed entry came back — the list can never be worked down' : null);
+check('a large amount left on a fallback category is flagged', () =>
+  app.needsHumanReview({ amount: BIG, category: 'sala_thjonustu' }) ? null
+    : 'a million krónur sitting on the importer default was treated as decided');
+check('money OUT is judged on size too, not just money in', () =>
+  app.needsHumanReview({ amount: -BIG, category: 'adrir_rekstrargjold' }) ? null
+    : 'a large payment out escaped review because its amount was negative');
+check('a large amount on a DELIBERATE category is left alone', () =>
+  app.needsHumanReview({ amount: BIG, category: 'lan_mottekid' })
+    ? 'a properly booked loan drawdown was dragged into the review list' : null);
+check('an ordinary small entry is not flagged', () =>
+  app.needsHumanReview({ amount: 12000, category: 'adrir_rekstrargjold' })
+    ? 'every small entry is flagged, which makes the flag worthless' : null);
+check('the company can set its own threshold', () =>
+  app.needsHumanReview({ amount: 50000, category: 'sala_thjonustu' }, 25000) ? null
+    : 'settings.reviewThreshold was ignored, so the rule is hardcoded');
+check('the review rule reads a category through its alias', () => {
+  const bad = Object.keys(app.CATEGORY_ALIASES).find(a => app.FALLBACK_CATEGORIES.includes(app.CATEGORY_ALIASES[a]));
+  if (!bad) return null;
+  return app.needsHumanReview({ amount: BIG, category: bad }) ? null
+    : 'alias "' + bad + '" escaped the review rule its own key is subject to';
+});
+
 // ── 3. Borrowed money is not profit ─────────────────────────────────────────
 check('a transfer changes neither revenue nor costs', () => {
   const pl = app.calcProfitLoss([tx({ type: 'transfer', category: 'lan_afborgun', amount: 900000 })], 20, false);

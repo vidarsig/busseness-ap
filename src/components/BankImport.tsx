@@ -4,7 +4,7 @@ import ReceiptMatcher from './ReceiptMatcher';
 import SearchableSelect from './SearchableSelect';
 import OpeningBalances from './OpeningBalances';
 import { useApp } from '../contexts/AppContext';
-import { Transaction, TransactionType, Invoice, Account, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule } from '../types';
+import { Transaction, TransactionType, Invoice, Account, EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_CATEGORIES, CategoryRule, needsHumanReview, REVIEW_THRESHOLD_DEFAULT } from '../types';
 import { categorizeBatch, detectImportColumns, ImportColumnMap } from '../utils/ai';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
 import { matchRule } from './AutoRules';
@@ -462,12 +462,16 @@ export default function BankImport() {
           : { ...p, selected: true, category: learned.category, vatRate: learned.vatRate, type: learned.type, learned: true };
       }
       // 5) New payer, no history — fall back to a plain default for the AI to refine.
+      // A GUESS MUST SAY IT IS A GUESS. This branch used to assign a category and
+      // move on in silence, which is worse than leaving it blank: a blank invites
+      // a question, a stamped category looks like somebody decided it.
       return {
         ...p,
         selected: true,
         category: p.type === 'income' ? 'sala_thjonustu' : 'adrir_rekstrargjold',
         vatRate: 0,
         type: p.type,
+        needsReview: true,
       };
     });
   }
@@ -746,6 +750,7 @@ ${(data.aiMemory || '').trim()}`
     const cur = (data.settings.defaultCurrency || 'ISK') as Transaction['currency'];
     const rate = cur === 'ISK' ? 1 : ((data.settings.exchangeRates as unknown as Record<string, number>)[cur] ?? 1);
     const ruleHits: Record<string, number> = {};
+    const reviewThreshold = Number(data.settings.reviewThreshold) || REVIEW_THRESHOLD_DEFAULT;
 
     // De-duplicate against existing transactions (and within this batch), so
     // re-importing an overlapping file is safe.
@@ -766,11 +771,17 @@ ${(data.aiMemory || '').trim()}`
       const key = keyFor(r.date, r.amount, r.description, r.reference);
       if (seen.has(key)) { skipped++; return; }
       seen.add(key);
+      // THE FLAG HAS TO SURVIVE THE IMPORT. It used to live only on this screen,
+      // so "nobody checked this" was forgotten the instant the rows were saved.
+      // Large amounts are flagged whatever the match said — history is a good
+      // guide to a 12.000 fuel stop and no guide at all to a million.
+      const review = needsHumanReview({ amount: r.amount, needsReview: r.needsReview }, reviewThreshold);
       newTxs.push({
         id: newId(), date: r.date, description: r.description,
         category: r.category, type: r.type, amount: r.amount,
         currency: cur, eurToIskRate: rate, vatRate: r.vatRate,
         reference: r.reference, invoiceId: r.invoiceId,
+        ...(review ? { needsReview: true } : {}),
       });
       if (r.matchedRule) ruleHits[r.matchedRule] = (ruleHits[r.matchedRule] ?? 0) + 1;
     });

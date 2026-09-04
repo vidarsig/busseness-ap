@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, X, Search, Filter, FileText, FileSpreadsheet, Camera, Receipt, Users, AlertTriangle, Eye } from 'lucide-react';
 import ReceiptScanner from './ReceiptScanner';
 import MicButton from './MicButton';
 import PhotoViewer from './PhotoViewer';
@@ -8,7 +8,7 @@ import { useApp } from '../contexts/AppContext';
 import {
   Transaction, TransactionType, Currency,
   INCOME_CATEGORIES, EXPENSE_CATEGORIES, TRANSFER_CATEGORIES,
-  keyIsRequired, missingRequiredKey,
+  keyIsRequired, missingRequiredKey, needsHumanReview, REVIEW_THRESHOLD_DEFAULT,
 } from '../types';
 import { getVATAmountISK, getTotalISK, getTransactionISK, invoiceReceivedISK, yearOf } from '../utils/calculations';
 import { invoiceTotals, invoiceVatRate } from '../utils/invoiceMath';
@@ -479,6 +479,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [onlyReview, setOnlyReview] = useState(false); // show only entries nobody has confirmed
   const [bulkKey, setBulkKey] = useState(''); // accountId to bulk-assign onto all filtered rows
   const [bulkType, setBulkType] = useState<string>('');  // '' | income | expense | transfer — bulk-set the type
   const [bulkCat, setBulkCat] = useState<string>('');    // '' or a category key — bulk-set the category
@@ -511,6 +512,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         if (filterCategory !== 'all' && tx.category !== filterCategory) return false;
         if (filterKey === 'none') { if (tx.accountId && data.accounts.some(a => a.id === tx.accountId)) return false; }
         else if (filterKey !== 'all' && tx.accountId !== filterKey) return false;
+        if (onlyReview && !needsHumanReview(tx, Number(data.settings.reviewThreshold) || REVIEW_THRESHOLD_DEFAULT)) return false;
         if (dateFrom && tx.date < dateFrom) return false;
         if (dateTo && tx.date > dateTo) return false;
         if (search) {
@@ -532,7 +534,7 @@ export default function Transactions({ initialFilter, onFilterConsumed }: { init
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [data.transactions, accountById, t, lang, filterType, filterYear, filterCategory, filterKey, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
+  }, [data.transactions, accountById, t, lang, onlyReview, filterType, filterYear, filterCategory, filterKey, dateFrom, dateTo, search, filterName, amountMin, amountMax]);
 
   // Keys (categories) actually in use, so the filter only lists real ones.
   const usedCategories = useMemo(() =>
@@ -614,6 +616,15 @@ Choose a key as well, or the money is booked nowhere.`);
   // leaving it to be found years later in a balance sheet that will not add up.
   // Covers rows that arrived before the rule was enforced, and anything a future
   // import or edit lets through.
+  // ENTRIES NOBODY EVER CONFIRMED. Flagged at import when the category was a
+  // fallback for an unknown payer, or when the amount was large enough that a
+  // machine should not decide it alone. Cleared the moment a person opens the
+  // entry and saves it — the act of looking IS the confirmation.
+  const unreviewed = useMemo(() => {
+    const th = Number(data.settings.reviewThreshold) || REVIEW_THRESHOLD_DEFAULT;
+    return data.transactions.filter(tx => needsHumanReview(tx, th));
+  }, [data.transactions, data.settings.reviewThreshold]);
+
   const unkeyed = useMemo(
     () => data.transactions.filter(tx => missingRequiredKey(tx, data.accounts)),
     [data.transactions, data.accounts]);
@@ -627,6 +638,8 @@ Choose a key as well, or the money is booked nowhere.`);
   const paged = filtered.slice(0, visibleCount);
 
   function handleSave(tx: Transaction) {
+    // Opening an entry and saving it IS the confirmation — drop the flag.
+    tx = { ...tx, needsReview: false };
     const existing = data.transactions.find(e => e.id === tx.id);
     dispatch(existing
       ? { type: 'UPDATE_TRANSACTION', payload: tx }
@@ -898,6 +911,23 @@ Choose a key as well, or the money is booked nowhere.`);
           </div>
         )}
       </div>
+
+      {/* ── Entries nobody ever confirmed ───── */}
+      {unreviewed.length > 0 && (
+        <div className="bg-sky-50 border border-sky-300 rounded-xl px-4 py-3 mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+          <Eye className="w-4 h-4 text-sky-700 flex-shrink-0" />
+          <span className="text-sky-900">
+            {lang === 'is'
+              ? <><strong>{unreviewed.length} færslur</strong> bíða yfirferðar ({fmtISK(unreviewed.reduce((n, tx) => n + getTransactionISK(tx), 0))}). Flokkurinn á þeim var <strong>ágiskun</strong>, ekki ákvörðun.</>
+              : <><strong>{unreviewed.length} entries</strong> are waiting to be checked ({fmtISK(unreviewed.reduce((n, tx) => n + getTransactionISK(tx), 0))}). Their category was a <strong>guess</strong>, not a decision.</>}
+          </span>
+          <button
+            onClick={() => { setOnlyReview(v => !v); setShowFilters(true); }}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-sky-700 text-white text-xs font-medium hover:bg-sky-800">
+            {onlyReview ? (lang === 'is' ? 'Sýna allt' : 'Show all') : (lang === 'is' ? 'Fara yfir þær' : 'Review them')}
+          </button>
+        </div>
+      )}
 
       {/* ── Entries on a key-required category that carry no key ───── */}
       {unkeyed.length > 0 && (

@@ -100,6 +100,15 @@ export interface Transaction {
   accountId?: string;    // optional: book this entry onto a chart-of-accounts key (Bókhaldslyklar / data.accounts)
   interestAmount?: number; // optional: for a loan payment, the interest portion (a financial expense). Only the principal (amount − interest) reduces the loan balance; interest hits the P&L.
   vatExempt?: boolean;   // optional: turnover EXEMPT from VAT (undanþegin — e.g. residential rent). Shown on the VAT return as "Velta án VSK", OUTSIDE taxable turnover; no output VAT, and (unlike 0%-rated) no input-VAT reclaim on related costs. Still revenue in the P&L.
+  // NOBODY EVER DECIDED THIS ONE. Set when the entry's category was ASSUMED
+  // rather than chosen — a payer with no history falling back to a default, or
+  // any amount large enough that a machine should not decide it alone. Bank
+  // Import already had a "the AI was unsure" flag, but it lived only on the
+  // import screen and was gone the moment the rows were saved, so the books
+  // could never tell an assumption from a decision. 1.800.000 came in from a
+  // party who is both customer and lender, was stamped "sala þjónustu" from
+  // history, and nothing asked. Cleared when a person opens the entry and saves it.
+  needsReview?: boolean;
 }
 
 export interface BalanceSheetItem {
@@ -344,6 +353,8 @@ export interface AppSettings {
   caProvince?: string;     // Canada province/territory (drives the combined GST/HST/PST rate)
   salesTaxRate: number;
   corporateTaxRate: number;
+  /** Any entry at or above this is always put in front of a person. Blank = 1.000.000. */
+  reviewThreshold?: number;
   vatRates: number[];
   // When true the amounts stored on transactions are GROSS (VAT is already inside
   // the figure, as with bank deposits) — the app EXTRACTS the VAT from within
@@ -600,6 +611,29 @@ export const TRANSFER_CATEGORIES = [
 export const KEY_REQUIRED_CATEGORIES = ['lan_afborgun', 'lan_mottekid', 'framlag', 'uttekt'] as const;
 
 /** True when this category MOVES a balance-sheet key and so cannot be booked without one. */
+// Above this, an entry is always put in front of a person however confident the
+// match — a machine should not quietly decide where a million krónur belongs.
+// A default, not a law: settings.reviewThreshold overrides it per company.
+export const REVIEW_THRESHOLD_DEFAULT = 1_000_000;
+
+// The two categories the importer falls back to when it does not know. An entry
+// sitting on one of these was quite possibly never decided by anyone.
+export const FALLBACK_CATEGORIES = ['sala_thjonustu', 'adrir_rekstrargjold'] as const;
+
+/** Should this entry be put in front of a person before it is trusted?
+ *  needsReview true = the importer says it guessed. false = a person has confirmed it.
+ *  Neither = judge it: a large amount still sitting on a fallback category was
+ *  probably never decided, and size is exactly where an assumption costs most. */
+export function needsHumanReview(
+  tx: { amount?: number; category?: string; needsReview?: boolean },
+  threshold: number = REVIEW_THRESHOLD_DEFAULT,
+): boolean {
+  if (tx.needsReview === true) return true;
+  if (tx.needsReview === false) return false;
+  const big = Math.abs(Number(tx.amount) || 0) >= threshold;
+  return big && (FALLBACK_CATEGORIES as readonly string[]).includes(canonicalCategory(tx.category));
+}
+
 export function keyIsRequired(category: string | undefined | null): boolean {
   return (KEY_REQUIRED_CATEGORIES as readonly string[]).includes(canonicalCategory(category));
 }
